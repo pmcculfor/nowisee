@@ -91,7 +91,7 @@ export interface AppModule {
   /**
    * Resolve a URL path owned by this app and return an initial refresh
    * (stack will be reset by core before/as part of open).
-   * `path` is the app-local portion after `#/a/<appId>` (or home's path convention).
+   * `path` is the app-local portion after `#/<appId>` (or home's path convention).
    */
   open(path: string, extras?: RefreshExtras): Promise<RefreshResult> | RefreshResult;
   /**
@@ -126,7 +126,7 @@ See [`MODULES.md`](MODULES.md) for full behavior. Summary:
 
 ### Router
 
-- Parse location hash: `#/` or home convention → Home app; `#/a/<appId>/...` → that app.
+- Parse location hash: `#/` (or `#/home`) → Home app; `#/<appId>/...` → that app.
 - `open(url)`: determine appId; if app changes (or always on open): **clear stack**; set current app; call `app.open(path)`; apply `RefreshResult`; block until complete.
 - Unknown appId / corrupt URL: open Home (or Home with an error text node)—do not crash.
 
@@ -173,10 +173,10 @@ See [`MODULES.md`](MODULES.md) for full behavior. Summary:
 
 ## URL conventions (MVP)
 
-- Hash router: Home at `#/` (or `#/a/home`—pick one in scaffold and keep stable).
-- Other apps: `#/a/<appId>/...` with app-owned remainder.
-- Bible example: `#/a/bible/kjv/Matthew/5/8` (exact shape is Bible’s choice).
-- Mail: `#/a/mail/...` as mail defines.
+- Hash router: Home at `#/` (canonical; `#/home` may alias).
+- Other apps: `#/<appId>/...` with app-owned remainder (first segment is the app id).
+- Bible example: `#/bible/kjv/Matthew/5/8` (exact shape after the app id is Bible’s choice).
+- Mail: `#/mail/...` as mail defines.
 - Status tips often return `url: null` so the address bar stays on the prior shareable node.
 
 ---

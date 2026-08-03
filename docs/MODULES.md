@@ -90,8 +90,8 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the canonical definitions.
 
 | URL | App | Path passed to `open` |
 |-----|-----|------------------------|
-| `#/` or `#/a/home` | `home` | `/` or `` |
-| `#/a/<appId>/rest` | `<appId>` | `/rest` or `rest` (normalize one way) |
+| `#/` or `#/home` | `home` | `/` or `` |
+| `#/<appId>/rest` | `<appId>` | `/rest` or `rest` (normalize one way) |
 
 Exact normalization is an implementation detail; apps must document their path grammar.
 
@@ -319,7 +319,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | `standardInputChords(inputId, { forward, back })` | Ctrl+Right (+ `passInputText`) / Ctrl+Left |
 | `rootLeftToHome(rootId, homeUrl)` | Left url edge to Home |
 | `collectNeighborhood({ tipId, neighbors, payload, depth, maxNodes })` | Callback-driven walk → warm payloads + map fragment |
-| `homeEnterUrl(appId)` | Build `#/a/<appId>` enter URL |
+| `homeEnterUrl(appId)` | Build `#/<appId>` enter URL |
 
 ### Non-goals
 
@@ -413,7 +413,7 @@ Must work as `AppModule` only: list/create/edit via text + input nodes, save sta
 | Server session TTL / auth | App/backend; platform context seam reserved empty |
 | Warm etags | Deferred |
 | aria-live assertive vs polite | Default assertive; revisit in a11y pass |
-| Home URL canonical form | `#/` vs `#/a/home` — choose at scaffold |
+| Home URL canonical form | `#/` canonical; `#/home` may alias |
 
 ---
 

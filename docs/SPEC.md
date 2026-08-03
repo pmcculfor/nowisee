@@ -53,7 +53,7 @@
 |-------|------|----------------|
 | **Display** | One surface (label or input) + a11y announce | Graphs, apps, keys |
 | **Keyboard** | Deliver keys/chords to navigator; caret vs nav based on tip node type | App business rules |
-| **Router** | Parse URL → appId; switch current app; dispatch `open` | App path meaning inside `#/a/<appId>/...` |
+| **Router** | Parse URL → appId; switch current app; dispatch `open` | App path meaning inside `#/<appId>/...` |
 | **Navigator + stack** | Per-app stack; apply map edges; busy/block; call refresh; merge warm/map | Choosing graph content; prefetch depth policy |
 | **NodeCache (client warm)** | Store payloads apps returned; pin stack entries | Server cache; inventing fetches |
 | **Navigation map store** | Current edge table from last refresh | Authoring edges |
