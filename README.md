@@ -9,3 +9,4 @@ Accessibility-first single-text browser for blind and keyboard/screen-reader-pri
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — TypeScript interface contracts
 - [`docs/MODULES.md`](docs/MODULES.md) — detailed per-module specifications
 - [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — proposed stack/layout for later scaffolding
+- [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md) — longevity review of the plan (proposed deltas, not yet applied)
