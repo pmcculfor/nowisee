@@ -2,9 +2,10 @@
 
 Accessibility-first single-text browser for blind and keyboard/screen-reader-primary users.
 
-**Status:** Spec and contracts only — no application code yet.
+**Status:** Specs and module contracts only — no application code yet.
 
-- [`AGENTS.md`](AGENTS.md) — engineering rules for contributors/agents
+- [`AGENTS.md`](AGENTS.md) — engineering rules and locked behaviors for contributors/agents
 - [`docs/SPEC.md`](docs/SPEC.md) — product & architecture (what + why)
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — interface contracts
-- [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — proposed implementation choices for later scaffolding
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — TypeScript interface contracts
+- [`docs/MODULES.md`](docs/MODULES.md) — detailed per-module specifications
+- [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — proposed stack/layout for later scaffolding
