@@ -51,8 +51,9 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the canonical definitions.
 ### Responsibilities
 
 - Register `AppModule` instances at bootstrap.
-- `get(id)`, `listEnabled()` (MVP: all registered are enabled).
-- Provide the catalog Home uses for labels + enter URLs.
+- `get(id) → AppModule | null` — **core-internal only**; never handed to an app.
+- `listEnabled() → AppDescriptor[]` — plain `{ id, label }` data (MVP: all registered are enabled).
+- Provide the catalog Home uses for labels + `app` edges.
 
 ### Edge cases
 
@@ -357,7 +358,51 @@ Notes on the defaults:
 
 ---
 
-## 10. App kit (optional shared library)
+## 10. Core: Platform capabilities
+
+**Path:** `src/core/platform.ts`
+
+Apps are handed a `PlatformContext` on every `open` / `refresh`. It is the only channel for effects an app cannot or should not perform itself, and the only non-data thing core passes besides the abort signal. Keeping browser access here — rather than letting apps reach for `navigator.*` — is what leaves the door open to running an app in a Worker, an iframe, or on a server later.
+
+### Responsibilities
+
+- Construct the context; expose a capability **only** when the host can honour it, so `if (platform.clipboard)` means something.
+- Own the browser-side mechanics, including the awkward ones below.
+
+### Clipboard, and why core has to own it
+
+Browsers only permit a clipboard write while the user's keypress is still counted as recent (*transient user activation*). An action `refresh` is asynchronous, so by the time an app could call `writeText` the activation has often expired — Safari strictly, Chrome under some focus conditions. **Routing the call through core does not fix this on its own; the write has to begin inside the keypress, and core is the only party holding it.**
+
+Core therefore opens a write channel at the moment it traverses an `action: true` edge — synchronously, inside the keydown, before any app call:
+
+```text
+keydown → edge has action: true
+  ├─ open a pending clipboard write (a promise core will resolve)
+  ├─ call app.refresh(stack, { action: true, platform })
+  │     └─ app calls platform.clipboard.writeText(text)  → resolves the pending write
+  └─ if the app never calls it, cancel the pending write
+```
+
+Where the browser supports a promise-valued `ClipboardItem`, core hands that promise straight to `navigator.clipboard.write` during the keydown. Where it does not, core falls back to calling `writeText` when the app asks, which still succeeds while the activation window is open. Either way the app's side is one line and it never sees the problem.
+
+### Edge cases
+
+| Case | Behavior |
+|------|----------|
+| App calls `writeText` outside an action call | Reject; no channel is open |
+| App calls `writeText` twice in one action call | Last call wins; log the first as an app bug |
+| Browser denies the write | Reject the app's promise; the app turns it into an error label |
+| Host does not offer a capability | The member is absent; apps must feature-detect |
+
+### Non-goals (MVP)
+
+- `storage`, `announce`, `requestRefresh` — declared in the type, **not provided in MVP**.
+- Per-app permissions or capability grants (arrives with third-party apps).
+- Any product-specific capability. Everything here is a browser or platform primitive.
+
+---
+
+## 11. App kit (optional shared library)
 
 **Path:** `src/app-kit/`
 
@@ -383,11 +428,11 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ---
 
-## 11. App: Home (`id: "home"`)
+## 12. App: Home (`id: "home"`)
 
 ### Responsibilities
 
-- `open` / `refresh`: present sibling list of enabled apps from `AppRegistry.listEnabled()` (inject registry via closure at construction).
+- `open` / `refresh`: present sibling list of enabled apps from a `listEnabled(): AppDescriptor[]` callback injected at construction. Home receives descriptors, **not** the registry object — it is an ordinary app and gets no privileged handle.
 - Each app label is a node; `enter` is `kind: "app"` to `{ appId, path: "/" }`.
 - `prev` / `next` among app labels with `replace` (wrap optional—Home SHOULD wrap for a short list).
 - `back` at home root: missing edge or no-op (already home).
@@ -400,7 +445,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ---
 
-## 12. App: Bible (`id: "bible"`)
+## 13. App: Bible (`id: "bible"`)
 
 ### Responsibilities
 
@@ -408,13 +453,9 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Graph: Testament → book → chapter → verse → option nodes (Copy, Commentary stub).
 - `open(path)` parses canonical verse/book paths; bootstrap stack tip = resolved node (stack may be a single leaf after open reset—the app still exposes internal pops via map once the user pushes deeper in-session).
 - After open, user builds in-app stack via `push` edges; `back` = `pop` within bible; root `back` = `app` edge to the root app.
-- Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) performs the write and returns “Copied” / an error label in place. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
+- Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) calls `extras.platform.clipboard?.writeText(verse)` and returns “Copied” / an error label in place. `prev` / `next` over the Copy option carry no flag and therefore do nothing. The app never touches `navigator.clipboard`, and never has to think about user activation — see §10.
 - Warm + map: use app kit neighborhood helper or hand-built edges for nearby books/chapters/verses as appropriate.
 - Search (optional/later): input node → results list as normal nodes in warm/map; client warm holds the hit list.
-
-### Known implementation constraint
-
-`navigator.clipboard.writeText` requires transient user activation, which browsers (Safari most strictly) may have expired by the time an async `refresh` resolves. Doing the write inside the action refresh is therefore not reliable on its own; the implementation must keep the write inside the gesture window — see [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §5.
 
 ### Domain-only
 
@@ -422,7 +463,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ---
 
-## 13. App: Demo mail (`id: "mail"`)
+## 14. App: Demo mail (`id: "mail"`)
 
 ### Responsibilities
 
@@ -439,15 +480,15 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ---
 
-## 14. Future app: Notes (non-MVP)
+## 15. Future app: Notes (non-MVP)
 
 ### Fit check
 
-Must work as `AppModule` only: list/create/edit via text + input nodes, save via an `action: true` edge onto a status node, optional share locations, root `back` to Home, durable storage **behind** the app or future generic platform storage—not `NotesRepository` in core.
+Must work as `AppModule` only: list/create/edit via text + input nodes, save via an `action: true` edge onto a status node, optional share locations, root `back` to Home, durable storage behind the app or via `platform.storage` (§10) once that capability is provided—not `NotesRepository` in core.
 
 ---
 
-## 15. Shell bootstrap
+## 16. Shell bootstrap
 
 **Path:** `src/shell/` + `main.ts`
 
@@ -455,8 +496,8 @@ Must work as `AppModule` only: list/create/edit via text + input nodes, save via
 
 - Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
 - Construct registry; register Home, Bible, Mail.
-- Construct cache, map store, display, navigator, router, keyboard.
-- Pass Home a registry reference or `listEnabled` callback.
+- Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
+- Pass Home a `listEnabled` callback returning descriptors (never the registry itself).
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
 - Focus display on load.
 
@@ -466,7 +507,7 @@ Must work as `AppModule` only: list/create/edit via text + input nodes, save via
 
 ---
 
-## 16. Cross-cutting open items (documented, not implemented as locks)
+## 17. Cross-cutting open items (documented, not implemented as locks)
 
 | Item | Notes |
 |------|-------|
@@ -479,18 +520,20 @@ Must work as `AppModule` only: list/create/edit via text + input nodes, save via
 | Deep-link ancestry | Deferred; optional `stack` on `open` is additive (review §8) |
 | Contract versioning + unknown-value fallbacks | Deferred until third-party apps (review §11) |
 | Validating / bounding app responses | Deferred; first-party apps only (review §12) |
+| Actual sandboxing (worker / iframe / server apps) | Deferred; §10 keeps the boundary message-shaped so it stays possible (review §5) |
+| `platform.storage` / `announce` / `requestRefresh` | Declared, not provided in MVP |
 | Home URL canonical form | `#/` canonical; `#/<rootAppId>` may alias |
 
 ---
 
-## 17. Implementation order (when coding)
+## 18. Implementation order (when coding)
 
 1. Types + config + registry + cache + map store + stack  
-2. Display + keyboard binding table (text only)  
+2. Display + keyboard binding table (text only) + platform context (clipboard)  
 3. Navigator (transitions, token, action flag) + Router boundary, with a tiny fake app  
 4. App kit edge helpers  
 5. Home app  
 6. Bible app + data  
 7. Mail demo + input nodes + action edges  
 8. Tests per ARCHITECTURE testing contracts  
-9. Accessibility pass (settles the deferred items in §16)  
+9. Accessibility pass (settles the deferred items in §17)  

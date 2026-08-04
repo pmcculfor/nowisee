@@ -18,7 +18,7 @@ The risk is not in the layering. It is that several **contract details** encode 
 | 2 | Side effects have no identity | **Accepted, redesigned by owner** — `action: true` on the edge, simpler than the reviewed proposal; applied |
 | 3 | Staleness guarded by tip id | **Accepted** — monotonic transition token + abort; applied |
 | 4 | Apps mint their own `#/...` URLs | **Accepted** — `AppLocation`; applied |
-| 5 | App boundary is not serializable | **Pending** — clipboard constraint recorded in `MODULES` §12 |
+| 5 | App boundary is not serializable | **Accepted** — data-only boundary + `PlatformContext`; applied |
 | 6 | Busy / dead-end / failure indistinguishable | **Deferred** — post-MVP; cost recorded |
 | 7 | Screen-reader browse mode unvalidated | **Deferred** — settled during implementation |
 | 8 | Deep links have no ancestry | **Deferred** — the right parent is not always obvious; additive later |
@@ -27,7 +27,7 @@ The risk is not in the layering. It is that several **contract details** encode 
 | 11 | No contract version / unknown-value fallbacks | **Deferred** — revisit with third-party apps |
 | 12 | Core trusts app responses | **Deferred** — first-party apps only for now |
 
-Applied items are now normative in `SPEC.md`, `ARCHITECTURE.md`, `MODULES.md`, and the lock table in `AGENTS.md`. Deferred items are listed in `SPEC.md` §7 with their cost, and in `MODULES.md` §16. This document is kept as the reasoning record — including for the items that were declined.
+Applied items are now normative in `SPEC.md`, `ARCHITECTURE.md`, `MODULES.md`, and the lock table in `AGENTS.md`. Deferred items are listed in `SPEC.md` §7 with their cost, and in `MODULES.md` §17. This document is kept as the reasoning record — including for the items that were declined.
 
 ---
 
@@ -174,7 +174,7 @@ Core exposes `router.hrefFor(location)` for anything that needs a real string (a
 
 ## 5. The app boundary is not serializable, which forecloses the App Store
 
-**Status: pending.** Restated in plain terms below, since the original write-up assumed too much.
+**Status: accepted and applied.** `SPEC.md` §4.10 states the rule, `ARCHITECTURE.md` types it, `MODULES.md` §10 specifies the platform module including the clipboard timing problem. Restated in plain terms below.
 
 ### What is true today
 
@@ -259,7 +259,7 @@ The escapes are known but each has a cost: `role="application"` on the surface f
 
 **Status: deferred.** The owner's objection is sound: for many nodes there is no obviously correct parent to synthesize, and inventing one is worse than having none. `RefreshResult.stack` remains available as a purely additive change if the inconsistency proves annoying in practice. The consequence is recorded in `MODULES` §6 so nobody rediscovers it as a bug.
 
-**Current:** URL open resets the stack (locked); `RefreshResult` carries a single `node`, so an opened deep link starts with a one-entry stack. `MODULES` §12 acknowledges this. `MODULES` §6 says popping the last entry lands the user at Home.
+**Current:** URL open resets the stack (locked); `RefreshResult` carries a single `node`, so an opened deep link starts with a one-entry stack. `MODULES` §13 acknowledges this. `MODULES` §6 says popping the last entry lands the user at Home.
 
 **Consequence.** Reaching `Matthew 5:8` by navigating leaves a stack of Testament → Book → Chapter → Verse, and `back` returns to the chapter. Reaching the *same node* from a shared link leaves a one-entry stack, and `back` exits to Home. The app can work around this — it sees the stack in `refresh` and can author `back` as a URL edge when the stack has length 1 — but that means every app carries branching boilerplate, and the user-visible behavior of a key silently depends on how they arrived. For an audience that navigates by memorized spatial habit, an inconsistent `back` is a significant regression, and shared links are the main growth channel a product like this has.
 
@@ -354,7 +354,7 @@ These are genuinely additive and will not force a refactor, provided the items a
 | Browser Back/Forward ↔ session stack | Contained inside Router once Router is a pure boundary (§9). |
 | Per-user enabled apps, lazy app loading, App Store UI | Registry-level concerns; unaffected by the core protocol. |
 | Multi-tab coordination | No shared mutable state in the design today. |
-| Notes app | The fit check in `MODULES` §14 is correct; nothing blocks it. |
+| Notes app | The fit check in `MODULES` §15 is correct; nothing blocks it. |
 | Warm etags / cache invalidation protocol | Additive to `RefreshResult`. |
 
 ---
@@ -371,8 +371,10 @@ The accepted ones are now in `ARCHITECTURE.md`. Recorded here for the deferred i
 
 ## Where this leaves the plan
 
-Applied: intents (§1), edge-flagged actions (§2), transition token and abort (§3), `AppLocation` (§4), Router/Navigator ownership split (§9), nested map (§10). These were the items that touch every app or every transition, so doing them before any code exists is the whole point.
+Applied: intents (§1), edge-flagged actions (§2), transition token and abort (§3), `AppLocation` (§4), the data-only boundary and platform capabilities (§5), Router/Navigator ownership split (§9), nested map (§10). These were the items that touch every app or every transition, so doing them before any code exists is the whole point.
 
-Deferred with the cost written down: the status channel (§6), the screen-reader spike (§7), deep-link ancestry (§8), the serializable boundary and capabilities (§5), versioning (§11), and response validation (§12). Each is additive, and each is recorded in `SPEC.md` §7 and `MODULES.md` §16 so it resurfaces rather than being quietly forgotten.
+Deferred with the cost written down: the status channel (§6), deep-link ancestry (§8), versioning (§11), and response validation (§12). Each is additive, and each is recorded in `SPEC.md` §7 and `MODULES.md` §17 so it resurfaces rather than being quietly forgotten.
 
-Build order is unchanged — `MODULES.md` §17 still applies.
+Being answered empirically: the screen-reader question (§7) — see `spikes/` for the probe page.
+
+Build order is unchanged — `MODULES.md` §18 still applies.

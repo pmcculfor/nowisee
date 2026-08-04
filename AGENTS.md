@@ -46,6 +46,8 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - Keystrokes (`"ctrl+right"`, `"ArrowLeft"`) or directions in app data — apps author intents
 - Any module other than Router producing a `#/…` string
 - Router (or anything but Navigator) mutating stack, cache, map, busy, or display
+- Live objects across the app boundary (handing an app the registry, the DOM, or a class instance)
+- Apps calling `navigator.clipboard`, `localStorage`, or the DOM instead of a platform capability
 - Detecting staleness by comparing tip ids instead of the transition token
 - `back` = tree parent only (use navigation-map edges; inside an app, typical `back` is `pop`)
 - Assuming every node has a unique permanent URL
@@ -72,6 +74,8 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Dead-end intent | Silent no-op |
 | Status / action aftermath | Stay on node until user navigates; refresh may update text in place |
 | Addressing | Apps use `AppLocation`; Router alone serializes; null/omit keeps prior address bar |
+| App boundary | Plain data in, plain data out — must survive being sent as a message. `PlatformContext` and the abort signal are the only non-data members |
+| Platform capabilities | Browser operations core can mediate go through `extras.platform` (clipboard in MVP); apps feature-detect and never touch browser APIs directly |
 | Concurrency | One monotonic transition token in Navigator decides what applies; tip-id comparison is not a staleness guard |
 | Ownership | Navigator owns every state transition; Router is a pure URL boundary |
 | Client vs server cache | Core owns client warm only; server cache/session behind apps |

@@ -23,13 +23,22 @@ export type StackBehavior = "push" | "replace" | "pop";
 
 export type NodeKind = "text" | "input";
 
+/** Plain data — anything that survives being sent as a message. */
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
 /** Opaque to core beyond id, label, kind. Apps may stash private fields in data. */
 export interface NodePayload {
   id: string;
   label: string;
   kind?: NodeKind; // default "text"
-  /** App-private optional data; core ignores. */
-  data?: unknown;
+  /** App-private optional data; core ignores it but requires it to be plain data. */
+  data?: JsonValue;
 }
 
 /**
@@ -95,11 +104,40 @@ export interface RefreshExtras {
    * Core never aborts an action call.
    */
   signal?: AbortSignal;
+  /** Browser and platform operations an app may not perform itself. */
+  platform?: PlatformContext;
+}
+
+/**
+ * The only sanctioned channel for effects an app cannot perform itself.
+ * Every member is optional: apps must feature-detect, because a given host
+ * (or a future sandboxed host) may not offer all of them.
+ */
+export interface PlatformContext {
   /**
-   * Reserved extension seam for shared login / platform services.
-   * Empty / undefined in MVP.
+   * Copy text to the clipboard. Only meaningful during an action call —
+   * browsers only permit a clipboard write while the user's keypress is
+   * still fresh, and core is the only party holding that. See MODULES §10.
    */
-  platform?: Record<string, unknown>;
+  readonly clipboard?: {
+    writeText(text: string): Promise<void>;
+  };
+  /** Per-app namespaced durable storage. Not provided in MVP. */
+  readonly storage?: {
+    get(key: string): Promise<JsonValue | null>;
+    set(key: string, value: JsonValue): Promise<void>;
+    remove(key: string): Promise<void>;
+  };
+  /** Screen-reader-only status text. Does not move the tip. Not provided in MVP. */
+  readonly announce?: (text: string) => void;
+  /** Ask core for a read-only refresh of the current tip. Not provided in MVP. */
+  readonly requestRefresh?: () => void;
+}
+
+/** What the registry exposes about an app. Plain data, not the module. */
+export interface AppDescriptor {
+  readonly id: string;
+  readonly label: string;
 }
 
 export interface RefreshResult {
@@ -167,11 +205,31 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ---
 
+## App boundary: data in, data out
+
+`open` and `refresh` are a **message protocol that currently happens to run in-process**. Preserving that property is what makes it possible to later run an app in a Worker, an iframe, or on a server without changing the contract — which is the only realistic way to run apps we did not write.
+
+| Crossing the boundary | Rule |
+|-----------------------|------|
+| `stack`, `inputText`, `NodePayload`, `NavigationMap`, `RefreshResult`, `AppLocation` | **Plain data only.** Must survive being serialized and sent as a message. No functions, class instances, DOM nodes, or live references. |
+| `PlatformContext`, `AbortSignal` | Call mechanics, not payload. These are the sanctioned non-data members, and each has a message-based equivalent (an RPC proxy, and an abort message) when a sandbox arrives. |
+| Anything else | Not permitted. Core hands apps no other live object; apps return no other live object. |
+
+Consequences, all normative:
+
+- Apps do not touch browser APIs that core can mediate. Clipboard goes through `platform.clipboard`; durable storage will go through `platform.storage`. An app reaching for `navigator.clipboard` or `localStorage` directly is a bug even though nothing stops it today.
+- The registry hands Home `AppDescriptor[]`, never the `AppRegistry` object.
+- `NodePayload.data` is typed as `JsonValue` so the compiler catches accidents rather than a sandbox migration years later.
+
+This is a discipline, not a sandbox. Nothing here builds isolation; it only avoids foreclosing it.
+
+---
+
 ## Packaging
 
 | Path (proposed) | Contents |
 |-----------------|----------|
-| `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, busy |
+| `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities, busy |
 | `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk) |
 | `src/apps/` | `home`, `bible`, `mail` (and later `notes`) as `AppModule`s |
 | `src/shell/` | Bootstrap: config, register apps, mount display, wire keyboard |
@@ -242,8 +300,14 @@ export interface ShellConfig {
 
 ### AppRegistry
 
-- `register` / `get` / `listEnabled`.
-- Home app uses `listEnabled()` for labels + `app` edges (not node ids of other apps).
+- `register` / `get(id) → AppModule | null` (core-internal) / `listEnabled() → AppDescriptor[]` (app-facing).
+- Home app uses `listEnabled()` for labels + `app` edges (not node ids of other apps, and not the registry object).
+
+### Platform capabilities
+
+- Builds the `PlatformContext` core passes on every `open` / `refresh`.
+- Owns the browser-side mechanics apps must not perform themselves — in MVP, the clipboard and its user-activation problem (MODULES §10).
+- Offers a capability only when the host can actually honour it, so feature detection means something.
 
 ---
 
@@ -270,6 +334,9 @@ export interface ShellConfig {
 7. Not throw through to freeze core busy state—prefer status text on failure. This matters most for action calls, where a rejection strands the user on "Sending…".
 8. Treat stack tip as possibly stale; return a valid fallback `node` when needed (repair, not teleport).
 9. Author edges by intent only; never assume a keystroke.
+10. Return plain data only — nothing that would fail to survive being sent as a message.
+11. Use `extras.platform` for browser operations core can mediate; never reach for `navigator.clipboard`, `localStorage`, or the DOM directly.
+12. Feature-detect every platform capability before calling it.
 
 ### SHOULD
 
@@ -298,4 +365,7 @@ Unit-test without DOM where possible:
 - Home lists apps as `app` edges; app root `back` opens the root app.
 - Rebinding the keyboard table changes behavior with zero app changes.
 - `Router.hrefFor(Router.parse(href))` round-trips; no other module emits a `#` string.
+- Every `RefreshResult` an MVP app returns survives a `structuredClone` round-trip.
+- An app calling a platform capability the host did not provide fails gracefully (status text, not a crash).
+- `listEnabled()` returns descriptors; the registry object is not reachable from any app.
 - App refresh: wrap-or-not is app-defined; action tip updates label in place without stack jump.
