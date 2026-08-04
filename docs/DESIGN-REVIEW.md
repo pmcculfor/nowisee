@@ -8,7 +8,26 @@
 
 The risk is not in the layering. It is that several **contract details** encode assumptions that will not survive the roadmap the spec itself commits to (many apps, third-party apps, an App Store, real backends, mobile). Each one is cheap to change today because there is no code, and expensive later because it is baked into every app that ships against the contract. Nothing below asks for a change to the architecture. Everything below is a change to the *vocabulary and guarantees* of `open` / `refresh`.
 
-This document proposes deltas to locked behavior. Per `AGENTS.md`, locks require owner approval; nothing here has been applied to the specs.
+---
+
+## Disposition (owner-reviewed)
+
+| § | Finding | Outcome |
+|---|---------|---------|
+| 1 | Physical keys baked into app data | **Accepted** — intents applied to the specs |
+| 2 | Side effects have no identity | **Accepted, redesigned by owner** — `action: true` on the edge, simpler than the reviewed proposal; applied |
+| 3 | Staleness guarded by tip id | **Accepted** — monotonic transition token + abort; applied |
+| 4 | Apps mint their own `#/...` URLs | **Accepted** — `AppLocation`; applied |
+| 5 | App boundary is not serializable | **Pending** — clipboard constraint recorded in `MODULES` §12 |
+| 6 | Busy / dead-end / failure indistinguishable | **Deferred** — post-MVP; cost recorded |
+| 7 | Screen-reader browse mode unvalidated | **Deferred** — settled during implementation |
+| 8 | Deep links have no ancestry | **Deferred** — the right parent is not always obvious; additive later |
+| 9 | Two owners for state transitions | **Accepted** — Router reduced to a pure boundary; applied |
+| 10 | Two map representations, `::` collision | **Accepted** — nested map; applied |
+| 11 | No contract version / unknown-value fallbacks | **Deferred** — revisit with third-party apps |
+| 12 | Core trusts app responses | **Deferred** — first-party apps only for now |
+
+Applied items are now normative in `SPEC.md`, `ARCHITECTURE.md`, `MODULES.md`, and the lock table in `AGENTS.md`. Deferred items are listed in `SPEC.md` §7 with their cost, and in `MODULES.md` §16. This document is kept as the reasoning record — including for the items that were declined.
 
 ---
 
@@ -31,6 +50,8 @@ The findings below are ordered by *cost of fixing later*, not by severity.
 ---
 
 ## 1. Physical keys are baked into app-authored data
+
+**Status: accepted and applied.**
 
 **Current:** `NavKey = "up" | "down" | "left" | "right" | "ctrl+left" | "ctrl+right" | string`. Apps author edges keyed by physical keystrokes. `AGENTS.md` locks Ctrl+Right / Ctrl+Left as the recommended input-leave chords.
 
@@ -67,6 +88,8 @@ This preserves every lock's *structure*, costs one indirection in Keyboard, and 
 
 ## 2. Side effects have no identity, and the recommended graph shape fires them by accident
 
+**Status: problem accepted; solved by the owner's edge-flag design rather than the one proposed here. Applied.**
+
 **Current:** §4.5 removes `activate()`; side effects run "when the user navigates onto an action/status node and `refresh` runs". The stated safeguard is that "the app structures the graph so the effectful tip is entered deliberately."
 
 **Why this does not last.** `refresh` is called on *every* arrival at a tip, including background revalidation after a warm hit, re-entry, and `hashchange`. Nothing in the contract distinguishes those. Three concrete failures:
@@ -75,34 +98,39 @@ This preserves every lock's *structure*, costs one indirection in Keyboard, and 
 2. **At-least-once delivery with no dedup key.** Warm hit → immediate display → background `refresh` → app sends the mail. The user presses a key; the tip changes; core discards the result as stale. The mail is still sent. Core's staleness guard protects the *display*, never the *effect*. Reload on a status tip re-sends. There is no request id, so an app cannot deduplicate even if it wants to.
 3. **Apps cannot tell why they were called.** "Revalidate this view" and "the user just deliberately committed" require opposite behavior, and arrive as the identical call.
 
-**Proposed delta.** Do not reintroduce `activate()`. Add *cause* to the existing call, and make the safe rule structural rather than advisory:
+**Reviewed proposal (not adopted).** Add a `reason` (`open` / `commit` / `browse` / `revalidate`) plus a `requestId` to every call, permit effects only on `commit`, and require apps to deduplicate by id.
+
+**Adopted instead (owner's design, and the better one).** Mark the *edge*, not the call. An edge may carry `action: true`; core sets `extras.action` on exactly the call caused by traversing that edge, and on no other call.
 
 ```ts
-export type RefreshReason =
-  | "open"        // URL entry / bootstrap
-  | "commit"      // user traversed an `enter` / `commit` intent — effects permitted
-  | "browse"      // user traversed `prev` / `next` / `back` — effects forbidden
-  | "revalidate"; // core-initiated background refresh — effects forbidden
+// edge
+{ kind: "node", toNodeId: "copy-status", stackBehavior: "push", action: true }
 
-export interface RefreshTrigger {
-  readonly reason: RefreshReason;
-  readonly requestId: string;   // stable per user-initiated transition
-  readonly fromNodeId?: string;
-  readonly intent?: NavIntent;
-}
+// what core passes on that one traversal, and nowhere else
+refresh(stack, { action: true })
 ```
 
-Then three normative rules:
+Why it is better than what was proposed:
 
-- Apps **MUST NOT** perform side effects unless `reason === "commit"`.
-- Apps **MUST** treat `refresh` as at-least-once and deduplicate by `requestId`.
-- Core **SHOULD** coalesce `browse` and `revalidate` refreshes behind a short settle window, so holding Down through a list issues one refresh rather than twenty.
+- **The owner is right.** Which transition constitutes a button press is app knowledge, and it is already expressed in app-authored data. A `reason` enum makes core classify app semantics; a flag lets the app state them.
+- **It is smaller.** No enum, no request ids, no dedup obligation on every app. One optional boolean, alongside `passInputText`, which it exactly parallels.
+- **It closes the same three holes structurally**, not by discipline: `prev` / `next` edges carry no flag so browsing options cannot fire them; revalidation carries no flag so a warm-hit refresh cannot repeat a send; re-entry carries no flag so nothing replays.
+- **Double-press is naturally safe** — after the local move the tip is the status node, and the trigger edge belonged to the previous node.
+- **Reload is safe** when status tips return `location: null`, which they should anyway, since the address bar then never points at an action node.
 
-`reason` composes directly with the intents from §1: browsing intents can never be effectful, by construction, which is what §4.5 wants and cannot currently guarantee.
+Three core rules make it airtight, all recorded in `ARCHITECTURE.md`:
+
+1. The flag appears on exactly the call caused by that traversal — never on bootstrap, revalidation, replay, or retry.
+2. Core never re-issues, retries, or aborts an action call. A failed action is re-triggered by the user, which is the only correct retry policy for a non-idempotent operation.
+3. Core may coalesce read-only revalidations (holding `next` through a long list should not issue one call per row), but never an action call.
+
+Residual risk, accepted: if an action call rejects, core keeps the last text and the user reads "Sending…" forever. Mitigated by the existing MUST that apps resolve with a status node rather than reject; fully addressed only when §6 lands.
 
 ---
 
 ## 3. Staleness is guarded by tip id, which is not a correctness guard
+
+**Status: accepted and applied.**
 
 **Current:** `MODULES` §7 — record `startedTipId` when a refresh begins; on completion, discard if the current tip id differs. Elsewhere the same section mentions "(+ monotonic token)". The two descriptions are not the same mechanism, and only one of them works.
 
@@ -117,6 +145,8 @@ Then three normative rules:
 ---
 
 ## 4. Apps mint their own `#/...` URLs, so core does not own its address space
+
+**Status: accepted and applied.** Core also gained `config.rootAppId`, so no core file names the Home app.
 
 **Current:** `NavEdge { kind: "url", url: string }`, `RefreshResult.url?: string | null`, app-kit `homeEnterUrl(appId)` building `#/<appId>`, Router parsing the same grammar.
 
@@ -144,36 +174,54 @@ Core exposes `router.hrefFor(location)` for anything that needs a real string (a
 
 ## 5. The app boundary is not serializable, which forecloses the App Store
 
-**Current:** apps are in-process objects. `NodePayload.data?: unknown`. Home takes a live `AppRegistry` reference by closure. The Bible app performs the clipboard write itself inside `refresh`.
+**Status: pending.** Restated in plain terms below, since the original write-up assumed too much.
 
-**Why this does not last.** `SPEC` §1 commits to "possibly third-party apps and an in-product App Store". Third-party code cannot run in-realm with full DOM access, and it cannot be trusted to be well-behaved. The good news is that `open`/`refresh` is *already* shaped like a message protocol — request in, plain data out. That is the property that lets an app later live in a Worker, an iframe, or on a server with no contract change. Three details currently break it, and each gets harder to remove as apps rely on it:
+### What is true today
 
-- `data?: unknown` invites non-cloneable values (functions, class instances, DOM nodes, live app state).
-- Live object references across the boundary (Home's registry handle) do not survive a serialization boundary.
-- Privileged effects performed by app code directly. Clipboard is the immediate example, and it is *already broken on its own terms*: `navigator.clipboard.writeText` requires transient user activation, which is gone after `refresh` awaits anything. The MVP "Copy" flow will fail intermittently in Safari and under some Chrome focus conditions.
+Apps are plain JavaScript objects living in the same page as core. An app can therefore reach anything the page can reach: the DOM, globals, the clipboard, the network. Core also hands apps live objects — Home gets the actual `AppRegistry` — and `data?: unknown` lets an app put literally anything into a node payload, including functions and DOM nodes.
 
-**Proposed delta.**
+For apps we write ourselves, none of that is a problem.
 
-- Everything crossing `open` / `refresh` **MUST** be structured-cloneable. Type `data` as a JSON-ish value rather than `unknown` so the compiler enforces it.
-- Give the reserved `platform` seam a shape now, as capabilities rather than an untyped bag. Effects go through core, which holds the user gesture and can be granted or denied per app:
+### Why it matters if apps you did not write ever run here
+
+You cannot run someone else's code in the same page as everyone's data. A buggy or hostile app could read what the user is doing in other apps, hijack the keyboard, or crash the shell. The standard fix is to run each app in a sandbox — a Web Worker, an iframe, or on a server — and all three work the same way: the two sides **send messages** instead of sharing objects. Messages can carry plain data (strings, numbers, arrays, plain objects) and nothing else. No functions, no DOM nodes, no live references.
+
+The good news is that `open` / `refresh` is *already* message-shaped: you call it with plain data and it answers with plain data. That is genuinely valuable and worth protecting, because it means the sandbox move is later a change of transport, not a change of contract.
+
+Three things currently poke a hole through that line, and each gets harder to remove the more apps rely on it:
+
+1. `data?: unknown` — the type permits things that cannot be sent as a message.
+2. Home receives the registry object rather than a list of app descriptions.
+3. Apps perform browser-privileged operations themselves — the Bible app calling the clipboard.
+
+### The immediate, non-hypothetical part: Copy is broken as specified
+
+Browsers only permit a clipboard write while the user's keypress is still "fresh" (transient user activation). `refresh` is async, so by the time the app calls `writeText`, the browser has often stopped counting the keypress as recent — Safari strictly, Chrome under some focus conditions. The MVP Copy flow will fail intermittently.
+
+Note carefully: **routing the call through core does not by itself fix this.** The problem is *when* the write happens, not *who* calls it. The fix is that the write must begin inside the keypress. Only core is in that position, because only core handles the keydown. The two workable implementations are (a) core starts the write during the keydown using the promise form of `ClipboardItem`, resolving it with text the app supplies, or (b) the app puts the copy text in the warm payload so core has it before any await. Both require core to know a clipboard write is coming, which the `action` edge already signals.
+
+### What would be asked for, if and when this is taken up
+
+- Type payload `data` as plain JSON so the compiler prevents accidents.
+- Hand Home a list of app descriptions rather than the registry object.
+- Give the already-reserved `platform` seam a shape, so browser-privileged operations go through core:
 
 ```ts
 export interface PlatformContext {
   readonly clipboard?: { writeText(text: string): Promise<void> };
-  readonly storage?: { get(k: string): Promise<JsonValue | null>; set(k: string, v: JsonValue): Promise<void> }; // per-app namespace
+  readonly storage?: { get(k: string): Promise<JsonValue | null>; set(k: string, v: JsonValue): Promise<void> };
   readonly announce?: (text: string) => void;   // SR-only status, does not move the tip
   readonly requestRefresh?: () => void;         // app-initiated update (new mail, etc.)
-  readonly signal: AbortSignal;
 }
 ```
 
-- Home receives `listEnabled()` results as data, not a registry object.
-
-`requestRefresh` deserves attention independently: today the graph can only change when the user presses a key. Mail, notifications, and any live data source need a way to say "the current node's text changed". Reserving the capability now costs nothing; adding a push channel to a pull-only protocol later does not.
+`requestRefresh` deserves attention on its own merits, independent of sandboxing: today the screen can only change when the user presses a key. Mail, notifications, and any live data source eventually need a way to say "the text on the current node changed". Reserving the capability costs nothing; retrofitting a push channel onto a pull-only protocol does not.
 
 ---
 
 ## 6. Busy, dead end, and failure are all silent — and the audience cannot see a spinner
+
+**Status: deferred past MVP.** Additive when taken up: a second SR-only region in Display plus announcements at the existing Navigator transition points. No contract change, so nothing here constrains the MVP build. The one interaction to keep in mind is that a rejected action call (§2) strands the user on "Sending…" until this lands, which is why apps MUST resolve with a status node rather than reject.
 
 **Current:** dead-end key → silent no-op (locked). Warm miss → "block on refresh; ignore further nav keys; **no placeholder**". Refresh failure → "keep last text; clear busy". Display announces via one `aria-live="assertive"` region.
 
@@ -195,6 +243,8 @@ Separately: `aria-live="assertive"` as the default is very likely wrong for this
 
 **Current:** Keyboard listens for arrows and calls `preventDefault` on handled keys.
 
+**Status: deferred to implementation.** The owner's position is that the DOM setup can be worked out once something is running, and that if it cannot be made to work the premise fails regardless. That is true. The counter-argument, recorded and not pressed further: the spike is a single static HTML page with three variants and no dependency on any core decision, so it can be run in parallel with the build rather than after it, and it is the only finding in this document that can invalidate the product rather than cost a refactor. It also settles the provisional key bindings in `MODULES` §9 and the assertive-vs-polite question below.
+
 **Why this is existential rather than merely important.** NVDA and JAWS run web content in *browse mode* by default, where the screen reader consumes arrow keys for its own virtual cursor and the page never sees them. VoiceOver on macOS with QuickNav enabled does the same with Left/Right. If arrows never reach the page, Nowisee's entire navigation model is inert for a large share of its intended users, and no amount of `preventDefault` helps — the interception happens above the browser.
 
 The escapes are known but each has a cost: `role="application"` on the surface forces focus mode but suppresses the screen reader's normal reading conventions and its own text-reading commands; keeping focus permanently inside an input-like element forces forms mode but constrains presentation. This is a decision with visible product consequences, and the spec does not currently mention that the problem exists.
@@ -206,6 +256,8 @@ The escapes are known but each has a cost: `role="application"` on the surface f
 ---
 
 ## 8. Deep links have no ancestry, so `back` means two different things at the same node
+
+**Status: deferred.** The owner's objection is sound: for many nodes there is no obviously correct parent to synthesize, and inventing one is worse than having none. `RefreshResult.stack` remains available as a purely additive change if the inconsistency proves annoying in practice. The consequence is recorded in `MODULES` §6 so nobody rediscovers it as a bug.
 
 **Current:** URL open resets the stack (locked); `RefreshResult` carries a single `node`, so an opened deep link starts with a one-entry stack. `MODULES` §12 acknowledges this. `MODULES` §6 says popping the last entry lands the user at Home.
 
@@ -227,15 +279,23 @@ This is stack *rehydration at entry*, not a teleport: the user has not moved, an
 
 ## 9. Two modules own the same state transition
 
-**Current:** `MODULES` §3 gives Router an eight-step sequence that clears the stack, clears cache and map, sets busy, calls `app.open`, applies the result, and clears busy. `MODULES` §7 gives Navigator ownership of stack, busy, generation, and applying results.
+**Status: accepted and applied.** In plain terms:
 
-Both modules mutate stack, cache, map, busy, and the display. That is precisely the "two ways to compute the same thing" that `AGENTS.md` bans, and it is why §3's concurrency question ("ignore or queue — document choice in code") has no clean answer: there is no single place where the answer could live.
+The specs describe the same job twice. `MODULES` §3 told Router to clear the stack, clear the cache and map, set the busy flag, call the app, apply the answer, and clear busy. `MODULES` §7 told Navigator to do all of those things too. So both modules could change the same state, from two different code paths, with no arbitration between them.
 
-**Proposed delta.** Router becomes a pure boundary: parse location → `AppLocation`, serialize `AppLocation` → href, listen for `hashchange`. All state transitions — including the open transaction — run through one Navigator entry point that owns the generation counter, busy, stack, cache, map, and display. Concurrency policy then has exactly one implementation and one test surface.
+The concrete symptom is already visible in the old text. §3 asked "what if the user opens a URL while a refresh is already running?" and answered "ignore or queue a single latest open — document choice in code". That question has no clean answer while two modules are in charge, because there is nowhere for the answer to live. You would end up with Router's idea of what is in flight and Navigator's idea of what is in flight, and the bug that follows — an old app response landing on top of newer state — is the kind that reproduces once a week and never in a test.
+
+**What changed.** Router now does two things and nothing else: turn a browser URL into `{ appId, path }`, and turn `{ appId, path }` back into a URL. It also listens for the browser's `hashchange` and hands the result to Navigator. It owns no stack, no cache, no busy flag, and it never applies an app's answer.
+
+Everything that actually changes what the user sees goes through one entry point in Navigator, which owns the stack, the cache, the map, busy, the display, the address bar, and the transition token from §3. Opening a URL is just another transition through that same path.
+
+No behavior was added or removed — the steps that used to live in Router moved into Navigator. The payoff is that "what happens if the user presses a key mid-load" now has exactly one implementation and one place to test it.
 
 ---
 
 ## 10. Two map representations and a collision-prone key encoding
+
+**Status: accepted and applied.**
 
 **Current:** `NavigationMap = Map<string, NavEdge> | Record<string, NavEdge>`, with a suggested key format of `` `${fromNodeId}::${navKey}` ``.
 
@@ -253,6 +313,8 @@ Cheap, total, and it makes the map trivially serializable for §5.
 
 ## 11. No contract version and no defined behavior for unknown values
 
+**Status: deferred, and partly resolved by §1.** Worth clarifying, because the word "intents" caused confusion here: this finding proposed nothing new about intents. Its third bullet only observed that `NavKey` invited apps to invent chords that core had no way to deliver, and that accepting §1 makes the problem disappear — which it now has, since apps author intents and core owns the bindings. What is left is two small, unrelated things: an `apiVersion` field, and deciding what core does when it meets a value it does not recognize (proposal: unknown edge kind → treat as a missing edge; unknown node kind → render as text). Both only matter once a core and an app can ship separately, so deferring alongside §12 is consistent.
+
 **Current:** `AppModule` has `id` and `label`. `NodeKind` is a closed union. `NavEdge.kind` is a closed union. `NavKey` is open-ended, but there is no mechanism by which an app-defined chord ever reaches an app, since Keyboard normalizes only a built-in set.
 
 For first-party apps compiled together this is fine. For third-party apps — which the spec commits to — a core and an app can be built months apart, and every unspecified case is a crash or a silent dead end in the field.
@@ -266,6 +328,8 @@ For first-party apps compiled together this is fine. For third-party apps — wh
 ---
 
 ## 12. Core trusts app responses completely
+
+**Status: deferred until third-party apps are real.** Reasonable while every app is first-party. One caveat worth holding onto: "we'll try not to abuse it" is a policy that only holds while the same people write core and every app. The validation layer sits at a single choke point (the one function that applies a `RefreshResult`), so it stays cheap to add later — provided nothing starts *depending* on core being permissive.
 
 **Current:** core applies `navigationMap` and `warm` verbatim. `NodeCache` mentions an optional defensive max size; nothing else is bounded or validated.
 
@@ -295,27 +359,20 @@ These are genuinely additive and will not force a refactor, provided the items a
 
 ---
 
-## Suggested additions to the testing contract
+## Testing contract additions
 
-The current list in `ARCHITECTURE.md` covers structure well and concurrency not at all. Add:
+The accepted ones are now in `ARCHITECTURE.md`. Recorded here for the deferred items, to be added when they land:
 
-1. `refresh` is at-least-once: the same `requestId` delivered twice performs one effect.
-2. Effects never run for `reason` of `browse` or `revalidate` — including a test that walks the full sibling option list past an effectful node.
-3. Generation: an A → B → A sequence discards the first A's in-flight result (the case tip-id equality gets wrong).
-4. A superseded refresh receives an aborted signal.
-5. An `open` racing an in-flight `refresh` resolves to exactly one applied result.
-6. Malformed / oversized app responses are rejected without corrupting core state.
-7. Deep-link entry with a rehydrated stack yields the same `back` behavior as arriving by navigation.
-8. Blocking, dead-end, and failure each produce a *distinguishable* announcement.
-9. Intent remapping: rebinding the keymap changes behavior with zero app changes.
+1. Malformed / oversized app responses are rejected without corrupting core state (§12).
+2. Deep-link entry yields the same `back` behavior as arriving by navigation (§8).
+3. Blocking, dead-end, and failure each produce a *distinguishable* announcement (§6).
 
 ---
 
-## Recommended sequence
+## Where this leaves the plan
 
-1. Run the screen-reader spike (§7). It can invalidate assumptions in Display, Keyboard, and the §1 default bindings, and it is the cheapest way to de-risk the product's central premise.
-2. Land the protocol deltas that touch every app — intents (§1), refresh trigger and effect rules (§2), locations (§4), serializable boundary and capabilities (§5), map shape (§10), versioning (§11).
-3. Land the core-internal deltas — generation and abort (§3), ownership split (§9), boundary validation (§12), status channel (§6).
-4. Then scaffold in the order already given in `MODULES` §17.
+Applied: intents (§1), edge-flagged actions (§2), transition token and abort (§3), `AppLocation` (§4), Router/Navigator ownership split (§9), nested map (§10). These were the items that touch every app or every transition, so doing them before any code exists is the whole point.
 
-Steps 2 and 3 are edits to `ARCHITECTURE.md` and `MODULES.md` plus the corresponding locks in `AGENTS.md`. There is no code to migrate yet, which is the entire reason to do it now.
+Deferred with the cost written down: the status channel (§6), the screen-reader spike (§7), deep-link ancestry (§8), the serializable boundary and capabilities (§5), versioning (§11), and response validation (§12). Each is additive, and each is recorded in `SPEC.md` §7 and `MODULES.md` §16 so it resurfaces rather than being quietly forgotten.
+
+Build order is unchanged — `MODULES.md` §17 still applies.

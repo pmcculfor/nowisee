@@ -10,7 +10,7 @@ Proposed implementation choices for when the app is scaffolded. **No application
 | UI toolkit | **Vanilla TS + Vite** | One text/input surface; avoid framework DOM complexity |
 | Topology | **Static SPA** | KJV + demo mail need no server; APIs can appear later behind apps |
 | Hosting path | Static-compatible (Vite build → any static host) | Swap host without rewriting core |
-| URL style | **Hash routes** (`#/…`) | Works on static hosting without server rewrites; apps own canonicalization |
+| URL style | **Hash routes** (`#/…`) behind `AppLocation` | Works on static hosting without server rewrites; apps address `{ appId, path }` so a later move to History API paths touches Router only |
 | Persistence | In-memory NodeCache only for MVP | IndexedDB later without changing warm ownership |
 | Tests | Vitest for Navigator/Router/stack + app `open`/`refresh` units | Lock edge-case behavior from the spec |
 | Shared helpers | `src/app-kit/` optional imports | DRY without core prefetch policy |
@@ -30,7 +30,7 @@ Proposed implementation choices for when the app is scaffolded. **No application
 ```text
 src/
   core/       # router, navigator, stack, navigationMap, nodeCache, display, keyboard, registry, types
-  app-kit/    # optional helpers (edges, lists, input chords, neighborhood walk)
+  app-kit/    # optional helpers (edges, lists, input edges, neighborhood walk)
   apps/       # home, bible, mail (AppModules)
   shell/      # bootstrap wiring
   main.ts
@@ -40,7 +40,7 @@ public/data/  # static assets (e.g. KJV JSON)
 
 ## Performance expectation
 
-Arrow/chord on a node already answerable from the navigation map + warm cache updates the single text surface immediately, then `refresh` revalidates in the background. Warm miss or open/bootstrap blocks until refresh returns. Apps (optionally via app-kit) push warm neighbors and multi-from map edges; core never invents fetches or depth policies.
+An intent on a node already answerable from the navigation map + warm cache updates the single text surface immediately, then `refresh` revalidates in the background. Warm miss or open/bootstrap blocks until refresh returns. Apps (optionally via app-kit) push warm neighbors and multi-from map edges; core never invents fetches or depth policies.
 
 ## Server sessions (when backends appear)
 

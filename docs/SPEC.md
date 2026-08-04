@@ -1,7 +1,7 @@
 # Nowisee — product & architecture specification
 
 **Audience:** planning/building agents with zero prior chat context.  
-**Status:** Product/architecture **what** is locked (post adversarial review). Contracts: [`ARCHITECTURE.md`](ARCHITECTURE.md). Module specs: [`MODULES.md`](MODULES.md). Engineering proposals: [`ENGINEERING.md`](ENGINEERING.md).
+**Status:** Product/architecture **what** is locked (post adversarial review, then post longevity review). Contracts: [`ARCHITECTURE.md`](ARCHITECTURE.md). Module specs: [`MODULES.md`](MODULES.md). Review findings and deferrals: [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md). Engineering proposals: [`ENGINEERING.md`](ENGINEERING.md).
 
 ---
 
@@ -9,7 +9,7 @@
 
 **Nowisee** is a website for blind (and screen-reader / keyboard-primary) users who struggle with modern, cluttered UIs.
 
-**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map**: arrow keys and mapped key chords (recommended: Ctrl+Left / Ctrl+Right on input nodes).
+**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to arrow keys by default and which a user, a locale, or a future touch build can rebind without any app changing.
 
 **Why it exists:** typical sites force tabbing through chrome or exploring by touch. Users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
 
@@ -29,21 +29,25 @@
 
 ## 2. User-visible navigation
 
-| Control | Typical meaning (authored by apps via navigation map) |
-|---------|--------------------------------------------------------|
-| **Up / Down** | Move among siblings (`stackBehavior: replace`) |
-| **Right** | Enter / follow (`stackBehavior: push`) |
-| **Left** | Inside an app: usually history back (`stackBehavior: pop`). At app root: **URL to Home** |
-| **Ctrl+Right / Ctrl+Left** | Recommended on **input** nodes: forward/commit and back |
-| Missing map edge | Silent no-op (stay) |
+Apps author **intents**. Core owns which keystroke produces each one (defaults in [`MODULES.md`](MODULES.md) §9).
+
+| Intent | Default key (text tip) | Typical meaning (authored by apps via navigation map) |
+|--------|------------------------|--------------------------------------------------------|
+| `prev` / `next` | Up / Down | Move among siblings (`stackBehavior: replace`) |
+| `enter` | Right | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions |
+| `back` | Left | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home** |
+| `enter` / `back` on an **input** tip | Enter / Alt+Up | Commit (with `passInputText`) and abandon. Plain arrows stay with the caret. |
+| Missing map edge | — | Silent no-op (stay) |
+
+Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if a future build delivers the same intents from swipe gestures.
 
 **Display:** one text blob or one input box. Screen reader announces updates via one live/focus region. Help lives **in the tree** as nodes, not modals.
 
 **Example paths:**
 
-- Home shows “Bible” → Down might show “Mail” → Right opens the Bible app via URL.
-- Bible → Right → “Old Testament” / Down → “New Testament” → … → verse → Right → “Copy” / Down → “Commentary”.
-- Mail → Inbox → subjects → body → options; Compose uses an **input** node; Ctrl+Right commits toward Send/status.
+- Home shows “Bible” → `next` might show “Mail” → `enter` opens the Bible app via an `app` edge.
+- Bible → `enter` → “Old Testament” / `next` → “New Testament” → … → verse → `enter` → “Copy” / `next` → “Commentary”.
+- Mail → Inbox → subjects → body → options; Compose uses an **input** node; `enter` commits toward Send/status.
 
 ---
 
@@ -52,20 +56,20 @@
 | Layer | Owns | Must not own |
 |-------|------|----------------|
 | **Display** | One surface (label or input) + a11y announce | Graphs, apps, keys |
-| **Keyboard** | Deliver keys/chords to navigator; caret vs nav based on tip node type | App business rules |
-| **Router** | Parse URL → appId; switch current app; dispatch `open` | App path meaning inside `#/<appId>/...` |
-| **Navigator + stack** | Per-app stack; apply map edges; busy/block; call refresh; merge warm/map | Choosing graph content; prefetch depth policy |
+| **Keyboard** | The physical binding table; resolve keystroke + tip kind → intent | App business rules; which intents exist in a map |
+| **Router** | Translate browser URL ↔ `AppLocation`; the only producer of `#/…` strings | Any state; applying results; app path meaning |
+| **Navigator + stack** | **Every** state transition: per-app stack, map edges, busy/block, transition token, refresh calls, warm/map merge, address bar | Choosing graph content; prefetch depth policy |
 | **NodeCache (client warm)** | Store payloads apps returned; pin stack entries | Server cache; inventing fetches |
 | **Navigation map store** | Current edge table from last refresh | Authoring edges |
 | **AppRegistry** | id → AppModule | App internals |
 | **App kit** | Optional shared helpers apps import | Automatic Navigator behavior |
-| **Apps** | Graph, labels, edges, warm, URLs, side effects, stale handling | Arrow handling, global cache radii |
+| **Apps** | Graph, labels, edges, warm, locations, side effects, stale handling | Keystrokes, URL strings, global cache radii |
 
-**Mental model:** Core is a **shell for a text-node browser**. Apps are **authorities** that answer `open` / `refresh`. Home is an app. Cross-app movement is by URL only.
+**Mental model:** Core is a **shell for a text-node browser**. Apps are **authorities** that answer `open` / `refresh`. Home is an app. Cross-app movement is by `app` edge only.
 
 ```text
-Core ──open/refresh──► AppModule
-     ◄── map + warm + url ──
+Core ──open/refresh(+action?)──► AppModule
+     ◄── map + warm + tip + location ──
 ```
 
 ---
@@ -74,13 +78,13 @@ Core ──open/refresh──► AppModule
 
 ### 4.1 Portable apps by id (Home included)
 
-**Decision:** Apps register as `AppModule` with stable `id` + `label`. Home is an app that lists others and links by URL. No core `BibleRepository` / `MailRepository`. Home must not embed foreign **node** ids—only URLs.
+**Decision:** Apps register as `AppModule` with stable `id` + `label`. Home is an app that lists others and links by `app` edge. No core `BibleRepository` / `MailRepository`. Home must not embed foreign **node** ids—only locations. Core identifies Home through `config.rootAppId`; no core file names it.
 
 **Why:** Many apps and possible third-party/App Store later.
 
 ### 4.2 `open` + `refresh` (not `navigate(action)` as primary)
 
-**Decision:** Core follows the **navigation map** locally when possible, then calls `app.refresh(stack, extras)`. Cold start and all URL transitions use `router.open` → app `open`/`refresh` bootstrap. The app returns a new navigation map, warm nodes, and optional share URL.
+**Decision:** Core follows the **navigation map** locally when possible, then calls `app.refresh(stack, extras)`. Cold start and all location transitions go through `navigator.openLocation` → app `open` bootstrap. The app returns a new navigation map, warm nodes, the authoritative tip, and an optional location.
 
 **Why:** Instant UI from warm + map; one app call shape; stack tip encodes where the user is; app revalidates every time.
 
@@ -88,28 +92,48 @@ Core ──open/refresh──► AppModule
 
 ### 4.3 Navigation map
 
-**Decision:** Edges keyed by `(fromNodeId, key)` where `key` is an arrow or named chord.
+**Decision:** Edges keyed by `(fromNodeId, intent)` where `intent` is `prev | next | enter | back` (or an app-defined symbolic intent), **never a keystroke**.
 
 - `kind: "node"` + `stackBehavior: push | replace | pop`
-- `kind: "url"` → always `router.open`
+- `kind: "app"` → an `AppLocation` inside Nowisee; core serializes it
+- `kind: "external"` → leaves the platform
 - Optional `passInputText` on edges leaving an input node
+- Optional `action: true` marking a deliberate trigger (§4.5)
 - On `pop`: **omit `toNodeId`**; destination is stack tip after pop
 - Missing edge: silent no-op
 - Apps may publish edges for nodes other than the current tip (multi-hop locally)
+- Map structure is nested (`fromNodeId → intent → edge`) so no delimiter can collide with app-owned ids
 
-**Why:** Rapid keys stay coherent; Left/Right/Up/Down stack rules are data; URL exits do not require foreign node ids.
+**Why:** Rapid keys stay coherent; stack rules are data; cross-app exits do not require foreign node ids.
+
+**Why intents rather than keystrokes:** the keystroke is an input-device detail and the map is app semantics. Fusing them would mean that touch/mobile, user-remappable keys, switch and voice input, braille panning, and right-to-left locales each require rewriting every app ever shipped. With intents, all of those are edits to one table in core.
+
+**Rejected:** `NavKey` values like `"ctrl+right"` in app data. Also rejected as a *default binding*: Ctrl+Left / Ctrl+Right on input nodes, which are word-wise caret movement on every major platform.
 
 ### 4.4 Per-app stack; URL open resets stack
 
-**Decision:** The session stack holds only node ids for the **current app**. Every URL open (including same-app jumps and returning to Home) goes through the router and **resets** that app’s stack, then bootstraps with refresh.
+**Decision:** The session stack holds only node ids for the **current app**. Every location open (including same-app jumps and returning to Home) goes through `navigator.openLocation` and **resets** that app’s stack, then bootstraps with `open`.
 
 **Why:** Stacks never mix apps; cross-app is URL; history back (`pop`) stays inside one app.
 
-### 4.5 No separate `activate()` / no `action` edge kind
+### 4.5 No separate `activate()`; effects are marked on the **edge**
 
-**Decision:** Side effects (copy, send) happen when the user navigates onto an action/status **node** and `refresh` runs. The app recognizes the tip and performs work. Warm may show “Sending…” then refresh updates to “Sent” **in place**.
+**Decision:** Side effects (copy, send) still happen inside an ordinary `refresh` on an ordinary node — there is no `activate()` call and no action edge *kind*. The app marks the single edge that constitutes the button press with `action: true`. Core sets `extras.action` on exactly the call caused by traversing that edge, and on no other call. Warm may show “Sending…” and the resulting refresh updates to “Sent” **in place**.
 
-**Why:** Keep the protocol minimal; avoid firing copy when merely browsing sibling option labels if the app structures the graph so the effectful tip is entered deliberately (typically Right / Ctrl+Right onto the action node).
+- App: marks the trigger edge; performs effects only when `extras.action` is true.
+- Core: sets the flag on that one traversal; never on bootstrap, revalidation, replay, or retry; never re-issues, retries, aborts, or coalesces an action call.
+
+**Why:** the effect is now tied to a *transition the user deliberately made*, not to a node merely being current. Three failure modes disappear by construction rather than by author discipline:
+
+| Failure | Why it cannot happen |
+|---------|----------------------|
+| Browsing sibling options fires Copy | `prev` / `next` edges carry no flag |
+| Warm-hit background revalidation re-sends | Revalidation carries no flag |
+| Returning to a status node replays the effect | Ordinary edges carry no flag |
+
+Rapid double-press is naturally safe: after the local move the tip is the status node, and the trigger edge belonged to the previous node.
+
+**Rejected:** an `activate()` API; an `action` edge *kind* (it would duplicate `node` and `app` edges); and a richer `reason` / `requestId` protocol on every refresh — the edge flag covers the only case where the distinction was load-bearing, at a fraction of the complexity.
 
 ### 4.6 No silent teleport; no auto-dismiss
 
@@ -123,18 +147,21 @@ Core ──open/refresh──► AppModule
 
 **Why:** Only the app knows what is cheap/valuable. Optional **app kit** helpers may BFS with app callbacks—never automatic in Navigator.
 
+**Concurrency:** Navigator owns one monotonic transition token. A result is applied only if its token is the newest issued; comparing tip ids is not sufficient, because `prev` then `next` returns to the same id and would let a stale result through. Superseded read-only calls are aborted via `extras.signal`; action calls are never aborted, only their results discarded.
+
 ### 4.8 Input nodes
 
-**Decision:** Input is a node type (single input box). Leave only via navigation-map edges (recommend Ctrl+Right forward with `passInputText`, Ctrl+Left back). **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode.
+**Decision:** Input is a node type (single input box). Leave only via navigation-map edges — the same `enter` / `back` intents used everywhere else, which core binds to different keys when the tip is an input so plain arrows keep driving the caret. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode.
 
-**Why:** One consistent exit vocabulary; chords are explicit map data.
+**Why:** One consistent exit vocabulary, and apps author the same four intents whether the tip is text or input.
 
-### 4.9 URLs
+### 4.9 Addressing
 
-- Shareable tips **may** expose a URL from refresh; not required for every node.
+- Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a browser URL, so the hash-vs-path decision, a sub-path mount, or a locale segment never reaches app code.
+- Shareable tips **may** return a location from refresh; not required for every node.
 - Aliases OK; app canonicalizes on open.
-- Null/omit url → core **keeps** previous address-bar URL.
-- Cross-app and Home exit: `kind: "url"` only.
+- Null/omit location → core **keeps** the previous address bar.
+- Cross-app and Home exit: `kind: "app"` edges only. `kind: "external"` leaves the platform.
 
 ### 4.10 Client vs server cache
 
@@ -149,10 +176,12 @@ Core ──open/refresh──► AppModule
 
 | Case | Behavior |
 |------|----------|
-| Open/bootstrap or map target not in warm | Block on refresh; ignore further nav keys; no placeholder |
-| Warm hit | Show immediately; background refresh; allow further map hits; ignore stale refresh if tip changed |
+| Open/bootstrap or map target not in warm | Block on refresh; ignore further intents; no placeholder |
+| Warm hit | Show immediately; background refresh; allow further map hits; discard any result whose transition token is not the newest |
 | Refresh failure | Keep last text; clear busy; do not crash shell |
 | Missing edge | Silent no-op |
+
+**Known MVP limitation:** those first three states are indistinguishable to a user who cannot see a spinner — blocked, dead-end, and failed all present as silence. Accepted for MVP; a status channel is deferred (see [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §6). This is also why apps MUST resolve with a status node rather than reject: a rejected action call otherwise strands the user on “Sending…”.
 
 ### 4.13 Auth / database
 
@@ -168,13 +197,14 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 
 1. **Runtime-unknown next node:** Temporary warm node + edge; replace content on refresh.
 2. **List ends:** Choose wrap/stop/message; do not assume platform wrap.
-3. **Action / send / copy:** Navigate to a status node; “Sending…” → “Sent”/error in place; leave only via mapped keys; never silent stack jump.
-4. **Leaving the app:** Root Left MUST be URL to Home.
-5. **Input:** Instruction node → input node; Ctrl+Right + `passInputText`; Ctrl+Left back.
-6. **URLs:** Stable canonical share URL when bookmarkable; omit/null for status tips that should not change the bar.
+3. **Action / send / copy:** Put `action: true` on the `enter` edge into a status node; “Sending…” → “Sent”/error in place; leave only via mapped intents; never silent stack jump. Resolve with an error label rather than rejecting — a rejected action call strands the user on “Sending…”.
+4. **Leaving the app:** Root `back` MUST be an `app` edge to Home.
+5. **Input:** Instruction node → input node; `enter` with `passInputText` to commit; `back` to abandon.
+6. **Addressing:** Stable canonical location when bookmarkable; omit/null for status tips that should not change the bar (this also stops a reload from re-entering an action node).
 7. **Prefetch:** Publish likely edges + warm payloads.
-8. **Home:** Labels + URL edges only.
+8. **Home:** Labels + `app` edges only.
 9. **App kit:** Prefer shared helpers for edge/list/input/neighborhood boilerplate.
+10. **Intents only:** Never assume a keystroke, a direction, or a screen.
 
 ---
 
@@ -190,10 +220,21 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 ## 7. Deferred (must preserve contracts above)
 
 - UI toolkit, bundler, hosting vendor (see ENGINEERING proposals)
-- Exact hash path syntax per app (behavior locked; shapes app-owned)
+- Exact path syntax per app (behavior locked; shapes app-owned)
 - IndexedDB / service worker
-- Dedicated Home key
+- Dedicated Home intent
 - Browser Back/Forward vs session stack (narrow core item later)
 - Server session TTL, cache keys, auth provider
 - Warm etag/hash protocol
 - Real auth, DB, real mail, commentary sources, notes storage
+
+Deferred with a known cost, each recorded in [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) with the argument for and against:
+
+| Deferred | Cost of deferring | Additive later? |
+|----------|-------------------|-----------------|
+| Status channel distinguishing busy / dead-end / failure (§6) | Those three states are identical to a user who cannot see a spinner | Yes — Display + Navigator addition |
+| Screen-reader browse-mode spike (§7) | The one risk that can invalidate the product premise | Yes, but it may force DOM changes in Display/Keyboard |
+| Deep-link ancestry (§8) | `back` behaves differently depending on how the user arrived | Yes — optional `stack` on `open` |
+| Serializable app boundary + capabilities (§5) | Third-party sandboxing gets harder the longer apps rely on in-page freedom | Partly — the clipboard constraint is immediate |
+| Contract versioning + unknown-value fallbacks (§11) | Core and app must ship together | Yes |
+| Validating / bounding app responses (§12) | A buggy app degrades the shell, and the shell gets blamed | Yes, until third-party apps exist |
