@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nowisee screen reader probe</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 18px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    max-width: 46rem; margin: 0 auto; padding: 1.5rem 1rem 6rem;
+  }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.5rem; }
+  h3 { font-size: 1.05rem; margin-bottom: .25rem; }
+  ol, ul { padding-left: 1.4rem; }
+  li { margin: .35rem 0; }
+  button {
+    font: inherit; padding: .5rem .9rem; margin: .2rem .3rem .2rem 0;
+    border: 2px solid currentColor; border-radius: .4rem; background: transparent;
+    cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: Highlight; color: HighlightText; }
+  #surface-host {
+    border: 3px solid currentColor; border-radius: .5rem;
+    padding: 1.25rem; margin: .75rem 0; min-height: 5rem;
+  }
+  #surface-host :focus { outline: 4px solid Highlight; outline-offset: 3px; }
+  .surface-text { font-size: 1.35rem; margin: 0; }
+  input.surface-input {
+    font: inherit; font-size: 1.35rem; width: 100%; padding: .5rem;
+    box-sizing: border-box;
+  }
+  #verdict { font-weight: 700; font-size: 1.15rem; }
+  table { border-collapse: collapse; margin: .5rem 0; }
+  th, td { border: 1px solid currentColor; padding: .3rem .6rem; text-align: left; }
+  fieldset { border: 2px solid currentColor; border-radius: .4rem; margin: 1rem 0; }
+  legend { padding: 0 .4rem; font-weight: 700; }
+  .q { margin: .8rem 0; }
+  .q label { margin-right: 1rem; white-space: nowrap; }
+  textarea { font: 15px/1.5 ui-monospace, monospace; width: 100%; height: 18rem; }
+  .note { border-left: 4px solid currentColor; padding-left: .8rem; }
+</style>
+</head>
+<body>
+
+<h1>Nowisee screen reader probe</h1>
+
+<p>This page answers one question: <strong>when a screen reader is running, do the
+arrow keys actually reach a web page, and does the page's text get read aloud when it
+changes?</strong> Nowisee's whole design depends on both being true, so it is worth
+finding out before anything is built.</p>
+
+<p>You do not need to know anything about the code to run this. Follow the steps,
+answer a few yes/no questions, and copy the summary at the bottom.</p>
+
+<h2>How to run the test</h2>
+
+<ol>
+  <li>Turn on your screen reader (NVDA, JAWS, VoiceOver, TalkBack — whichever you use).</li>
+  <li>Pick a <strong>setup</strong> from the buttons below. There are six. Each one arranges
+      the page differently; the point of the test is to find out which one behaves best.</li>
+  <li>Press the <strong>“Put me in the reading area”</strong> button. This moves your focus
+      into the box being tested.</li>
+  <li>Press the <strong>Down arrow</strong> a few times, then <strong>Up</strong>, then
+      <strong>Right</strong>, then <strong>Left</strong>. The text in the box is supposed to change
+      every time, and your screen reader is supposed to read the new text.</li>
+  <li>Read the <strong>Result</strong> section. It tells you, automatically, whether your
+      key presses reached the page at all.</li>
+  <li>Answer the questions under <strong>What did you hear?</strong> — only you can judge those.</li>
+  <li>Repeat for each of the six setups.</li>
+  <li>Copy the <strong>Summary</strong> text box at the bottom and send it back.</li>
+</ol>
+
+<p class="note">If the text never changes and the Result says nothing arrived, that is not a
+broken page — that is the finding. It means your screen reader is keeping the arrow keys
+for itself, and Nowisee will need a different arrangement. Move on to the next setup.</p>
+
+<h2>Step 1 — pick a setup</h2>
+
+<div id="variant-buttons"></div>
+<p id="variant-description"></p>
+
+<h2>Step 2 — the reading area</h2>
+
+<p><button type="button" id="focus-btn">Put me in the reading area</button>
+<button type="button" id="reset-btn">Start this setup over</button></p>
+
+<div id="surface-host"></div>
+
+<h2>Step 3 — result (filled in automatically)</h2>
+
+<p id="verdict">Not tested yet.</p>
+
+<table>
+  <caption>Keys that reached the page during this setup</caption>
+  <thead><tr><th scope="col">Key</th><th scope="col">Times it arrived</th></tr></thead>
+  <tbody id="key-table"><tr><td colspan="2">Nothing yet.</td></tr></tbody>
+</table>
+
+<h2>Step 4 — what did you hear?</h2>
+
+<form id="questions"></form>
+
+<h2>Step 5 — summary to send back</h2>
+
+<p>Select all of this box and copy it.</p>
+<textarea id="summary" readonly aria-label="Test results summary"></textarea>
+
+<script>
+(function () {
+  "use strict";
+
+  var VERSES = [
+    "Genesis 1:1. In the beginning God created the heaven and the earth.",
+    "Genesis 1:2. And the earth was without form, and void; and darkness was upon the face of the deep.",
+    "Genesis 1:3. And God said, Let there be light: and there was light."
+  ];
+
+  var VARIANTS = [
+    {
+      id: "A",
+      name: "Reading area, announcements wait their turn",
+      detail: "div with tabindex=-1, aria-live=polite, aria-atomic=true",
+      plain: "The text sits in a plain box. When it changes, the screen reader is asked to read it once it finishes whatever it is saying.",
+      kind: "live", politeness: "polite"
+    },
+    {
+      id: "B",
+      name: "Reading area, announcements interrupt",
+      detail: "div with tabindex=-1, aria-live=assertive, aria-atomic=true",
+      plain: "Same as A, except the screen reader is asked to cut off whatever it is saying and read the new text immediately.",
+      kind: "live", politeness: "assertive"
+    },
+    {
+      id: "C",
+      name: "Application area",
+      detail: 'div role="application" containing an aria-live=polite region',
+      plain: "The box tells the screen reader 'this is an application, let the page have the arrow keys'. This usually gives the page the keys but takes away some of the screen reader's own reading commands.",
+      kind: "application"
+    },
+    {
+      id: "D",
+      name: "No announcements — focus moves instead",
+      detail: "div with tabindex=-1, re-focused after each change, no live region",
+      plain: "Nothing is announced deliberately. Instead the box is re-focused after the text changes, so the screen reader reads it the way it reads anything you move to.",
+      kind: "focus"
+    },
+    {
+      id: "E",
+      name: "Read-only text box",
+      detail: "input readonly, value replaced on each change",
+      plain: "The text lives inside a text box you cannot type in. Screen readers usually hand arrow keys straight to a text box, so this may work where A to D do not.",
+      kind: "readonlyInput"
+    },
+    {
+      id: "F",
+      name: "Editable text box (for typing screens)",
+      detail: "input type=text; plain arrows left to the caret; Enter and Alt+Up captured",
+      plain: "This one tests the typing screens. Type something, then check that Left and Right still move through the letters normally, and that Enter and Alt+Up are picked up by the page.",
+      kind: "editableInput"
+    }
+  ];
+
+  var ARROWS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+  var state = {
+    variant: 0,
+    verse: 0,
+    depth: 0,
+    surfaceKeys: {},   // keys that reached the tested box
+    pageKeys: {},      // keys that reached the page at all
+    answers: {},       // variantId -> { questionId: answer }
+    auto: {}           // variantId -> verdict string
+  };
+
+  var host = document.getElementById("surface-host");
+  var verdictEl = document.getElementById("verdict");
+  var keyTable = document.getElementById("key-table");
+  var summaryEl = document.getElementById("summary");
+  var descEl = document.getElementById("variant-description");
+  var questionsEl = document.getElementById("questions");
+  var surfaceEl = null;
+
+  // ---- key naming -------------------------------------------------------
+
+  function keyName(e) {
+    var p = "";
+    if (e.ctrlKey) p += "Ctrl+";
+    if (e.altKey) p += "Alt+";
+    if (e.metaKey) p += "Meta+";
+    if (e.shiftKey) p += "Shift+";
+    return p + e.key;
+  }
+
+  // Holding a modifier on its own fires a keydown too; it is noise in the report.
+  var MODIFIER_ONLY = ["Alt", "Control", "Shift", "Meta", "CapsLock"];
+
+  function bump(bag, e) {
+    if (MODIFIER_ONLY.indexOf(e.key) !== -1) return;
+    var name = keyName(e);
+    bag[name] = (bag[name] || 0) + 1;
+  }
+
+  // ---- the tiny fake node graph ----------------------------------------
+
+  function currentText() {
+    if (state.depth === 0) return VERSES[state.verse];
+    return "Options for verse " + (state.verse + 1) + ". Press Left to go back.";
+  }
+
+  function move(name) {
+    if (name === "ArrowDown") state.verse = (state.verse + 1) % VERSES.length;
+    else if (name === "ArrowUp") state.verse = (state.verse + VERSES.length - 1) % VERSES.length;
+    else if (name === "ArrowRight") state.depth = 1;
+    else if (name === "ArrowLeft") state.depth = 0;
+  }
+
+  // ---- building each setup ---------------------------------------------
+
+  function buildSurface() {
+    var v = VARIANTS[state.variant];
+    host.textContent = "";
+    state.verse = 0;
+    state.depth = 0;
+
+    if (v.kind === "live") {
+      var live = document.createElement("p");
+      live.className = "surface-text";
+      live.id = "surface";
+      live.tabIndex = -1;
+      live.setAttribute("aria-live", v.politeness);
+      live.setAttribute("aria-atomic", "true");
+      live.setAttribute("aria-label", "Reading area");
+      live.textContent = currentText();
+      host.appendChild(live);
+      surfaceEl = live;
+
+    } else if (v.kind === "application") {
+      var app = document.createElement("div");
+      app.setAttribute("role", "application");
+      app.setAttribute("aria-label", "Reading area");
+      app.tabIndex = -1;
+      app.id = "surface";
+      var inner = document.createElement("p");
+      inner.className = "surface-text";
+      inner.setAttribute("aria-live", "polite");
+      inner.setAttribute("aria-atomic", "true");
+      inner.textContent = currentText();
+      app.appendChild(inner);
+      host.appendChild(app);
+      surfaceEl = app;
+
+    } else if (v.kind === "focus") {
+      var f = document.createElement("p");
+      f.className = "surface-text";
+      f.id = "surface";
+      f.tabIndex = -1;
+      f.setAttribute("aria-label", "Reading area");
+      f.textContent = currentText();
+      host.appendChild(f);
+      surfaceEl = f;
+
+    } else if (v.kind === "readonlyInput") {
+      var ro = document.createElement("input");
+      ro.className = "surface-input";
+      ro.id = "surface";
+      ro.readOnly = true;
+      ro.setAttribute("aria-label", "Reading area");
+      ro.value = currentText();
+      host.appendChild(ro);
+      surfaceEl = ro;
+
+    } else { // editableInput
+      var lab = document.createElement("p");
+      lab.textContent = "Type a few words, move through them with Left and Right, then press Enter, then press Alt and Up together.";
+      host.appendChild(lab);
+      var ed = document.createElement("input");
+      ed.className = "surface-input";
+      ed.id = "surface";
+      ed.type = "text";
+      ed.setAttribute("aria-label", "Typing area");
+      ed.placeholder = "Type here";
+      host.appendChild(ed);
+      surfaceEl = ed;
+    }
+
+    surfaceEl.addEventListener("keydown", onSurfaceKey);
+  }
+
+  function paint() {
+    var v = VARIANTS[state.variant];
+    var text = currentText();
+
+    if (v.kind === "live") {
+      surfaceEl.textContent = text;
+    } else if (v.kind === "application") {
+      surfaceEl.firstChild.textContent = text;
+    } else if (v.kind === "focus") {
+      surfaceEl.textContent = text;
+      surfaceEl.blur();
+      window.requestAnimationFrame(function () { surfaceEl.focus(); });
+    } else if (v.kind === "readonlyInput") {
+      surfaceEl.value = text;
+    }
+  }
+
+  // ---- key handling -----------------------------------------------------
+
+  function onSurfaceKey(e) {
+    var name = keyName(e);
+    bump(state.surfaceKeys, e);
+    var v = VARIANTS[state.variant];
+
+    if (v.kind === "editableInput") {
+      // Plain arrows are deliberately left alone so the caret keeps them.
+      if (name === "Enter" || name === "Alt+ArrowUp") e.preventDefault();
+      report();
+      return;
+    }
+
+    if (ARROWS.indexOf(name) !== -1) {
+      e.preventDefault();
+      move(name);
+      paint();
+    }
+    report();
+  }
+
+  document.addEventListener("keydown", function (e) {
+    bump(state.pageKeys, e);
+  }, true);
+
+  // ---- reporting --------------------------------------------------------
+
+  function arrowsAt(bag) {
+    var n = 0;
+    ARROWS.forEach(function (a) { n += (bag[a] || 0); });
+    return n;
+  }
+
+  function verdictText() {
+    var v = VARIANTS[state.variant];
+    if (v.kind === "editableInput") {
+      var enter = state.surfaceKeys["Enter"] || 0;
+      var altUp = state.surfaceKeys["Alt+ArrowUp"] || 0;
+      if (!enter && !altUp) return "Not tested yet. Type something, then press Enter, then Alt and Up together.";
+      if (enter && altUp) return "Both Enter and Alt+Up reached the typing area. Now confirm that Left and Right still moved through your letters normally.";
+      return "So far " + (enter ? "Enter" : "Alt+Up") + " reached the typing area, but not the other one. Try the other one.";
+    }
+    var atSurface = arrowsAt(state.surfaceKeys);
+    var atPage = arrowsAt(state.pageKeys);
+    if (atSurface > 0) return "GOOD: arrow keys are reaching the reading area (" + atSurface + " so far). Now judge whether you heard the text change.";
+    if (atPage > 0) return "PARTLY: arrow keys reached the page but not the reading area. Press the 'Put me in the reading area' button and try again.";
+    return "BLOCKED: no arrow keys are getting through. Your screen reader is keeping them. This setup will not work as-is.";
+  }
+
+  function report() {
+    var v = VARIANTS[state.variant];
+    verdictEl.textContent = verdictText();
+    state.auto[v.id] = verdictEl.textContent;
+
+    var names = Object.keys(state.surfaceKeys).sort();
+    if (!names.length) {
+      keyTable.textContent = "";
+      var empty = document.createElement("tr");
+      var td = document.createElement("td");
+      td.colSpan = 2;
+      td.textContent = "Nothing yet.";
+      empty.appendChild(td);
+      keyTable.appendChild(empty);
+    } else {
+      keyTable.textContent = "";
+      names.forEach(function (n) {
+        var tr = document.createElement("tr");
+        var k = document.createElement("td");
+        k.textContent = n;
+        var c = document.createElement("td");
+        c.textContent = String(state.surfaceKeys[n]);
+        tr.appendChild(k);
+        tr.appendChild(c);
+        keyTable.appendChild(tr);
+      });
+    }
+    writeSummary();
+  }
+
+  // ---- questions --------------------------------------------------------
+
+  var COMMON_QUESTIONS = [
+    { id: "heard", text: "When the text changed, did your screen reader read the new text?",
+      options: ["Every time", "Sometimes", "Never"] },
+    { id: "double", text: "Did you hear the same text read twice, or hear it cut itself off?",
+      options: ["Yes, that happened", "No, it was clean"] },
+    { id: "srkeys", text: "Could you still use your screen reader's own reading commands (for example, read the current line)?",
+      options: ["Yes", "No", "Did not try"] },
+    { id: "comfort", text: "Overall, would this be pleasant to use for an hour?",
+      options: ["Yes", "Tolerable", "No"] }
+  ];
+
+  var INPUT_QUESTIONS = [
+    { id: "caret", text: "Did Left and Right move through the letters you typed, one at a time?",
+      options: ["Yes", "No"] },
+    { id: "words", text: "Did Ctrl+Left and Ctrl+Right jump word by word, as normal?",
+      options: ["Yes", "No", "Did not try"] },
+    { id: "srkeys", text: "Could you still use your screen reader's own reading commands?",
+      options: ["Yes", "No", "Did not try"] }
+  ];
+
+  function questionsFor(variant) {
+    return variant.kind === "editableInput" ? INPUT_QUESTIONS : COMMON_QUESTIONS;
+  }
+
+  function buildQuestions() {
+    var v = VARIANTS[state.variant];
+    questionsEl.textContent = "";
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Setup " + v.id + " — " + v.name;
+    fs.appendChild(lg);
+
+    questionsFor(v).forEach(function (q) {
+      var group = document.createElement("div");
+      group.className = "q";
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", q.text);
+
+      var p = document.createElement("p");
+      p.textContent = q.text;
+      p.style.margin = "0 0 .2rem";
+      group.appendChild(p);
+
+      q.options.forEach(function (opt, i) {
+        var inputId = "q-" + v.id + "-" + q.id + "-" + i;
+        var input = document.createElement("input");
+        input.type = "radio";
+        input.name = "q-" + v.id + "-" + q.id;
+        input.id = inputId;
+        input.value = opt;
+        if (state.answers[v.id] && state.answers[v.id][q.id] === opt) input.checked = true;
+        input.addEventListener("change", function () {
+          if (!state.answers[v.id]) state.answers[v.id] = {};
+          state.answers[v.id][q.id] = opt;
+          writeSummary();
+        });
+        var label = document.createElement("label");
+        label.setAttribute("for", inputId);
+        label.textContent = " " + opt + " ";
+        group.appendChild(input);
+        group.appendChild(label);
+      });
+
+      fs.appendChild(group);
+    });
+
+    questionsEl.appendChild(fs);
+  }
+
+  // ---- summary ----------------------------------------------------------
+
+  function writeSummary() {
+    var lines = [];
+    lines.push("Nowisee screen reader probe results");
+    lines.push("Date: " + new Date().toISOString());
+    lines.push("Browser: " + navigator.userAgent);
+    lines.push("Screen reader used: (please type it here)");
+    lines.push("");
+
+    VARIANTS.forEach(function (v) {
+      lines.push("Setup " + v.id + " — " + v.name);
+      lines.push("  arrangement: " + v.detail);
+      lines.push("  keys: " + (state.auto[v.id] || "not tested"));
+      var a = state.answers[v.id] || {};
+      questionsFor(v).forEach(function (q) {
+        lines.push("  " + q.text + " -> " + (a[q.id] || "unanswered"));
+      });
+      lines.push("");
+    });
+
+    summaryEl.value = lines.join("\n");
+  }
+
+  // ---- wiring -----------------------------------------------------------
+
+  function selectVariant(i) {
+    state.variant = i;
+    state.surfaceKeys = {};
+    buildSurface();
+    buildQuestions();
+    var v = VARIANTS[i];
+    descEl.textContent = "Setup " + v.id + ": " + v.plain;
+    Array.prototype.forEach.call(
+      document.querySelectorAll("#variant-buttons button"),
+      function (b, bi) { b.setAttribute("aria-pressed", bi === i ? "true" : "false"); }
+    );
+    report();
+  }
+
+  var btnHost = document.getElementById("variant-buttons");
+  VARIANTS.forEach(function (v, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = "Setup " + v.id + ": " + v.name;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () { selectVariant(i); surfaceEl.focus(); });
+    btnHost.appendChild(b);
+  });
+
+  document.getElementById("focus-btn").addEventListener("click", function () {
+    surfaceEl.focus();
+  });
+  document.getElementById("reset-btn").addEventListener("click", function () {
+    selectVariant(state.variant);
+    surfaceEl.focus();
+  });
+
+  selectVariant(0);
+})();
+</script>
+</body>
+</html>
