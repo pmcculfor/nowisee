@@ -264,7 +264,7 @@ export interface ShellConfig {
 
 ### Navigator (single owner of state transitions)
 
-1. Own per-app **stack** of `StackEntry`, busy/blocked, and a monotonic transition token.
+1. Own per-app **stack**, **blocked** (intents ignored while true; “busy” in older wording means the same flag), and a monotonic transition token.
 2. `onIntent(intent)`: look up `(tipId, intent)`; missing → silent no-op.
 3. `openLocation(location, extras)`: clear stack, clear cache/map, set current app, call `app.open(path)`, apply.
 4. `kind: "app"` edge → `openLocation`. `kind: "external"` → hand the href to the browser.

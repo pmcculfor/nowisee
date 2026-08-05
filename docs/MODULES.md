@@ -60,7 +60,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the canonical definitions.
 | Case | Behavior |
 |------|----------|
 | `get` unknown id | Return null; Navigator falls back to `config.rootAppId` |
-| Double-register same id | Reject or replace deterministically (pick one at scaffold; document it) |
+| Double-register same id | **Reject** (throw / fail bootstrap); do not silently replace |
 
 ### Non-goals
 
@@ -197,7 +197,7 @@ Navigator is the **single owner** of every state transition: stack, cache, map, 
 ### Responsibilities
 
 - Orchestrate intent → map → stack → display → refresh.
-- Own `busy` / `blocked` and the monotonic **transition token**.
+- Own **`blocked`** (intents ignored while true) and the monotonic **transition token**. Specs may say “busy”; that means the same flag.
 - Apply `RefreshResult` to map, cache, stack tip (id, label, location), display, address bar.
 - Read input text from Display when `passInputText` is set.
 - Set `extras.action` on exactly the traversal of an `action: true` edge.
@@ -231,6 +231,7 @@ onIntent(intent):
     destId = stack.tip.nodeId
   else:
     destId = edge.toNodeId                           // required for push/replace
+    if !destId: return                               // malformed → silent no-op
 
   payload = cache.get(destId)
   if payload:
@@ -239,8 +240,8 @@ onIntent(intent):
   else:
     blocked = true
     applyLocalMove(edge.stackBehavior, { nodeId: destId, label: "" })
-    // stack moves so refresh sees the intended tip; the display does not change
-    // and no placeholder text is shown until result.node arrives
+    // stack moves so refresh sees the intended tip; Display keeps the previous
+    // label (no placeholder, no empty flash) until result.node arrives
     startCall(refresh, extras, token)
     // on result (if token is newest): apply; blocked = false
 ```

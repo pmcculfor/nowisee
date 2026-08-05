@@ -197,7 +197,7 @@ Browser operations core can mediate go through that platform context, not throug
 
 ### 4.14 Auth / database
 
-Not in MVP. Later: a platform capability (§4.10) — still no app-named core repositories.
+Not in MVP. Clipboard is the only platform capability provided now (§4.10). Auth, durable storage, and shared login arrive later on that same seam — still no app-named core repositories.
 
 ### 4.15 MVP scope
 
