@@ -3,25 +3,31 @@
 import { describe, expect, it } from "vitest";
 import { createHomeApp } from "../src/apps/home.ts";
 import { startShell } from "../src/shell/bootstrap.ts";
+import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 describe("shell bootstrap", () => {
-  it("opens Home at #/ with rootAppId home", async () => {
+  it("opens Home at #/ with rootAppId home and lists Bible", async () => {
     window.location.hash = "#/";
     const mount = document.createElement("div");
     document.body.appendChild(mount);
 
-    const shell = startShell(mount, { config: { rootAppId: "home" } });
+    const shell = startShell(mount, {
+      config: { rootAppId: "home" },
+      kjv: fixtureKjv,
+    });
     await shell.navigator.openLocation({ appId: "home", path: "/" });
 
-    expect(shell.registry.listEnabled()).toEqual([{ id: "home", label: "Home" }]);
-    expect(mount.textContent).toContain("Home");
+    expect(shell.registry.listEnabled()).toEqual([
+      { id: "home", label: "Home" },
+      { id: "bible", label: "Bible" },
+    ]);
+    expect(mount.textContent).toContain("Bible");
     expect(shell.navigator.getCurrentAppId()).toBe("home");
 
     shell.stop();
   });
 
   it("Home is constructed with listEnabled descriptors, not the registry object", () => {
-    // Structural check: createHomeApp used by bootstrap only accepts listEnabled callback.
     const home = createHomeApp({
       rootAppId: "home",
       listEnabled: () => [{ id: "home", label: "Home" }],
