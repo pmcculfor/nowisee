@@ -80,7 +80,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Ownership | Navigator owns every state transition; Router is a pure URL boundary |
 | Client vs server cache | Core owns client warm only; server cache/session behind apps |
 | MVP apps | Home + KJV Bible + demo mail as portable `AppModule`s |
-| Auth/DB | Not MVP; reserve empty platform context on refresh |
+| Auth/DB | Not MVP; clipboard is the only platform capability provided; storage/auth arrive later on the same seam |
 
 ## Mental model
 
