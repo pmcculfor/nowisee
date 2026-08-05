@@ -1,3 +1,7 @@
+import { createBibleApp } from "../apps/bible/index.ts";
+import type { KjvData } from "../apps/bible/types.ts";
+import kjvJson from "../apps/bible/data/kjv.json" with { type: "json" };
+import { createHomeApp } from "../apps/home.ts";
 import { Display } from "../core/display.ts";
 import { defaultKeyBindings, Keyboard } from "../core/keyboard.ts";
 import { NavigationMapStore } from "../core/navigationMap.ts";
@@ -8,7 +12,6 @@ import { AppRegistry } from "../core/registry.ts";
 import { Router } from "../core/router.ts";
 import { Stack } from "../core/stack.ts";
 import type { ShellConfig } from "../core/types.ts";
-import { createHomeApp } from "../apps/home.ts";
 
 export type ShellHandle = {
   readonly navigator: Navigator;
@@ -20,11 +23,11 @@ export type ShellHandle = {
 
 /**
  * Bootstrap the shell. Core never names a product app — `rootAppId` comes from config.
- * Bible/Mail register here in later slices.
+ * Mail registers in a later slice.
  */
 export function startShell(
   mount: HTMLElement,
-  options: { readonly config?: ShellConfig } = {},
+  options: { readonly config?: ShellConfig; readonly kjv?: KjvData } = {},
 ): ShellHandle {
   const config: ShellConfig = {
     rootAppId: options.config?.rootAppId ?? "home",
@@ -37,6 +40,12 @@ export function startShell(
     rootAppId: config.rootAppId,
   });
   registry.register(home);
+  registry.register(
+    createBibleApp({
+      rootAppId: config.rootAppId,
+      data: options.kjv ?? (kjvJson as KjvData),
+    }),
+  );
 
   const display = new Display(mount);
   const map = new NavigationMapStore();
