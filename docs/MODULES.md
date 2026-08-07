@@ -296,7 +296,7 @@ onIntent(intent):
 - Render exactly one interactive surface.
 - `showText(label)` for `kind: "text"` (default) — remount + focus.
 - `replaceText(label)` — in-place label change when the text surface is already mounted (no remount, no focus steal).
-- `showInput(initialText)` for `kind: "input"`; expose `getInputText()`.
+- `showInput(initialText)` for `kind: "input"` — multiline `<textarea>`; expose `getInputText()`.
 - Focus management on load and when switching text ↔ input.
 - Announce updates (`aria-live` assertive default).
 
@@ -527,7 +527,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - List order: **Create a note**, then notes sorted by `updatedAt` descending.
 - Open `/`: tip is the first note if any, otherwise Create. Prev from the first note reaches Create.
 - List tips show the **first line** of each note body (empty → “Empty note”).
-- Enter on Create or a note → input node (empty or full body). Enter commits with `passInputText` + `action: true`; back abandons without writing.
+- Enter on Create or a note → multiline input (full body). **Back** commits with `passInputText` + `action: true`; **enter** is unbound on the input so plain Enter inserts newlines. There is no discard-via-back path.
 - Side effects (create/update) run **only** when `extras.action` is true.
 - Root list tips: `back` is an `app` edge to Home.
 - Persistence behind an injected `NotesStore` (shell wires localStorage for MVP). Schema carries `id`, `body`, `createdAt`, `updatedAt` — no owner yet; swap the store for a DB/API later without core changes.

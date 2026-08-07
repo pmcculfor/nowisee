@@ -14,7 +14,8 @@ export class Display {
   private readonly root: HTMLElement;
   private mode: DisplayMode = "text";
   private textEl: HTMLElement | null = null;
-  private inputEl: HTMLInputElement | null = null;
+  /** Multiline surface — plain Enter inserts a newline; nav uses the chord/pads. */
+  private inputEl: HTMLTextAreaElement | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -60,16 +61,24 @@ export class Display {
     this.root.replaceChildren();
     this.textEl = null;
 
-    const input = document.createElement("input");
-    input.type = "text";
+    const input = document.createElement("textarea");
     input.dataset.surface = "input";
     input.value = initialText;
+    input.rows = Math.max(3, initialText.split(/\r?\n/).length);
     input.setAttribute("aria-label", "Input");
+    // Avoid browser spellcheck chrome fighting screen readers in MVP.
+    input.setAttribute("spellcheck", "false");
 
     this.root.appendChild(input);
     this.inputEl = input;
     this.mode = "input";
     input.focus();
+    try {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    } catch {
+      // Some hosts reject selection APIs on detached/unfocused controls.
+    }
   }
 
   getInputText(): string {

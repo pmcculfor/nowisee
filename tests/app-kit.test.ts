@@ -96,6 +96,19 @@ describe("inputEdges", () => {
     );
     expect(withPop.field?.back).toEqual(edgePop());
   });
+
+  it("commitOn back saves via back and omits enter", () => {
+    const map = inputEdges("field", {
+      commitTo: "saved",
+      commitOn: "back",
+      action: true,
+      commitStackBehavior: "replace",
+    });
+    expect(map.field?.back).toEqual(
+      edgeAction("saved", { passInputText: true, stackBehavior: "replace" }),
+    );
+    expect(map.field?.enter).toBeUndefined();
+  });
 });
 
 describe("rootBackToHome", () => {

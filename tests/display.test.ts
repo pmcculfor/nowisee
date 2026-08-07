@@ -20,20 +20,20 @@ describe("Display", () => {
     expect(document.activeElement).toBe(surface);
   });
 
-  it("showInput replaces the surface with one input and focuses it", () => {
+  it("showInput replaces the surface with one textarea and focuses it", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
 
     display.showText("before");
-    display.showInput("typed");
+    display.showInput("typed\nline two");
 
     expect(root.querySelector("[data-surface='text']")).toBeNull();
-    const input = root.querySelector("input");
+    const input = root.querySelector("textarea");
     expect(input).not.toBeNull();
-    expect(input!.value).toBe("typed");
+    expect(input!.value).toBe("typed\nline two");
     expect(display.getMode()).toBe("input");
-    expect(display.getInputText()).toBe("typed");
+    expect(display.getInputText()).toBe("typed\nline two");
     expect(document.activeElement).toBe(input);
   });
 
@@ -45,7 +45,7 @@ describe("Display", () => {
     display.showInput("x");
     display.showText("back to text");
 
-    expect(root.querySelector("input")).toBeNull();
+    expect(root.querySelector("textarea")).toBeNull();
     expect(root.querySelector("[data-surface='text']")!.textContent).toBe("back to text");
     expect(display.getInputText()).toBe("");
   });

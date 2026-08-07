@@ -29,7 +29,7 @@ body {
 }
 
 #app [data-surface="text"],
-#app input[data-surface="input"] {
+#app textarea[data-surface="input"] {
   display: block;
   width: 100%;
   max-width: 40rem;
@@ -40,10 +40,13 @@ body {
   color: inherit;
 }
 
-#app input[data-surface="input"] {
+#app textarea[data-surface="input"] {
   outline: 2px solid #333;
   outline-offset: 4px;
   padding: 0.25rem 0;
+  min-height: 8rem;
+  resize: vertical;
+  line-height: inherit;
 }
 
 /* VoiceOver edge pads: huge hit targets, no visible chrome, name via aria-label only. */

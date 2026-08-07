@@ -201,9 +201,11 @@ function buildNavigationMap(
         enter: edgeNode(CREATE_EDIT_NODE_ID, "replace"),
       },
     },
+    // Back saves; enter is unbound so the chord Right is a no-op while typing
+    // (plain Enter inserts a newline in the textarea).
     inputEdges(CREATE_EDIT_NODE_ID, {
       commitTo: CREATE_RESULT_NODE_ID,
-      backTo: CREATE_NODE_ID,
+      commitOn: "back",
       action: true,
       commitStackBehavior: "replace",
     }),
@@ -222,7 +224,7 @@ function buildNavigationMap(
     fragments.push(
       inputEdges(editId, {
         commitTo: id,
-        backTo: id,
+        commitOn: "back",
         action: true,
         commitStackBehavior: "replace",
       }),
