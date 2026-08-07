@@ -9,7 +9,7 @@
 
 **Nowisee** is a website for blind (and screen-reader / keyboard-primary) users who struggle with modern, cluttered UIs.
 
-**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to `Ctrl+Alt+Shift`+arrows by default (and to VoiceOver edge pads on focus) and which a user or locale can rebind without any app changing.
+**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to `Ctrl+Alt+Shift`+arrows by default (and to VoiceOver edge pads on focus or click) and which a user or locale can rebind without any app changing.
 
 **Why it exists:** typical sites force tabbing through chrome or exploring by touch. Users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
 

@@ -25,6 +25,16 @@ export function formatRef(ref: BibleRef): string {
   return `${ref.book} ${ref.chapter}:${ref.verse}`;
 }
 
+/** Number first so VoiceOver announces it before the role word. */
+export function chapterLabel(chapter: number): string {
+  return `${chapter} (chapter)`;
+}
+
+/** Verse number + text only; copy still uses formatRef for book/chapter. */
+export function verseLabel(verse: number, text: string): string {
+  return `${verse}. ${text}`;
+}
+
 /** Encode path segment safely (spaces → kept as-is in path; we use encodeURIComponent). */
 export function bookPathSegment(name: string): string {
   return encodeURIComponent(name);

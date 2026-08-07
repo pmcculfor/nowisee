@@ -18,10 +18,12 @@ import type {
 import {
   bookPathSegment,
   booksForTestament,
+  chapterLabel,
   decodeBookSegment,
   findBook,
   formatRef,
   testamentLabel,
+  verseLabel,
   verseText,
 } from "./canon.ts";
 import {
@@ -169,13 +171,13 @@ function tipPayload(deps: BibleViewDeps, parsed: ParsedNode): NodePayload {
     case "chapter":
       return {
         id: chapterId(parsed.book, parsed.chapter),
-        label: `${parsed.book} ${parsed.chapter}`,
+        label: chapterLabel(parsed.chapter),
       };
     case "verse": {
       const text = verseText(deps.data, parsed.ref) ?? "";
       return {
         id: verseId(parsed.ref),
-        label: `${formatRef(parsed.ref)}. ${text}`,
+        label: verseLabel(parsed.ref.verse, text),
       };
     }
     case "option":
@@ -261,7 +263,7 @@ function addBookLevel(
   for (let ch = 1; ch <= Math.min(book.chapters.length, 12); ch++) {
     addNode(payloads, {
       id: chapterId(book.name, ch),
-      label: `${book.name} ${ch}`,
+      label: chapterLabel(ch),
     });
   }
   // Ensure testament parent warm
@@ -288,13 +290,14 @@ function addChapterLevel(
   for (let ch = 1; ch <= chapterCount; ch++) {
     const id = chapterId(book.name, ch);
     ids.push(id);
-    addNode(payloads, { id, label: `${book.name} ${ch}` });
+    addNode(payloads, { id, label: chapterLabel(ch) });
   }
-  fragments.push(siblingListEdges(ids, { wrap: false }));
+  fragments.push(siblingListEdges(ids, { wrap: true }));
   fragments.push({
     from: chapterId(book.name, chapter),
     intent: "enter",
-    edge: edgeNode(verseId({ book: book.name, chapter, verse: 1 }), "push"),
+    // Replace so verse↔verse chapter joins keep a clean [book, verse] stack.
+    edge: edgeNode(verseId({ book: book.name, chapter, verse: 1 }), "replace"),
   });
   fragments.push({
     from: chapterId(book.name, chapter),
@@ -324,11 +327,50 @@ function addVerseLevel(
     ids.push(id);
     addNode(payloads, {
       id,
-      label: `${formatRef(r)}. ${verses[v - 1]!}`,
+      label: verseLabel(v, verses[v - 1]!),
     });
   }
   fragments.push(siblingListEdges(ids, { wrap: false }));
+
+  // Last verse → first of next chapter; first verse ← last of previous chapter.
   const tip = verseId(ref);
+  const lastVerse = verses.length;
+  if (lastVerse > 0 && ref.chapter < book.chapters.length) {
+    const nextRef = { book: book.name, chapter: ref.chapter + 1, verse: 1 };
+    const nextText = book.chapters[ref.chapter]?.[0];
+    fragments.push({
+      from: verseId({ book: book.name, chapter: ref.chapter, verse: lastVerse }),
+      intent: "next",
+      edge: edgeNode(verseId(nextRef), "replace"),
+    });
+    if (nextText !== undefined) {
+      addNode(payloads, {
+        id: verseId(nextRef),
+        label: verseLabel(1, nextText),
+      });
+    }
+  }
+  if (ref.chapter > 1) {
+    const prevChapterVerses = book.chapters[ref.chapter - 2] ?? [];
+    const prevLast = prevChapterVerses.length;
+    if (prevLast > 0) {
+      const prevRef = {
+        book: book.name,
+        chapter: ref.chapter - 1,
+        verse: prevLast,
+      };
+      fragments.push({
+        from: verseId({ book: book.name, chapter: ref.chapter, verse: 1 }),
+        intent: "prev",
+        edge: edgeNode(verseId(prevRef), "replace"),
+      });
+      addNode(payloads, {
+        id: verseId(prevRef),
+        label: verseLabel(prevLast, prevChapterVerses[prevLast - 1]!),
+      });
+    }
+  }
+
   fragments.push({
     from: tip,
     intent: "enter",
@@ -337,12 +379,13 @@ function addVerseLevel(
   fragments.push({
     from: tip,
     intent: "back",
-    edge: edgePop(),
+    // Replace to this verse's chapter (works after cross-chapter joins).
+    edge: edgeNode(chapterId(book.name, ref.chapter), "replace"),
   });
   addOptionPayloads(payloads, ref);
   addNode(payloads, {
     id: chapterId(book.name, ref.chapter),
-    label: `${book.name} ${ref.chapter}`,
+    label: chapterLabel(ref.chapter),
   });
 }
 
@@ -425,7 +468,7 @@ function warmVerses(
     const ref = { book: book.name, chapter, verse: v };
     addNode(payloads, {
       id: verseId(ref),
-      label: `${formatRef(ref)}. ${verses[v - 1]!}`,
+      label: verseLabel(v, verses[v - 1]!),
     });
   }
   void deps;

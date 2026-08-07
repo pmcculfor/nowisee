@@ -23,10 +23,9 @@ body {
   box-sizing: border-box;
   min-height: 100dvh;
   min-height: 100vh;
-  padding: max(4.5rem, 18vh, env(safe-area-inset-top))
-    max(4.5rem, 18vw, env(safe-area-inset-right))
-    max(4.5rem, 18vh, env(safe-area-inset-bottom))
-    max(4.5rem, 18vw, env(safe-area-inset-left));
+  /* Pads overlay the surface — no reserved gutter that squishes text. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 #app [data-surface="text"],
@@ -69,7 +68,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: max(4.5rem, 18vh);
+  height: max(6.75rem, 27vh);
   padding-top: env(safe-area-inset-top);
 }
 
@@ -77,22 +76,22 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: max(4.5rem, 18vh);
+  height: max(6.75rem, 27vh);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
 #app button[data-nav-pad="left"] {
-  top: max(4.5rem, 18vh);
-  bottom: max(4.5rem, 18vh);
+  top: max(6.75rem, 27vh);
+  bottom: max(6.75rem, 27vh);
   left: 0;
-  width: max(4.5rem, 18vw);
+  width: max(6.75rem, 27vw);
   padding-left: env(safe-area-inset-left);
 }
 
 #app button[data-nav-pad="right"] {
-  top: max(4.5rem, 18vh);
-  bottom: max(4.5rem, 18vh);
+  top: max(6.75rem, 27vh);
+  bottom: max(6.75rem, 27vh);
   right: 0;
-  width: max(4.5rem, 18vw);
+  width: max(6.75rem, 27vw);
   padding-right: env(safe-area-inset-right);
 }

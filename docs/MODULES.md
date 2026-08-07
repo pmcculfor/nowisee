@@ -369,15 +369,15 @@ Notes on the defaults:
 
 **Path:** `src/core/navPads.ts`
 
-VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them — explore-by-touch only, no double-tap activate.
+VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them, and again on `click` (sighted tap or VoiceOver double-tap activate). A short debounce collapses focus+click from one gesture into a single intent.
 
 ### Responsibilities
 
 - Mount four native `<button type="button">` elements (top / bottom / left / right).
 - Name each via `aria-label` only (`Previous` / `Next` / `Back` / `Enter`); no nested text VoiceOver can stop on separately.
-- Listen for `focusin` on those buttons only; call `navigator.onIntent(intent)`.
+- Listen for `focusin` and `click` on those buttons only; call `navigator.onIntent(intent)`.
 - If blocked: ignore.
-- Do **not** navigate on `click` — focus is the trigger.
+- Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
 
 | Edge | Intent |
 |------|--------|
@@ -487,8 +487,11 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 - Own KJV data (static JSON or equivalent).
 - Graph: Testament → book → chapter → verse → option nodes (Copy, Commentary stub).
+- Book lists and chapter lists wrap at the ends; verse `next` / `prev` join adjacent chapters (last verse → first of next chapter, and the reverse).
+- Chapter labels are `N (chapter)` (number first); verse labels are `N. text` only. Copy still writes `Book C:V. text`.
+- Chapter → verse uses `replace` (not `push`) so cross-chapter verse joins keep a clean stack; verse `back` replaces to that verse’s chapter.
 - `open(path)` parses canonical verse/book paths; bootstrap stack tip = resolved node (stack may be a single leaf after open reset—the app still exposes internal pops via map once the user pushes deeper in-session).
-- After open, user builds in-app stack via `push` edges; `back` = `pop` within bible; root `back` = `app` edge to the root app.
+- After open, user builds in-app stack via `push` / `replace` edges; `back` = `pop` or chapter `replace` within bible; root `back` = `app` edge to the root app.
 - Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) calls `extras.platform.clipboard?.writeText(verse)` and returns “Copied” / an error label in place. `prev` / `next` over the Copy option carry no flag and therefore do nothing. The app never touches `navigator.clipboard`, and never has to think about user activation — see §10.
 - Warm + map: use app kit neighborhood helper or hand-built edges for nearby books/chapters/verses as appropriate.
 - Search (optional/later): input node → results list as normal nodes in warm/map; client warm holds the hit list.

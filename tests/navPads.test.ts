@@ -68,4 +68,32 @@ describe("NavPads", () => {
     back.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     expect(intents).toEqual(["next", "enter"]);
   });
+
+  it("fires onIntent on click, and debounces focusin+click into one intent", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const intents: NavIntent[] = [];
+    const host: NavPadsHost = {
+      isBlocked: () => false,
+      onIntent: (intent) => {
+        intents.push(intent);
+      },
+    };
+
+    const pads = new NavPads({ parent, host });
+    pads.attach();
+
+    const next = parent.querySelector<HTMLButtonElement>('button[data-nav-pad="bottom"]')!;
+    next.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    next.click();
+    expect(intents).toEqual(["next"]);
+
+    const back = parent.querySelector<HTMLButtonElement>('button[data-nav-pad="left"]')!;
+    back.click();
+    expect(intents).toEqual(["next", "back"]);
+
+    pads.detach();
+    next.click();
+    expect(intents).toEqual(["next", "back"]);
+  });
 });

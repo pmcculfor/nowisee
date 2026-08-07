@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBibleApp } from "../src/apps/bible/index.ts";
-import { optionId, testamentId, verseId } from "../src/apps/bible/ids.ts";
+import {
+  bookId,
+  chapterId,
+  optionId,
+  testamentId,
+  verseId,
+} from "../src/apps/bible/ids.ts";
 import type { RefreshResult } from "../src/core/types.ts";
 import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
@@ -32,10 +38,64 @@ describe("Bible app", () => {
     const app = bible();
     const result = await app.open("/kjv/Matthew/5/3");
     expect(result.node.id).toBe(verseId({ book: "Matthew", chapter: 5, verse: 3 }));
-    expect(result.node.label).toContain("Blessed are the poor in spirit");
+    expect(result.node.label).toBe(
+      "3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
+    );
     expect(result.location).toEqual({
       appId: "bible",
       path: "/kjv/Matthew/5/3",
+    });
+  });
+
+  it("books and chapters wrap at list ends", async () => {
+    const app = bible();
+    // Books already author wrap: true; fixture has one book per testament, so
+    // siblingListEdges omits self-edges when length === 1. Chapters have many.
+    const first = chapterId("Matthew", 1);
+    const last = chapterId("Matthew", 5);
+    const chList = await refresh(app, [
+      { nodeId: bookId("Matthew"), label: "Matthew", location: null },
+      { nodeId: first, label: "1 (chapter)", location: null },
+    ]);
+    expect(chList.node.label).toBe("1 (chapter)");
+    expect(chList.navigationMap[first]?.prev).toEqual({
+      kind: "node",
+      toNodeId: last,
+      stackBehavior: "replace",
+    });
+    expect(chList.navigationMap[last]?.next).toEqual({
+      kind: "node",
+      toNodeId: first,
+      stackBehavior: "replace",
+    });
+
+    const books = await app.open("/kjv/Matthew");
+    expect(books.navigationMap[bookId("Matthew")]?.next).toBeUndefined();
+    // Enter still lands on wrapped chapter list.
+    expect(books.navigationMap[bookId("Matthew")]?.enter).toEqual({
+      kind: "node",
+      toNodeId: first,
+      stackBehavior: "push",
+    });
+  });
+
+  it("last verse next joins the first verse of the next chapter", async () => {
+    const app = bible();
+    const result = await app.open("/kjv/Matthew/4/1");
+    const lastOf4 = verseId({ book: "Matthew", chapter: 4, verse: 1 });
+    const firstOf5 = verseId({ book: "Matthew", chapter: 5, verse: 1 });
+    expect(result.node.label).toBe("1. Placeholder Matthew 4:1");
+    expect(result.navigationMap[lastOf4]?.next).toEqual({
+      kind: "node",
+      toNodeId: firstOf5,
+      stackBehavior: "replace",
+    });
+
+    const ch5 = await app.open("/kjv/Matthew/5/1");
+    expect(ch5.navigationMap[firstOf5]?.prev).toEqual({
+      kind: "node",
+      toNodeId: lastOf4,
+      stackBehavior: "replace",
     });
   });
 
@@ -60,12 +120,17 @@ describe("Bible app", () => {
     expect(result.navigationMap[copyId]?.next).not.toHaveProperty("action");
   });
 
-  it("Copy action writes clipboard once; sibling browse does not", async () => {
+  it("Copy action writes clipboard with book and chapter; display is verse number only", async () => {
     const app = bible();
     const written: string[] = [];
     const ref = { book: "Genesis", chapter: 1, verse: 1 };
     const statusId = `bible:s:${ref.book}:${ref.chapter}:${ref.verse}:copy`;
     const copyId = optionId(ref, "copy");
+
+    const verse = await app.open("/kjv/Genesis/1/1");
+    expect(verse.node.label).toBe(
+      "1. In the beginning God created the heaven and the earth.",
+    );
 
     await refresh(app, [{ nodeId: copyId, label: "Copy", location: null }]);
     expect(written).toEqual([]);
@@ -90,7 +155,9 @@ describe("Bible app", () => {
     expect(copied.node.label).toBe("Copied");
     expect(copied.location).toBeNull();
     expect(written).toHaveLength(1);
-    expect(written[0]).toContain("In the beginning God created");
+    expect(written[0]).toBe(
+      "Genesis 1:1. In the beginning God created the heaven and the earth.",
+    );
 
     await refresh(
       app,
