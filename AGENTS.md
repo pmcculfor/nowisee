@@ -87,3 +87,14 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - **Core** = shell for a text-node browser (keys, stack, map, cache, registry, display, router).
 - **Apps** = authorities that answer `open` / `refresh` with navigation maps and warm nodes.
 - When unsure, push knowledge into the app (or optional app kit); keep core smaller.
+
+## Cursor Cloud specific instructions
+
+Frontend-only static SPA (Vanilla TS + Vite). No backend, database, environment variables, or secrets are needed to run, test, or build. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/pages.yml`).
+
+- **Dev server:** `npm run dev` serves at `http://localhost:5173/` (Vite `base` stays `/` in dev, `/nowisee/` only in production builds).
+- **Tests:** `npm test` (Vitest, node environment). `tests/navigator.test.ts` intentionally logs `Navigator: refresh/open failed Error: boom` to stderr while exercising the failure path — that stderr line is expected and does **not** mean the suite failed.
+- **Lint / typecheck:** there is no ESLint/Prettier. The static check is the strict `tsc -p tsconfig.app.json --noEmit` that runs as the first half of `npm run build`.
+- **Build:** `npm run build` (typecheck + `vite build`). It emits one large (~4 MB) JS chunk because the committed KJV JSON is bundled; the "chunks are larger than 500 kB" warning is expected, not an error.
+- **KJV data:** already committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
+- **Navigating the running app:** navigation is driven only by the `Ctrl+Alt+Shift+Arrow` chord (Up=prev, Down=next, Right=enter, Left=back) or the invisible full-height/width screen-edge pads (right edge = enter, left = back, top = prev, bottom = next). Plain arrows, Tab, and Escape are intentionally unbound.
