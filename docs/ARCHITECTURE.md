@@ -274,7 +274,7 @@ export interface ShellConfig {
    - `pop`: pop; destination = new tip; **ignore any toNodeId**
 6. If destination payload in warm (or pinned stack): display immediately; start `refresh`.
 7. Else: block until `refresh` returns; then display.
-8. Apply: replace map; replace warm (re-pin stack); set tip from `result.node` (**including its id**); set address bar from `result.location` rules. Remount Display only when the tip changed; identical warm revalidation must not remount (screen readers restart on remount). Same-id text label changes update the live region in place.
+8. Apply: replace map; replace warm (re-pin stack); set tip from `result.node` (**including its id**); set address bar from `result.location` rules. Remount Display only when the tip changed; identical warm revalidation must not remount (screen readers restart on remount). Same-id text label changes remount once so focus can announce the new label.
 9. Every transition increments the token. A result is applied only if its token is the newest issued — tip-id comparison is not sufficient.
 10. On refresh failure: keep display; clear block/busy.
 
@@ -286,9 +286,8 @@ export interface ShellConfig {
 
 ### Display
 
-- Text node: show `label` in one focusable live region.
-- Input node: show one input box (same single-surface rule); seed from `label` or app `data` as the app defines.
-- `aria-live`: assertive by default; revisit in the accessibility pass.
+- Text node: show `label` in one focusable surface (`tabindex="-1"`). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS).
+- Input node: show one multiline textarea (same single-surface rule); seed from `label` or app `data` as the app defines.
 
 ### Keyboard
 

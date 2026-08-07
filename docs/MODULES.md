@@ -250,7 +250,7 @@ onIntent(intent):
 
 **Local move vs refresh authority:** After a warm hit, display `payload.label` immediately, then refresh may replace the tip with `result.node` (same id or a stale-repair fallback). Core adopts `result.node.id` as the tip id, since subsequent map lookups key off it. Do not teleport to an unrelated workflow destination.
 
-**Display after revalidation:** If `result.node` matches what Display already shows (same app, id, kind, and — for text — label), do **not** remount the surface. Remounting restarts screen-reader utterance (VoiceOver on iOS especially). Same-id text with a new label updates the live region in place (`replaceText`) without stealing focus. Same-id input tips leave the mounted input alone so revalidation cannot wipe caret or typed text.
+**Display after revalidation:** If `result.node` matches what Display already shows (same app, id, kind, and — for text — label), do **not** remount the surface. Remounting restarts screen-reader utterance. Same-id text with a new label remounts once via `showText` (focus announces the new label). Same-id input tips leave the mounted input alone so revalidation cannot wipe caret or typed text.
 
 ### Transition token
 
@@ -295,10 +295,9 @@ onIntent(intent):
 
 - Render exactly one interactive surface.
 - `showText(label)` for `kind: "text"` (default) — remount + focus.
-- `replaceText(label)` — in-place label change when the text surface is already mounted (no remount, no focus steal).
 - `showInput(initialText)` for `kind: "input"` — multiline `<textarea>`; expose `getInputText()`.
 - Focus management on load and when switching text ↔ input.
-- Announce updates (`aria-live` assertive default).
+- **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
 
 ### Edge cases
 
@@ -306,13 +305,14 @@ onIntent(intent):
 |------|----------|
 | Long label | Single blob; no truncation required in MVP |
 | Switch text → input | Replace surface; focus input |
-| Switch input → text | Replace surface; focus live region |
+| Switch input → text | Replace surface; focus text surface |
 | Identical tip revalidated | Navigator skips Display; no remount / no re-focus |
-| Same text tip, new label | `replaceText` — in-place live-region update, no focus steal |
+| Same text tip, new label | Remount + focus once so the new label is announced |
 
 ### Non-goals
 
 - Multi-field forms, visible chrome, Escape-to-blur platform behavior.
+- A second SR-only status channel (deferred — see DESIGN-REVIEW §6).
 
 ---
 
@@ -549,7 +549,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
 - Pass Home a `listEnabled` callback returning descriptors (never the registry itself).
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
-- Focus display on load.
+- Do **not** call `display.focus()` again after open resolves — `showText` / `showInput` already focused; a second focus restarts VoiceOver.
 
 ### Non-goals
 
@@ -564,7 +564,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | Browser Back/Forward vs session stack | Hashchange → `openLocation` is enough for MVP; deeper sync deferred |
 | Server session TTL / auth | App/backend; platform context seam reserved empty |
 | Warm etags | Deferred |
-| aria-live assertive vs polite | Default assertive; revisit in a11y pass |
+| aria-live assertive vs polite | **Settled:** neither — announce via focus only; no `aria-live` on the content surface (VoiceOver iOS double-speaks live+focus) |
 | Busy / dead-end / failure are indistinguishable to the user | Accepted for MVP; status channel deferred (review §6) |
 | Screen-reader browse mode eating arrows | Spike deferred; DOM strategy settled during implementation (review §7) |
 | Deep-link ancestry | Deferred; optional `stack` on `open` is additive (review §8) |

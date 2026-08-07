@@ -41,7 +41,7 @@ Apps author **intents**. Core owns which keystroke produces each one (defaults i
 
 Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.
 
-**Display:** one text blob or one input box. Screen reader announces updates via one live/focus region. Help lives **in the tree** as nodes, not modals.
+**Display:** one text blob or one input box. Screen reader announces updates by focusing the remounted text surface (no `aria-live` on that surface). Help lives **in the tree** as nodes, not modals.
 
 **Example paths:**
 
