@@ -67,3 +67,33 @@ Your answers to the four questions decide between the setups that pass. In rough
 - **Setup F separately** confirms the default typing-screen keys in `docs/MODULES.md` §9. If `Alt`+`Up` does not arrive, or if plain arrows stop moving the cursor, that table changes. Because apps only ever see intents like `enter` and `back`, changing it affects one file and no app.
 
 Whatever comes back, record it in `docs/DESIGN-REVIEW.md` §7 and turn the outcome into a lock.
+
+---
+
+## `voiceover-dom-focus-probe.html` — does VoiceOver accessibility focus become DOM focus?
+
+### Why this exists
+
+On iPhone there is no keyboard. VoiceOver owns touch gestures, so the desktop arrow-key model does not apply. One candidate for phone navigation is large edge pads (top / bottom / left / right): when VoiceOver’s accessibility focus lands on a pad, navigate — without requiring a second double-tap to activate.
+
+That only works if VoiceOver’s accessibility focus also fires a real DOM `focus` / `focusin` event the page can listen for. That is not guaranteed, and it may differ by element type (`button`, `a`, `input`, `div tabindex="0"`, plain text, etc.). This page answers that with evidence.
+
+### How to run it
+
+On an iPhone, open the GitHub Pages copy in Safari (this is the path that matters for VoiceOver testing):
+
+**https://pmcculfor.github.io/nowisee/spikes/voiceover-dom-focus-probe.html**
+
+(The same file also lives at `spikes/voiceover-dom-focus-probe.html` and is copied into `public/spikes/` so the Pages build ships it.)
+
+1. Turn VoiceOver on.
+2. Explore by touch (drag a finger) or swipe right/left across the probes.
+3. Do **not** double-tap — the question is focus-only.
+4. The sticky status box at the top turns green and announces whenever a real DOM `focusin` fires. The log lists every event; counts are per probe type.
+5. Copy the summary and send it back.
+
+### What the answers decide
+
+- **If `button` / `a` / `tabindex="0"` fire DOM focus on accessibility focus alone:** edge-pad navigation on focus is viable for iPhone VoiceOver; pick the element type that worked cleanly and lock it for the mobile input path.
+- **If only form controls fire DOM focus:** edge pads would need to be inputs (probably a bad reading experience) or we need a different trigger.
+- **If nothing fires until double-tap / activation:** focus-only navigation is not available; phone UX needs another model (custom gestures VoiceOver does not eat, a rotor action, an on-screen control that accepts activation, etc.).

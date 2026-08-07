@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VoiceOver → DOM focus probe</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    font: 18px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 1rem 1rem 8rem;
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+  h1 { font-size: 1.45rem; margin: 0 0 .5rem; }
+  h2 { font-size: 1.15rem; margin: 1.75rem 0 .5rem; }
+  p { margin: .6rem 0; }
+  ol { padding-left: 1.3rem; }
+  li { margin: .35rem 0; }
+  .note {
+    border-left: 4px solid currentColor;
+    padding-left: .75rem;
+    margin: 1rem 0;
+  }
+  .status {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: Canvas;
+    border: 3px solid currentColor;
+    border-radius: .5rem;
+    padding: .75rem 1rem;
+    margin: 1rem 0;
+  }
+  .status strong { display: block; font-size: 1.1rem; }
+  .status .meta { font-size: .95rem; opacity: .85; margin-top: .25rem; }
+  .hit {
+    background: #0a7;
+    color: #fff;
+    border-color: #0a7;
+  }
+  @media (prefers-color-scheme: dark) {
+    .hit { background: #1c9; color: #000; border-color: #1c9; }
+  }
+  .probe {
+    display: block;
+    width: 100%;
+    min-height: 3.5rem;
+    margin: .6rem 0;
+    padding: .85rem 1rem;
+    font: inherit;
+    text-align: left;
+    border: 3px solid currentColor;
+    border-radius: .5rem;
+    background: transparent;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .probe:focus {
+    outline: 5px solid Highlight;
+    outline-offset: 3px;
+  }
+  .probe-label {
+    display: block;
+    font-weight: 700;
+  }
+  .probe-hint {
+    display: block;
+    font-size: .9rem;
+    opacity: .8;
+    margin-top: .2rem;
+  }
+  a.probe { display: block; }
+  input.probe, textarea.probe {
+    width: 100%;
+    resize: vertical;
+  }
+  .plain-text {
+    border: 3px dashed currentColor;
+    border-radius: .5rem;
+    padding: .85rem 1rem;
+    margin: .6rem 0;
+    min-height: 3.5rem;
+  }
+  #log {
+    font: 14px/1.45 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 2px solid currentColor;
+    border-radius: .4rem;
+    padding: .75rem;
+    max-height: 16rem;
+    overflow: auto;
+    background: Canvas;
+  }
+  .toolbar { margin: .75rem 0; }
+  button.tool {
+    font: inherit;
+    padding: .45rem .8rem;
+    margin: .2rem .35rem .2rem 0;
+    border: 2px solid currentColor;
+    border-radius: .4rem;
+    background: transparent;
+    color: inherit;
+  }
+  .counts {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: .25rem .75rem;
+    margin: .5rem 0 0;
+    font-size: .95rem;
+  }
+  .counts dt { font-weight: 600; }
+  .counts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<h1>VoiceOver → DOM focus probe</h1>
+
+<p>One question: when VoiceOver’s <strong>accessibility focus</strong> lands on something
+(explore by touch, or swipe), does the browser also fire a real DOM
+<code>focus</code> / <code>focusin</code> event?</p>
+
+<p class="note">You do not need to double-tap. Just move VoiceOver onto each item
+below and listen / look for the status box to change. If nothing changes, that
+item did <em>not</em> get DOM focus from accessibility focus alone.</p>
+
+<div class="status" id="status" aria-live="assertive" aria-atomic="true">
+  <strong id="status-main">Waiting. Move VoiceOver onto a probe below.</strong>
+  <div class="meta" id="status-meta">No DOM focus events yet.</div>
+</div>
+
+<h2>How to run this on iPhone</h2>
+<ol>
+  <li>Open this page in Safari.</li>
+  <li>Turn VoiceOver on (Settings → Accessibility → VoiceOver, or triple-click Side Button if set up).</li>
+  <li>Use <strong>explore by touch</strong>: drag one finger slowly over the probes.
+      Or swipe right / left to move VoiceOver from item to item.</li>
+  <li>Do <strong>not</strong> double-tap unless you want to also test activation —
+      the point of this page is focus-only.</li>
+  <li>Watch (or listen to) the sticky status box at the top. It announces every
+      time a real DOM focus event fires.</li>
+</ol>
+
+<h2>Probes — different element types</h2>
+
+<p>Each block labels what it is. Try all of them; they may behave differently.</p>
+
+<!-- 1. Native button -->
+<button type="button" class="probe" id="p-button" data-label="button">
+  <span class="probe-label">1. Button</span>
+  <span class="probe-hint">&lt;button type="button"&gt; — natively focusable</span>
+</button>
+
+<!-- 2. Link -->
+<a class="probe" id="p-link" href="#link-target" data-label="link">
+  <span class="probe-label">2. Link</span>
+  <span class="probe-hint">&lt;a href&gt; — natively focusable</span>
+</a>
+<span id="link-target" hidden>link target</span>
+
+<!-- 3. Text input -->
+<label class="probe-label" for="p-input" style="display:block;margin-top:.8rem">3. Text input</label>
+<input class="probe" id="p-input" type="text" data-label="text input"
+  value="Sample text in an input"
+  aria-describedby="p-input-hint">
+<span class="probe-hint" id="p-input-hint">&lt;input type="text"&gt; — form control</span>
+
+<!-- 4. Textarea -->
+<label class="probe-label" for="p-textarea" style="display:block;margin-top:.8rem">4. Textarea</label>
+<textarea class="probe" id="p-textarea" rows="2" data-label="textarea"
+  aria-describedby="p-textarea-hint">Sample text in a textarea</textarea>
+<span class="probe-hint" id="p-textarea-hint">&lt;textarea&gt; — form control</span>
+
+<!-- 5. Focusable div (tabindex=0) -->
+<div class="probe" id="p-div0" tabindex="0" data-label="div tabindex=0"
+  role="group" aria-label="5. Focusable div">
+  <span class="probe-label">5. Div with tabindex="0"</span>
+  <span class="probe-hint">Focusable text container — like a large edge pad</span>
+</div>
+
+<!-- 6. ARIA button -->
+<div class="probe" id="p-aria-btn" tabindex="0" role="button"
+  data-label="role=button div"
+  aria-label="6. ARIA button. Div with role button">
+  <span class="probe-label">6. Div role="button"</span>
+  <span class="probe-hint">ARIA button, tabindex="0"</span>
+</div>
+
+<!-- 7. tabindex=-1 (programmatic only) -->
+<div class="probe" id="p-div-1" tabindex="-1" data-label="div tabindex=-1"
+  role="group" aria-label="7. Div with tabindex minus one">
+  <span class="probe-label">7. Div with tabindex="-1"</span>
+  <span class="probe-hint">Programmatically focusable only — VoiceOver may still land here</span>
+</div>
+
+<!-- 8. Plain text — control: should NOT get DOM focus -->
+<div class="plain-text" id="p-plain" data-label="plain text (not focusable)"
+  aria-label="8. Plain text. Not focusable.">
+  <span class="probe-label">8. Plain text (no tabindex)</span>
+  <span class="probe-hint">Control case: VoiceOver can read this, but DOM focus should NOT fire</span>
+</div>
+
+<!-- 9. Large edge-style pads — closer to the product idea -->
+<h2>Edge-pad style (closer to the product idea)</h2>
+<p>Large touch targets like the top / bottom / left / right pads you described.
+Try explore-by-touch on these especially.</p>
+
+<button type="button" class="probe" id="p-edge-top" data-label="edge pad button"
+  style="min-height:5rem;text-align:center">
+  <span class="probe-label">Top edge — button</span>
+  <span class="probe-hint">Large &lt;button&gt;</span>
+</button>
+
+<div class="probe" id="p-edge-left" tabindex="0" role="button"
+  data-label="edge pad role=button"
+  aria-label="Left edge. Div role button."
+  style="min-height:5rem;text-align:center">
+  <span class="probe-label">Left edge — role="button"</span>
+  <span class="probe-hint">Large div role="button" tabindex="0"</span>
+</div>
+
+<div class="probe" id="p-edge-right" tabindex="0"
+  data-label="edge pad div tabindex=0"
+  role="group" aria-label="Right edge. Focusable div."
+  style="min-height:5rem;text-align:center">
+  <span class="probe-label">Right edge — div tabindex="0"</span>
+  <span class="probe-hint">Large focusable div, no button role</span>
+</div>
+
+<a class="probe" id="p-edge-bottom" href="#bottom-target" data-label="edge pad link"
+  style="min-height:5rem;text-align:center">
+  <span class="probe-label">Bottom edge — link</span>
+  <span class="probe-hint">Large &lt;a href&gt;</span>
+</a>
+<span id="bottom-target" hidden>bottom target</span>
+
+<h2>Event log</h2>
+<div class="toolbar">
+  <button type="button" class="tool" id="clear-btn">Clear log</button>
+  <button type="button" class="tool" id="copy-btn">Copy summary</button>
+</div>
+<div id="log" aria-label="Event log" tabindex="0">No events yet.</div>
+
+<h2>Counts by probe</h2>
+<dl class="counts" id="counts"></dl>
+
+<textarea id="summary" readonly hidden aria-hidden="true"></textarea>
+
+<script>
+(function () {
+  "use strict";
+
+  var statusEl = document.getElementById("status");
+  var statusMain = document.getElementById("status-main");
+  var statusMeta = document.getElementById("status-meta");
+  var logEl = document.getElementById("log");
+  var countsEl = document.getElementById("counts");
+  var summaryEl = document.getElementById("summary");
+
+  var lines = [];
+  var counts = Object.create(null);
+  var hitTimer = null;
+  var totalFocus = 0;
+
+  function labelFor(el) {
+    if (!el || el === document.body || el === document.documentElement) {
+      return "(document / nowhere useful)";
+    }
+    return el.getAttribute("data-label")
+      || el.id
+      || el.getAttribute("aria-label")
+      || (el.tagName ? el.tagName.toLowerCase() : String(el));
+  }
+
+  function describeActive() {
+    var a = document.activeElement;
+    return labelFor(a) + (a && a.id ? " #" + a.id : "");
+  }
+
+  function flashHit() {
+    statusEl.classList.add("hit");
+    clearTimeout(hitTimer);
+    hitTimer = setTimeout(function () {
+      statusEl.classList.remove("hit");
+    }, 900);
+  }
+
+  function bump(label) {
+    counts[label] = (counts[label] || 0) + 1;
+    renderCounts();
+  }
+
+  function renderCounts() {
+    countsEl.textContent = "";
+    var keys = Object.keys(counts).sort();
+    if (!keys.length) {
+      var empty = document.createElement("dt");
+      empty.textContent = "None yet";
+      countsEl.appendChild(empty);
+      return;
+    }
+    keys.forEach(function (k) {
+      var dt = document.createElement("dt");
+      dt.textContent = k;
+      var dd = document.createElement("dd");
+      dd.textContent = String(counts[k]);
+      countsEl.appendChild(dt);
+      countsEl.appendChild(dd);
+    });
+    writeSummary();
+  }
+
+  function writeSummary() {
+    var out = [];
+    out.push("Nowisee VoiceOver → DOM focus probe");
+    out.push("Date: " + new Date().toISOString());
+    out.push("UA: " + navigator.userAgent);
+    out.push("Total focusin events: " + totalFocus);
+    out.push("");
+    out.push("Counts:");
+    Object.keys(counts).sort().forEach(function (k) {
+      out.push("  " + k + ": " + counts[k]);
+    });
+    out.push("");
+    out.push("Log (newest last):");
+    lines.forEach(function (l) { out.push("  " + l); });
+    summaryEl.value = out.join("\n");
+  }
+
+  function log(msg) {
+    var stamp = new Date().toISOString().slice(11, 23);
+    var line = stamp + "  " + msg;
+    lines.push(line);
+    if (lines.length > 80) lines.shift();
+    logEl.textContent = lines.join("\n");
+    logEl.scrollTop = logEl.scrollHeight;
+    writeSummary();
+  }
+
+  function onFocusIn(e) {
+    var target = e.target;
+    // Ignore focus landing on the log / tools themselves unless useful
+    if (target === logEl || (target && target.classList && target.classList.contains("tool"))) {
+      log("focusin on " + labelFor(target) + " (tool/log — ignored for verdict)");
+      return;
+    }
+
+    totalFocus += 1;
+    var label = labelFor(target);
+    bump(label);
+    flashHit();
+
+    statusMain.textContent = "DOM FOCUS fired on: " + label;
+    statusMeta.textContent =
+      "Event: focusin · activeElement: " + describeActive() +
+      " · total: " + totalFocus;
+
+    log(
+      "FOCUSIN → " + label +
+      " | tag=" + (target && target.tagName) +
+      " | id=" + (target && target.id || "-") +
+      " | activeElement=" + describeActive()
+    );
+  }
+
+  function onFocusOut(e) {
+    log(
+      "focusout ← " + labelFor(e.target) +
+      " → next related=" + labelFor(e.relatedTarget)
+    );
+  }
+
+  // Capture phase so we see everything, including things that stopPropagation later.
+  document.addEventListener("focusin", onFocusIn, true);
+  document.addEventListener("focusout", onFocusOut, true);
+
+  // Also listen for non-bubbling focus on window for belt-and-suspenders.
+  window.addEventListener("focus", function (e) {
+    // window focus / blur are noisy when switching apps; only log element focus.
+    if (e.target && e.target !== window) {
+      log("window focus event target=" + labelFor(e.target));
+    }
+  }, true);
+
+  document.getElementById("clear-btn").addEventListener("click", function () {
+    lines = [];
+    counts = Object.create(null);
+    totalFocus = 0;
+    logEl.textContent = "No events yet.";
+    statusMain.textContent = "Log cleared. Move VoiceOver onto a probe.";
+    statusMeta.textContent = "No DOM focus events yet.";
+    statusEl.classList.remove("hit");
+    renderCounts();
+  });
+
+  document.getElementById("copy-btn").addEventListener("click", function () {
+    writeSummary();
+    summaryEl.hidden = false;
+    summaryEl.removeAttribute("aria-hidden");
+    summaryEl.style.display = "block";
+    summaryEl.style.width = "100%";
+    summaryEl.style.height = "10rem";
+    summaryEl.style.marginTop = "0.5rem";
+    summaryEl.focus();
+    summaryEl.select();
+    try {
+      navigator.clipboard.writeText(summaryEl.value);
+      statusMain.textContent = "Summary copied (also shown below for manual copy).";
+    } catch (err) {
+      statusMain.textContent = "Select the summary text and copy it manually.";
+    }
+  });
+
+  // Prevent link hash jumps from yanking the page while testing.
+  document.querySelectorAll('a.probe[href^="#"]').forEach(function (a) {
+    a.addEventListener("click", function (e) {
+      e.preventDefault();
+      log("click on " + labelFor(a) + " (navigation prevented)");
+    });
+  });
+
+  // Log clicks separately so you can tell focus vs activation.
+  document.querySelectorAll(".probe, .plain-text").forEach(function (el) {
+    el.addEventListener("click", function () {
+      log("CLICK on " + labelFor(el));
+    });
+  });
+
+  renderCounts();
+  log("Ready. Listening for focusin / focusout.");
+})();
+</script>
+</body>
+</html>

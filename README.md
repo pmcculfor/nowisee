@@ -10,4 +10,4 @@ Accessibility-first single-text browser for blind and keyboard/screen-reader-pri
 - [`docs/MODULES.md`](docs/MODULES.md) — detailed per-module specifications
 - [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — proposed stack/layout for later scaffolding
 - [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md) — longevity review: findings, what was accepted, what was deferred and why
-- [`spikes/`](spikes/) — throwaway probes; currently a screen-reader test page you can open in a browser
+- [`spikes/`](spikes/) — throwaway probes (screen-reader keys; [VoiceOver → DOM focus on iPhone](https://pmcculfor.github.io/nowisee/spikes/voiceover-dom-focus-probe.html))
