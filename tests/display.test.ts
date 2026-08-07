@@ -57,4 +57,36 @@ describe("Display", () => {
     display.showText(long);
     expect(root.textContent).toBe(long);
   });
+
+  it("replaceText updates in place without remounting or stealing focus", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+
+    display.showText("Copying…");
+    const surface = root.querySelector("[data-surface='text']")!;
+    const outsider = document.createElement("button");
+    document.body.appendChild(outsider);
+    outsider.focus();
+    expect(document.activeElement).toBe(outsider);
+
+    display.replaceText("Copied");
+
+    expect(root.querySelector("[data-surface='text']")).toBe(surface);
+    expect(surface.textContent).toBe("Copied");
+    expect(document.activeElement).toBe(outsider);
+  });
+
+  it("replaceText falls back to showText when no text surface is mounted", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+
+    display.replaceText("Hello");
+
+    const surface = root.querySelector("[data-surface='text']");
+    expect(surface).not.toBeNull();
+    expect(surface!.textContent).toBe("Hello");
+    expect(document.activeElement).toBe(surface);
+  });
 });

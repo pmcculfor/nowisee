@@ -2,6 +2,10 @@
  * Single interactive surface: one text live region, or one input box.
  * DOM strategy (role=application vs live region) is provisional pending the
  * screen-reader spike — assertive aria-live is the documented MVP default.
+ *
+ * Remounting the text surface (replaceChildren + focus) restarts screen-reader
+ * utterance. Callers that already showed a tip and only need a label change
+ * should use `replaceText` instead of `showText`.
  */
 
 export type DisplayMode = "text" | "input";
@@ -36,6 +40,20 @@ export class Display {
     this.textEl = el;
     this.mode = "text";
     el.focus();
+  }
+
+  /**
+   * Change the text surface label without remounting or stealing focus.
+   * Falls back to `showText` if the text surface is not mounted.
+   */
+  replaceText(label: string): void {
+    if (this.mode !== "text" || !this.textEl) {
+      this.showText(label);
+      return;
+    }
+    if (this.textEl.textContent !== label) {
+      this.textEl.textContent = label;
+    }
   }
 
   showInput(initialText: string): void {

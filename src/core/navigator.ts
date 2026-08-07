@@ -58,6 +58,18 @@ export class Navigator {
   private inFlight: InFlight | null = null;
   private currentAppId: string | null = null;
   private tipKind: NodeKind = "text";
+  /**
+   * What Display is actually showing. Used so a warm-hit revalidation that
+   * confirms the same tip does not remount the live region (VoiceOver would
+   * restart mid-utterance). Cleared on openLocation because the surface may
+   * still show a prior app's tip until the new result arrives.
+   */
+  private displayed: {
+    appId: string;
+    id: string;
+    kind: NodeKind;
+    label: string;
+  } | null = null;
 
   constructor(options: NavigatorOptions) {
     this.config = options.config;
@@ -146,6 +158,7 @@ export class Navigator {
     this.stack.clear();
     this.cache.clear();
     this.map.replace({});
+    this.displayed = null;
     this.blocked = true;
 
     let appId = location.appId;
@@ -247,12 +260,49 @@ export class Navigator {
 
   private showPayload(payload: NodePayload): void {
     const kind = payload.kind ?? "text";
+    // Same text tip, new label (status in place): update live region without remount.
+    const reuseTextSurface =
+      kind === "text" &&
+      this.displayed !== null &&
+      this.displayed.appId === this.currentAppId &&
+      this.displayed.id === payload.id &&
+      this.displayed.kind === "text";
+
     this.tipKind = kind;
+    if (this.currentAppId) {
+      this.displayed = {
+        appId: this.currentAppId,
+        id: payload.id,
+        kind,
+        label: payload.label,
+      };
+    }
     if (kind === "input") {
       this.display.showInput(payload.label);
+    } else if (reuseTextSurface) {
+      this.display.replaceText(payload.label);
     } else {
       this.display.showText(payload.label);
     }
+  }
+
+  /**
+   * True when Display already shows this tip. Text tips remount so navigation
+   * announces even when labels collide; input tips match on id alone so a
+   * background revalidation cannot wipe the caret or typed text.
+   */
+  private isAlreadyShowing(payload: NodePayload): boolean {
+    if (!this.displayed || this.displayed.appId !== this.currentAppId) {
+      return false;
+    }
+    const kind = payload.kind ?? "text";
+    if (this.displayed.id !== payload.id || this.displayed.kind !== kind) {
+      return false;
+    }
+    if (kind === "input") {
+      return true;
+    }
+    return this.displayed.label === payload.label;
   }
 
   private currentApp(): AppModule | null {
@@ -350,7 +400,13 @@ export class Navigator {
     const stackIds = this.stack.snapshot().map((e) => e.nodeId);
     this.cache.replaceWarm(result.warm, result.node, stackIds);
 
-    this.showPayload(result.node);
+    // Warm hit already painted this tip; remounting would restart screen readers.
+    // Still adopt a changed label (e.g. "Copying…" → "Copied") or a repaired id.
+    if (!this.isAlreadyShowing(result.node)) {
+      this.showPayload(result.node);
+    } else {
+      this.tipKind = result.node.kind ?? "text";
+    }
 
     if (result.location !== undefined && result.location !== null) {
       this.setAddressBar(result.location);
