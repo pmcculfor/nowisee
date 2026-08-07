@@ -9,7 +9,7 @@
 
 **Nowisee** is a website for blind (and screen-reader / keyboard-primary) users who struggle with modern, cluttered UIs.
 
-**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to arrow keys by default and which a user, a locale, or a future touch build can rebind without any app changing.
+**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to `Ctrl+Alt+Shift`+arrows by default (and to VoiceOver edge pads on focus) and which a user or locale can rebind without any app changing.
 
 **Why it exists:** typical sites force tabbing through chrome or exploring by touch. Users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
 
@@ -31,15 +31,15 @@
 
 Apps author **intents**. Core owns which keystroke produces each one (defaults in [`MODULES.md`](MODULES.md) §9).
 
-| Intent | Default key (text tip) | Typical meaning (authored by apps via navigation map) |
-|--------|------------------------|--------------------------------------------------------|
-| `prev` / `next` | Up / Down | Move among siblings (`stackBehavior: replace`) |
-| `enter` | Right | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions |
-| `back` | Left | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home** |
-| `enter` / `back` on an **input** tip | Enter / Alt+Up | Commit (with `passInputText`) and abandon. Plain arrows stay with the caret. |
+| Intent | Default input (text and input tips) | Typical meaning (authored by apps via navigation map) |
+|--------|-------------------------------------|--------------------------------------------------------|
+| `prev` / `next` | `Ctrl+Alt+Shift+ArrowUp` / `ArrowDown`; VoiceOver pads top / bottom | Move among siblings (`stackBehavior: replace`) |
+| `enter` | `Ctrl+Alt+Shift+ArrowRight`; VoiceOver pad right | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions |
+| `back` | `Ctrl+Alt+Shift+ArrowLeft`; VoiceOver pad left | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home** |
+| plain arrows on an **input** tip | unbound | Caret keeps them. Leave input via the same `enter` / `back` intents as everywhere else. |
 | Missing map edge | — | Silent no-op (stay) |
 
-Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if a future build delivers the same intents from swipe gestures.
+Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.
 
 **Display:** one text blob or one input box. Screen reader announces updates via one live/focus region. Help lives **in the tree** as nodes, not modals.
 
@@ -151,7 +151,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.8 Input nodes
 
-**Decision:** Input is a node type (single input box). Leave only via navigation-map edges — the same `enter` / `back` intents used everywhere else, which core binds to different keys when the tip is an input so plain arrows keep driving the caret. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode.
+**Decision:** Input is a node type (single input box). Leave only via navigation-map edges — the same `enter` / `back` intents used everywhere else, bound to the same non-caret chord (and edge pads) as on text tips so plain arrows keep driving the caret. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode.
 
 **Why:** One consistent exit vocabulary, and apps author the same four intents whether the tip is text or input.
 

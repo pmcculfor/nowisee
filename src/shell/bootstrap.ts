@@ -4,6 +4,7 @@ import kjvJson from "../apps/bible/data/kjv.json" with { type: "json" };
 import { createHomeApp } from "../apps/home.ts";
 import { Display } from "../core/display.ts";
 import { defaultKeyBindings, Keyboard } from "../core/keyboard.ts";
+import { NavPads } from "../core/navPads.ts";
 import { NavigationMapStore } from "../core/navigationMap.ts";
 import { Navigator } from "../core/navigator.ts";
 import { NodeCache } from "../core/nodeCache.ts";
@@ -11,7 +12,7 @@ import { PlatformCapabilities } from "../core/platform.ts";
 import { AppRegistry } from "../core/registry.ts";
 import { Router } from "../core/router.ts";
 import { Stack } from "../core/stack.ts";
-import type { ShellConfig } from "../core/types.ts";
+import type { NavIntent, ShellConfig } from "../core/types.ts";
 
 export type ShellHandle = {
   readonly navigator: Navigator;
@@ -47,7 +48,12 @@ export function startShell(
     }),
   );
 
-  const display = new Display(mount);
+  mount.replaceChildren();
+  const surface = document.createElement("div");
+  surface.dataset.shell = "surface";
+  mount.appendChild(surface);
+
+  const display = new Display(surface);
   const map = new NavigationMapStore();
   const cache = new NodeCache();
   const stack = new Stack();
@@ -75,19 +81,29 @@ export function startShell(
     },
   });
 
+  const intentHost = {
+    isBlocked: () => navigator.isBlocked(),
+    onIntent: (intent: NavIntent) => {
+      void navigator.onIntent(intent);
+    },
+  };
+
   const keyboard = new Keyboard({
     target: window,
     host: {
       getTipKind: () => navigator.getTipKind(),
-      isBlocked: () => navigator.isBlocked(),
-      onIntent: (intent) => {
-        void navigator.onIntent(intent);
-      },
+      ...intentHost,
     },
     bindings: config.keyBindings ?? defaultKeyBindings(),
   });
 
+  const navPads = new NavPads({
+    parent: mount,
+    host: intentHost,
+  });
+
   keyboard.attach();
+  navPads.attach();
   router.attach();
 
   const initial =
@@ -106,6 +122,7 @@ export function startShell(
     display,
     stop() {
       keyboard.detach();
+      navPads.detach();
       router.detach();
     },
   };

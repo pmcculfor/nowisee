@@ -10,18 +10,17 @@ export interface KeyEventLike {
 }
 
 /**
- * Provisional defaults from MODULES §9.
+ * Defaults from MODULES §9.
  * Escape is never bound. Tab / Shift+Tab are never bound (WCAG 2.1.2).
- * Plain arrows on input tips are unbound so the caret keeps them.
+ * Same chord on text and input tips so plain arrows stay with the caret on inputs.
  */
 export function defaultKeyBindings(): readonly KeyBinding[] {
+  const chord = { ctrl: true, alt: true, shift: true } as const;
   return [
-    { intent: "prev", key: "ArrowUp", whenTip: "text" },
-    { intent: "next", key: "ArrowDown", whenTip: "text" },
-    { intent: "enter", key: "ArrowRight", whenTip: "text" },
-    { intent: "back", key: "ArrowLeft", whenTip: "text" },
-    { intent: "enter", key: "Enter", whenTip: "input" },
-    { intent: "back", key: "ArrowUp", mods: { alt: true }, whenTip: "input" },
+    { intent: "prev", key: "ArrowUp", mods: chord },
+    { intent: "next", key: "ArrowDown", mods: chord },
+    { intent: "enter", key: "ArrowRight", mods: chord },
+    { intent: "back", key: "ArrowLeft", mods: chord },
   ];
 }
 

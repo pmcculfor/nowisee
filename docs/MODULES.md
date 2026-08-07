@@ -11,12 +11,12 @@ This document specifies **what each module owns**, **inputs/outputs**, **edge ca
 ```text
 ┌─────────────────────────────────────────────────────────┐
 │ Shell bootstrap                                         │
-│  config → register apps → mount Display → bind Keyboard │
+│  config → surface + NavPads → Display → Keyboard        │
 └───────────────┬─────────────────────────────────────────┘
                 │
 ┌───────────────▼─────────────────────────────────────────┐
 │ Keyboard ──intent──► Navigator ◄── NavigationMapStore   │
-│                        │  ▲                             │
+│ NavPads  ──intent──►│  ▲                                │
 │  Router ──location────►│  │ stack, busy, token          │
 │  (parse / hrefFor)  ◄──┘  │                             │
 │                        ▼  │                             │
@@ -334,28 +334,58 @@ export interface KeyBinding {
 }
 ```
 
-### Default binding table (provisional)
+### Default binding table
+
+Same chord on **text** and **input** tips. Plain arrows stay unbound so the caret keeps them in fields.
 
 | Tip kind | Key | Intent |
 |----------|-----|--------|
-| text | `ArrowUp` / `ArrowDown` | `prev` / `next` |
-| text | `ArrowRight` / `ArrowLeft` | `enter` / `back` |
-| input | plain arrows | *unbound* — the caret keeps them |
-| input | `Enter` | `enter` (commit) |
-| input | `Alt+ArrowUp` | `back` |
+| text / input | `Ctrl+Alt+Shift+ArrowUp` / `ArrowDown` | `prev` / `next` |
+| text / input | `Ctrl+Alt+Shift+ArrowRight` / `ArrowLeft` | `enter` / `back` |
+| either | plain arrows | *unbound* |
 
 Notes on the defaults:
 
-- `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` were the earlier recommendation and are **rejected as defaults**: in a text field those are word-wise caret movement on every major platform, which this audience uses constantly.
+- The full `Ctrl+Alt+Shift` chord avoids colliding with caret movement (`Ctrl+Arrow`), browser/OS shortcuts, and common screen-reader keys.
 - `Tab` / `Shift+Tab` must **not** be bound. Consuming Tab would trap the keyboard inside the page (WCAG 2.1.2).
 - Right-to-left locales swap the `enter` / `back` arrows here. Apps are unaffected.
-- These defaults are provisional pending the screen-reader spike ([`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §7); changing them is a change to this table only.
+- Changing defaults is a change to this table only; apps author intents, never keys.
 
 ### Non-goals
 
 - Knowing which intents an app actually uses (Navigator no-ops on unmapped intents).
 - Escape exits input (explicitly **not** supported).
 - Persisting a user's custom bindings (a future settings app supplies `config.keyBindings`).
+- Touch / VoiceOver delivery (owned by NavPads, §9b).
+
+---
+
+## 9b. Core: NavPads
+
+**Path:** `src/core/navPads.ts`
+
+VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them — explore-by-touch only, no double-tap activate.
+
+### Responsibilities
+
+- Mount four native `<button type="button">` elements (top / bottom / left / right).
+- Name each via `aria-label` only (`Previous` / `Next` / `Back` / `Enter`); no nested text VoiceOver can stop on separately.
+- Listen for `focusin` on those buttons only; call `navigator.onIntent(intent)`.
+- If blocked: ignore.
+- Do **not** navigate on `click` — focus is the trigger.
+
+| Edge | Intent |
+|------|--------|
+| top | `prev` |
+| bottom | `next` |
+| left | `back` |
+| right | `enter` |
+
+### Non-goals
+
+- Visible chrome or sighted affordances (pads are intentionally transparent).
+- Knowing which intents an app map contains.
+- Replacing Keyboard on desktop; both paths coexist.
 
 ---
 
