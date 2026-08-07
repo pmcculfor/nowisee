@@ -63,13 +63,13 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | App API | `open(path)` + `refresh(stack, extras)` → navigation map + warm + tip + location |
 | Prefetch | App pushes `warm` + navigation-map edges; core only stores/serves |
 | Navigation map | `(fromNodeId, intent) → node \| app \| external` edge; missing = silent no-op; nested structure, no delimiter |
-| Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes to intents |
+| Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes and edge-pad focus to intents |
 | Actions | `action: true` on an edge; core sets `extras.action` on that traversal **only**; never re-issues, retries, aborts, or coalesces it; apps run side effects only then |
 | Stack | Per **current app** only; opening a location resets stack |
 | Node edge stackBehavior | `push` / `replace` / `pop` (on `pop`, omit `toNodeId`; stack tip wins) |
 | Cross-app / leave app | `app` location edges only; app root `back` **MUST** be an `app` edge to home |
 | Home | An `AppModule`, not a core-special UI; identified by `config.rootAppId`, never a core constant |
-| Input leave | The same `enter` / `back` intents, bound to non-caret keys on input tips; **no Escape exit** |
+| Input leave | The same `enter` / `back` intents and chord/pads as text tips; plain arrows unbound for the caret; **no Escape exit** |
 | Sibling ends | App choice via edges (wrap not mandated) |
 | Dead-end intent | Silent no-op |
 | Status / action aftermath | Stay on node until user navigates; refresh may update text in place |

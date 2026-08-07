@@ -23,6 +23,8 @@ describe("shell bootstrap", () => {
     ]);
     expect(mount.textContent).toContain("Bible");
     expect(shell.navigator.getCurrentAppId()).toBe("home");
+    expect(mount.querySelectorAll("button[data-nav-pad]")).toHaveLength(4);
+    expect(mount.querySelector('[data-shell="surface"]')).not.toBeNull();
 
     shell.stop();
   });
