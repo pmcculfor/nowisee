@@ -287,7 +287,7 @@ export interface ShellConfig {
 ### Display
 
 - Text node: show `label` in one focusable surface (`tabindex="-1"`). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS).
-- Input node: show one multiline textarea (same single-surface rule); seed from `label` or app `data` as the app defines.
+- Input node: show one single-line text field (same single-surface rule); seed from `label` or app `data` as the app defines. Not a `<textarea>` — VoiceOver on iOS often fails to enter editing after programmatic focus on textareas (MODULES §8).
 
 ### Keyboard
 

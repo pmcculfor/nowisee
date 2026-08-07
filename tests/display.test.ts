@@ -20,7 +20,7 @@ describe("Display", () => {
     expect(document.activeElement).toBe(surface);
   });
 
-  it("showInput replaces the surface with one textarea and focuses it", () => {
+  it("showInput replaces the surface with one text input and focuses it", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
@@ -29,31 +29,40 @@ describe("Display", () => {
     display.showInput("typed\nline two");
 
     expect(root.querySelector("[data-surface='text']")).toBeNull();
-    const input = root.querySelector("textarea");
+    const input = root.querySelector("input[type='text']");
     expect(input).not.toBeNull();
-    expect(input!.value).toBe("typed\nline two");
+    // Text inputs strip U+000A; soft newlines are kept as U+2028 in the control.
+    expect((input as HTMLInputElement).value).toBe("typed\u2028line two");
+    expect(root.querySelector("textarea")).toBeNull();
     expect(display.getMode()).toBe("input");
     expect(display.getInputText()).toBe("typed\nline two");
     expect(document.activeElement).toBe(input);
   });
 
-  it("reuses the same textarea node across showInput calls", () => {
+  it("round-trips newlines through getInputText after the user edits the field", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
 
-    display.showInput("first");
-    const first = root.querySelector("textarea");
-    expect(first).not.toBeNull();
+    display.showInput("a\nb");
+    const input = root.querySelector<HTMLInputElement>("input[data-surface='input']")!;
+    input.value = "a\u2028b\u2028c";
+    expect(display.getInputText()).toBe("a\nb\nc");
+  });
 
-    display.showText("away");
-    expect(root.querySelector("textarea")).toBeNull();
+  it("plain Enter inserts a soft newline in the text field", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
 
-    display.showInput("second\nline");
-    const second = root.querySelector("textarea");
-    expect(second).toBe(first);
-    expect(second!.value).toBe("second\nline");
-    expect(document.activeElement).toBe(second);
+    display.showInput("ab");
+    const input = root.querySelector<HTMLInputElement>("input[data-surface='input']")!;
+    input.setSelectionRange(1, 1);
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+    expect(input.value).toBe("a\u2028b");
+    expect(display.getInputText()).toBe("a\nb");
   });
 
   it("switching input → text replaces the surface", () => {
@@ -64,7 +73,7 @@ describe("Display", () => {
     display.showInput("x");
     display.showText("back to text");
 
-    expect(root.querySelector("textarea")).toBeNull();
+    expect(root.querySelector("input[data-surface='input']")).toBeNull();
     expect(root.querySelector("[data-surface='text']")!.textContent).toBe("back to text");
     expect(display.getInputText()).toBe("");
   });

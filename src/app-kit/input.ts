@@ -8,8 +8,8 @@ export type InputEdgesOptions = {
   /**
    * Which intent commits.
    * - `"enter"` (default): `enter` commits; `back` abandons via `backTo`
-   * - `"back"`: `back` commits; `enter` is omitted (silent no-op) so plain
-   *   Enter can insert newlines in a multiline input
+   * - `"back"`: `back` commits; `enter` is omitted (silent no-op) so chord
+   *   Right does not leave the field while typing
    */
   readonly commitOn?: "enter" | "back";
   /**

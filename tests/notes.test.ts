@@ -124,7 +124,7 @@ describe("Notes app", () => {
       label: "Line one\nLine two",
       kind: "input",
     });
-    // Back saves; enter is unbound (multiline typing uses plain Enter).
+    // Back saves; enter is unbound so chord Right is a no-op while typing.
     expect(edit.navigationMap[noteEditNodeId("n1")]?.back).toMatchObject({
       kind: "node",
       toNodeId: noteNodeId("n1"),
