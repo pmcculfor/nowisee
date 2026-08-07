@@ -5,6 +5,12 @@
  * move focus onto it. Do **not** put `aria-live` on the focused surface.
  * VoiceOver on iOS announces both the live-region insertion and the focus
  * change, which restarts mid-utterance even when the label never changes.
+ *
+ * Input surface: a single reused `<textarea>`. iOS Safari raises the software
+ * keyboard for programmatic `focus()` only inside a user-activation gesture
+ * (NavPads click). Recreating the control on every `showInput` made that
+ * focus less reliable than the earlier single-line `<input>`; keep one node
+ * and re-attach it.
  */
 
 export type DisplayMode = "text" | "input";
@@ -27,7 +33,6 @@ export class Display {
 
   showText(label: string): void {
     this.root.replaceChildren();
-    this.inputEl = null;
 
     const el = document.createElement("div");
     el.dataset.surface = "text";
@@ -44,17 +49,14 @@ export class Display {
     this.root.replaceChildren();
     this.textEl = null;
 
-    const input = document.createElement("textarea");
-    input.dataset.surface = "input";
+    const input = this.ensureInputEl();
     input.value = initialText;
     input.rows = Math.max(3, initialText.split(/\r?\n/).length);
-    input.setAttribute("aria-label", "Input");
-    // Avoid browser spellcheck chrome fighting screen readers in MVP.
-    input.setAttribute("spellcheck", "false");
 
     this.root.appendChild(input);
-    this.inputEl = input;
     this.mode = "input";
+    // Must stay synchronous with the triggering gesture (NavPads click) so
+    // iOS will raise the software keyboard.
     input.focus();
     try {
       const end = input.value.length;
@@ -65,6 +67,9 @@ export class Display {
   }
 
   getInputText(): string {
+    if (this.mode !== "input") {
+      return "";
+    }
     return this.inputEl?.value ?? "";
   }
 
@@ -75,5 +80,20 @@ export class Display {
       return;
     }
     this.textEl?.focus();
+  }
+
+  private ensureInputEl(): HTMLTextAreaElement {
+    if (this.inputEl) {
+      return this.inputEl;
+    }
+    const input = document.createElement("textarea");
+    input.dataset.surface = "input";
+    input.setAttribute("aria-label", "Input");
+    // Avoid browser spellcheck chrome fighting screen readers in MVP.
+    input.setAttribute("spellcheck", "false");
+    // Enter inserts a newline; leave via chord / pads (not a form submit).
+    input.setAttribute("enterkeyhint", "enter");
+    this.inputEl = input;
+    return input;
   }
 }
