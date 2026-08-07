@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Display } from "../src/core/display.ts";
 
 describe("Display", () => {
-  it("showText renders one focusable assertive live region", () => {
+  it("showText renders one focusable text surface without aria-live", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
@@ -14,7 +14,7 @@ describe("Display", () => {
     const surface = root.querySelector("[data-surface='text']");
     expect(surface).not.toBeNull();
     expect(surface!.textContent).toBe("Hello");
-    expect(surface!.getAttribute("aria-live")).toBe("assertive");
+    expect(surface!.hasAttribute("aria-live")).toBe(false);
     expect(surface!.getAttribute("tabindex")).toBe("-1");
     expect(display.getMode()).toBe("text");
     expect(document.activeElement).toBe(surface);
@@ -56,37 +56,5 @@ describe("Display", () => {
     const long = "a".repeat(10_000);
     display.showText(long);
     expect(root.textContent).toBe(long);
-  });
-
-  it("replaceText updates in place without remounting or stealing focus", () => {
-    const root = document.createElement("div");
-    document.body.appendChild(root);
-    const display = new Display(root);
-
-    display.showText("Copying…");
-    const surface = root.querySelector("[data-surface='text']")!;
-    const outsider = document.createElement("button");
-    document.body.appendChild(outsider);
-    outsider.focus();
-    expect(document.activeElement).toBe(outsider);
-
-    display.replaceText("Copied");
-
-    expect(root.querySelector("[data-surface='text']")).toBe(surface);
-    expect(surface.textContent).toBe("Copied");
-    expect(document.activeElement).toBe(outsider);
-  });
-
-  it("replaceText falls back to showText when no text surface is mounted", () => {
-    const root = document.createElement("div");
-    document.body.appendChild(root);
-    const display = new Display(root);
-
-    display.replaceText("Hello");
-
-    const surface = root.querySelector("[data-surface='text']");
-    expect(surface).not.toBeNull();
-    expect(surface!.textContent).toBe("Hello");
-    expect(document.activeElement).toBe(surface);
   });
 });

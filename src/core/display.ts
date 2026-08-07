@@ -1,11 +1,10 @@
 /**
- * Single interactive surface: one text live region, or one input box.
- * DOM strategy (role=application vs live region) is provisional pending the
- * screen-reader spike — assertive aria-live is the documented MVP default.
+ * Single interactive surface: one text node, or one multiline input.
  *
- * Remounting the text surface (replaceChildren + focus) restarts screen-reader
- * utterance. Callers that already showed a tip and only need a label change
- * should use `replaceText` instead of `showText`.
+ * Announcement contract (locked): focus only — remount the text surface and
+ * move focus onto it. Do **not** put `aria-live` on the focused surface.
+ * VoiceOver on iOS announces both the live-region insertion and the focus
+ * change, which restarts mid-utterance even when the label never changes.
  */
 
 export type DisplayMode = "text" | "input";
@@ -33,28 +32,12 @@ export class Display {
     const el = document.createElement("div");
     el.dataset.surface = "text";
     el.setAttribute("tabindex", "-1");
-    el.setAttribute("aria-live", "assertive");
-    el.setAttribute("aria-atomic", "true");
     el.textContent = label;
 
     this.root.appendChild(el);
     this.textEl = el;
     this.mode = "text";
     el.focus();
-  }
-
-  /**
-   * Change the text surface label without remounting or stealing focus.
-   * Falls back to `showText` if the text surface is not mounted.
-   */
-  replaceText(label: string): void {
-    if (this.mode !== "text" || !this.textEl) {
-      this.showText(label);
-      return;
-    }
-    if (this.textEl.textContent !== label) {
-      this.textEl.textContent = label;
-    }
   }
 
   showInput(initialText: string): void {

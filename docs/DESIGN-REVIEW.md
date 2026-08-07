@@ -223,7 +223,7 @@ export interface PlatformContext {
 
 **Status: deferred past MVP.** Additive when taken up: a second SR-only region in Display plus announcements at the existing Navigator transition points. No contract change, so nothing here constrains the MVP build. The one interaction to keep in mind is that a rejected action call (§2) strands the user on "Sending…" until this lands, which is why apps MUST resolve with a status node rather than reject.
 
-**Current:** dead-end key → silent no-op (locked). Warm miss → "block on refresh; ignore further nav keys; **no placeholder**". Refresh failure → "keep last text; clear busy". Display announces via one `aria-live="assertive"` region.
+**Current:** dead-end key → silent no-op (locked). Warm miss → "block on refresh; ignore further nav keys; **no placeholder**". Refresh failure → "keep last text; clear busy". Display announces by remounting a focusable text surface (**no** `aria-live` on that surface — live + focus double-speaks on VoiceOver iOS; locked in MODULES §8).
 
 **Why this does not last.** For a sighted user these three states are trivially distinguishable. For this product's entire user base they are byte-identical: *press key, nothing is spoken*. The user cannot tell "there is nothing that way" from "the network is slow" from "it failed". The predictable coping behavior is to press the key repeatedly, which — combined with §2 and §3 — is exactly the input pattern that triggers the worst races.
 
@@ -235,7 +235,7 @@ This is the finding I would rank highest on product risk, and it is cheap now be
 - Refresh failure → generic core-owned announcement; content stays put. Apps may still return their own error *text*, but core must not be silent when the app never answers.
 - Dead-end no-op → a distinguishable minimal cue (a short earcon or a terse announcement), with silence available as a user setting rather than as the only behavior.
 
-Separately: `aria-live="assertive"` as the default is very likely wrong for this interaction model. Assertive interrupts, and rapid arrow navigation will produce interruption storms and double-speak. The two viable strategies are (a) `role="status"` / polite with `aria-atomic`, or (b) move focus to the (re-rendered, `tabindex="-1"`) surface and let the screen reader announce it naturally. Which one wins is an empirical question — see §7 — but it should be answered before Display is written, because the choice determines Display's DOM contract.
+Separately: content announcement is **focus-only** (locked). A second polite live region remains appropriate for the status channel above — that region must not be the focused content surface.
 
 ---
 

@@ -194,7 +194,7 @@ describe("Navigator + Router contracts", () => {
     expect(h.root.querySelector("[data-surface='text']")).toBe(surfaceAfterWarm);
   });
 
-  it("same-tip label change after revalidation updates text in place", async () => {
+  it("same-tip label change after revalidation remounts once with the new label", async () => {
     const h = harness();
     await h.navigator.openLocation({ appId: "fake", path: "/" });
     await intent(h.navigator, "next"); // a
@@ -209,7 +209,8 @@ describe("Navigator + Router contracts", () => {
     await flush();
 
     expect(visibleText(h.root)).toBe("Copied");
-    expect(h.root.querySelector("[data-surface='text']")).toBe(surface);
+    // Label changed → one remount + focus (no aria-live; focus announces).
+    expect(h.root.querySelector("[data-surface='text']")).not.toBe(surface);
   });
 
   it("input revalidation preserves typed text", async () => {

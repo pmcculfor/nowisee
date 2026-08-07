@@ -60,7 +60,7 @@ export class Navigator {
   private tipKind: NodeKind = "text";
   /**
    * What Display is actually showing. Used so a warm-hit revalidation that
-   * confirms the same tip does not remount the live region (VoiceOver would
+   * confirms the same tip does not remount the surface (VoiceOver would
    * restart mid-utterance). Cleared on openLocation because the surface may
    * still show a prior app's tip until the new result arrives.
    */
@@ -260,14 +260,6 @@ export class Navigator {
 
   private showPayload(payload: NodePayload): void {
     const kind = payload.kind ?? "text";
-    // Same text tip, new label (status in place): update live region without remount.
-    const reuseTextSurface =
-      kind === "text" &&
-      this.displayed !== null &&
-      this.displayed.appId === this.currentAppId &&
-      this.displayed.id === payload.id &&
-      this.displayed.kind === "text";
-
     this.tipKind = kind;
     if (this.currentAppId) {
       this.displayed = {
@@ -279,8 +271,6 @@ export class Navigator {
     }
     if (kind === "input") {
       this.display.showInput(payload.label);
-    } else if (reuseTextSurface) {
-      this.display.replaceText(payload.label);
     } else {
       this.display.showText(payload.label);
     }
