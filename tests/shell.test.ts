@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { createHomeApp } from "../src/apps/home.ts";
+import { createMemoryNotesStore } from "../src/apps/notes/index.ts";
 import { startShell } from "../src/shell/bootstrap.ts";
 import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
@@ -14,12 +15,14 @@ describe("shell bootstrap", () => {
     const shell = startShell(mount, {
       config: { rootAppId: "home" },
       kjv: fixtureKjv,
+      notesStore: createMemoryNotesStore(),
     });
     await shell.navigator.openLocation({ appId: "home", path: "/" });
 
     expect(shell.registry.listEnabled()).toEqual([
       { id: "home", label: "Home" },
       { id: "bible", label: "Bible" },
+      { id: "notes", label: "Notes" },
     ]);
     expect(mount.textContent).toContain("Bible");
     expect(shell.navigator.getCurrentAppId()).toBe("home");

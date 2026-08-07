@@ -2,6 +2,12 @@ import { createBibleApp } from "../apps/bible/index.ts";
 import type { KjvData } from "../apps/bible/types.ts";
 import kjvJson from "../apps/bible/data/kjv.json" with { type: "json" };
 import { createHomeApp } from "../apps/home.ts";
+import {
+  createLocalNotesStore,
+  createMemoryNotesStore,
+  createNotesApp,
+  type NotesStore,
+} from "../apps/notes/index.ts";
 import { Display } from "../core/display.ts";
 import { defaultKeyBindings, Keyboard } from "../core/keyboard.ts";
 import { NavPads } from "../core/navPads.ts";
@@ -22,13 +28,23 @@ export type ShellHandle = {
   stop(): void;
 };
 
+export type StartShellOptions = {
+  readonly config?: ShellConfig;
+  readonly kjv?: KjvData;
+  /**
+   * Injected Notes persistence. Defaults to a localStorage-backed store when
+   * available; tests may pass a memory store. Swap for a remote adapter later.
+   */
+  readonly notesStore?: NotesStore;
+};
+
 /**
  * Bootstrap the shell. Core never names a product app — `rootAppId` comes from config.
  * Mail registers in a later slice.
  */
 export function startShell(
   mount: HTMLElement,
-  options: { readonly config?: ShellConfig; readonly kjv?: KjvData } = {},
+  options: StartShellOptions = {},
 ): ShellHandle {
   const config: ShellConfig = {
     rootAppId: options.config?.rootAppId ?? "home",
@@ -45,6 +61,12 @@ export function startShell(
     createBibleApp({
       rootAppId: config.rootAppId,
       data: options.kjv ?? (kjvJson as KjvData),
+    }),
+  );
+  registry.register(
+    createNotesApp({
+      rootAppId: config.rootAppId,
+      store: options.notesStore ?? defaultNotesStore(),
     }),
   );
 
@@ -126,4 +148,21 @@ export function startShell(
       router.detach();
     },
   };
+}
+
+/** Browser-local MVP store. Shell owns the localStorage touch — not the app. */
+function defaultNotesStore(): NotesStore {
+  const storage = globalThis.localStorage;
+  if (storage && typeof storage.getItem === "function") {
+    return createLocalNotesStore({
+      kv: {
+        get: (key) => storage.getItem(key),
+        set: (key, value) => {
+          storage.setItem(key, value);
+        },
+      },
+    });
+  }
+  // Non-browser hosts (or blocked storage): in-memory only for the session.
+  return createMemoryNotesStore();
 }

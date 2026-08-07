@@ -519,11 +519,22 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ---
 
-## 15. Future app: Notes (non-MVP)
+## 15. App: Notes (`id: "notes"`)
 
-### Fit check
+### Responsibilities
 
-Must work as `AppModule` only: list/create/edit via text + input nodes, save via an `action: true` edge onto a status node, optional share locations, root `back` to Home, durable storage behind the app or via `platform.storage` (§10) once that capability is provided—not `NotesRepository` in core.
+- Portable `AppModule` — list / create / edit via text + input nodes only.
+- List order: **Create a note**, then notes sorted by `updatedAt` descending.
+- Open `/`: tip is the first note if any, otherwise Create. Prev from the first note reaches Create.
+- List tips show the **first line** of each note body (empty → “Empty note”).
+- Enter on Create or a note → input node (empty or full body). Enter commits with `passInputText` + `action: true`; back abandons without writing.
+- Side effects (create/update) run **only** when `extras.action` is true.
+- Root list tips: `back` is an `app` edge to Home.
+- Persistence behind an injected `NotesStore` (shell wires localStorage for MVP). Schema carries `id`, `body`, `createdAt`, `updatedAt` — no owner yet; swap the store for a DB/API later without core changes.
+
+### Non-goals
+
+- Per-user auth, shared multi-device sync, rich text, folders.
 
 ---
 
