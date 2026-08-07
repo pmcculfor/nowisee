@@ -250,6 +250,8 @@ onIntent(intent):
 
 **Local move vs refresh authority:** After a warm hit, display `payload.label` immediately, then refresh may replace the tip with `result.node` (same id or a stale-repair fallback). Core adopts `result.node.id` as the tip id, since subsequent map lookups key off it. Do not teleport to an unrelated workflow destination.
 
+**Display after revalidation:** If `result.node` matches what Display already shows (same app, id, kind, and — for text — label), do **not** remount the surface. Remounting restarts screen-reader utterance (VoiceOver on iOS especially). Same-id text with a new label updates the live region in place (`replaceText`) without stealing focus. Same-id input tips leave the mounted input alone so revalidation cannot wipe caret or typed text.
+
 ### Transition token
 
 - Every transition (intent, `openLocation`, `hashchange`) increments a monotonic token and records it on the call it starts.
@@ -292,7 +294,8 @@ onIntent(intent):
 ### Responsibilities
 
 - Render exactly one interactive surface.
-- `showText(label)` for `kind: "text"` (default).
+- `showText(label)` for `kind: "text"` (default) — remount + focus.
+- `replaceText(label)` — in-place label change when the text surface is already mounted (no remount, no focus steal).
 - `showInput(initialText)` for `kind: "input"`; expose `getInputText()`.
 - Focus management on load and when switching text ↔ input.
 - Announce updates (`aria-live` assertive default).
@@ -304,6 +307,8 @@ onIntent(intent):
 | Long label | Single blob; no truncation required in MVP |
 | Switch text → input | Replace surface; focus input |
 | Switch input → text | Replace surface; focus live region |
+| Identical tip revalidated | Navigator skips Display; no remount / no re-focus |
+| Same text tip, new label | `replaceText` — in-place live-region update, no focus steal |
 
 ### Non-goals
 

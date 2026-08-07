@@ -178,6 +178,58 @@ describe("Navigator + Router contracts", () => {
     expect(cold.stack.tip()?.nodeId).toBe("ghost");
   });
 
+  it("warm revalidation with identical tip does not remount the text surface", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+
+    const moving = h.navigator.onIntent("next");
+    expect(visibleText(h.root)).toBe("A");
+    const surfaceAfterWarm = h.root.querySelector("[data-surface='text']");
+    expect(surfaceAfterWarm).not.toBeNull();
+
+    await moving;
+    await flush();
+
+    expect(visibleText(h.root)).toBe("A");
+    expect(h.root.querySelector("[data-surface='text']")).toBe(surfaceAfterWarm);
+  });
+
+  it("same-tip label change after revalidation updates text in place", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "next"); // a
+    await intent(h.navigator, "enter"); // copy
+
+    const acting = h.navigator.onIntent("enter"); // action → copy-status
+    expect(visibleText(h.root)).toBe("Copying…");
+    const surface = h.root.querySelector("[data-surface='text']");
+    expect(surface).not.toBeNull();
+
+    await acting;
+    await flush();
+
+    expect(visibleText(h.root)).toBe("Copied");
+    expect(h.root.querySelector("[data-surface='text']")).toBe(surface);
+  });
+
+  it("input revalidation preserves typed text", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "enter"); // child
+
+    const opening = h.navigator.onIntent("enter"); // input (warm)
+    expect(h.display.getMode()).toBe("input");
+    const input = h.root.querySelector("input")!;
+    input.value = "hello";
+
+    await opening;
+    await flush();
+
+    expect(h.display.getMode()).toBe("input");
+    expect(h.root.querySelector("input")).toBe(input);
+    expect(h.display.getInputText()).toBe("hello");
+  });
+
   it("refresh failure clears blocked and keeps last display", async () => {
     const registry = new AppRegistry();
     registry.register(createRootApp("home"));

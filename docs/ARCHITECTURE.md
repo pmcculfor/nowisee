@@ -274,7 +274,7 @@ export interface ShellConfig {
    - `pop`: pop; destination = new tip; **ignore any toNodeId**
 6. If destination payload in warm (or pinned stack): display immediately; start `refresh`.
 7. Else: block until `refresh` returns; then display.
-8. Apply: replace map; replace warm (re-pin stack); set tip from `result.node` (**including its id**); set address bar from `result.location` rules.
+8. Apply: replace map; replace warm (re-pin stack); set tip from `result.node` (**including its id**); set address bar from `result.location` rules. Remount Display only when the tip changed; identical warm revalidation must not remount (screen readers restart on remount). Same-id text label changes update the live region in place.
 9. Every transition increments the token. A result is applied only if its token is the newest issued — tip-id comparison is not sufficient.
 10. On refresh failure: keep display; clear block/busy.
 
