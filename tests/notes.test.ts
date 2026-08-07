@@ -124,18 +124,15 @@ describe("Notes app", () => {
       label: "Line one\nLine two",
       kind: "input",
     });
-    expect(edit.navigationMap[noteEditNodeId("n1")]?.enter).toMatchObject({
+    // Back saves; enter is unbound (multiline typing uses plain Enter).
+    expect(edit.navigationMap[noteEditNodeId("n1")]?.back).toMatchObject({
       kind: "node",
       toNodeId: noteNodeId("n1"),
       stackBehavior: "replace",
       passInputText: true,
       action: true,
     });
-    expect(edit.navigationMap[noteEditNodeId("n1")]?.back).toEqual({
-      kind: "node",
-      toNodeId: noteNodeId("n1"),
-      stackBehavior: "replace",
-    });
+    expect(edit.navigationMap[noteEditNodeId("n1")]?.enter).toBeUndefined();
   });
 
   it("create action writes a note; edit action updates body and updatedAt", async () => {

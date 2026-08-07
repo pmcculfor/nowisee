@@ -13,7 +13,7 @@ import type { AppLocation, AppModule } from "../src/core/types.ts";
 import { createFakeApp, createRootApp } from "./helpers/fakeApp.ts";
 
 function visibleText(root: HTMLElement): string {
-  const input = root.querySelector("input");
+  const input = root.querySelector("textarea");
   if (input) {
     return input.value;
   }
@@ -219,14 +219,14 @@ describe("Navigator + Router contracts", () => {
 
     const opening = h.navigator.onIntent("enter"); // input (warm)
     expect(h.display.getMode()).toBe("input");
-    const input = h.root.querySelector("input")!;
+    const input = h.root.querySelector("textarea")!;
     input.value = "hello";
 
     await opening;
     await flush();
 
     expect(h.display.getMode()).toBe("input");
-    expect(h.root.querySelector("input")).toBe(input);
+    expect(h.root.querySelector("textarea")).toBe(input);
     expect(h.display.getInputText()).toBe("hello");
   });
 
@@ -426,7 +426,7 @@ describe("Navigator + Router contracts", () => {
     await intent(h.navigator, "enter"); // input
     expect(h.navigator.getTipKind()).toBe("input");
 
-    const input = h.root.querySelector("input")!;
+    const input = h.root.querySelector("textarea")!;
     input.value = "hello";
 
     await intent(h.navigator, "enter"); // commit with passInputText + action
