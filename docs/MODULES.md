@@ -295,8 +295,8 @@ onIntent(intent):
 
 - Render exactly one interactive surface.
 - `showText(label)` for `kind: "text"` (default) — remount + focus.
-- `showInput(initialText)` for `kind: "input"` — multiline `<textarea>`; expose `getInputText()`.
-- Focus management on load and when switching text ↔ input.
+- `showInput(initialText)` for `kind: "input"` — multiline `<textarea>` (one reused node, re-attached so iOS keyboard focus stays reliable); expose `getInputText()`.
+- Focus management on load and when switching text ↔ input. `showInput`’s `focus()` must stay synchronous with the triggering user gesture (NavPads click) so iOS raises the software keyboard.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
 
 ### Edge cases
@@ -369,13 +369,15 @@ Notes on the defaults:
 
 **Path:** `src/core/navPads.ts`
 
-VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them, and again on `click` (sighted tap or VoiceOver double-tap activate). A short debounce collapses focus+click from one gesture into a single intent.
+VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them, and again on `click` (sighted tap or VoiceOver double-tap activate).
+
+**Click wins over focusin.** A VoiceOver double-tap usually delivers `focusin` then `click`. If `focusin` navigated immediately, `Display.showInput` would `focus()` the textarea outside the click’s user-activation window and iOS would not raise the software keyboard (this was less noticeable with the earlier single-line `<input type="text">`). `focusin` is therefore deferred briefly; a following `click` cancels that timer and fires the intent instead, so textarea focus stays inside the activation gesture. A bare `focusin` (swipe onto the pad and rest) still navigates after the delay. Leaving the pad before the delay cancels the pending intent. A short debounce still collapses accidental repeat activations of the same intent.
 
 ### Responsibilities
 
 - Mount four native `<button type="button">` elements (top / bottom / left / right).
 - Name each via `aria-label` only (`Previous` / `Next` / `Back` / `Enter`); no nested text VoiceOver can stop on separately.
-- Listen for `focusin` and `click` on those buttons only; call `navigator.onIntent(intent)`.
+- Listen for `focusin`, `focusout`, and `click` on those buttons only; call `navigator.onIntent(intent)` (click immediate; focusin deferred; focusout cancels pending).
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
 

@@ -37,6 +37,25 @@ describe("Display", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("reuses the same textarea node across showInput calls", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+
+    display.showInput("first");
+    const first = root.querySelector("textarea");
+    expect(first).not.toBeNull();
+
+    display.showText("away");
+    expect(root.querySelector("textarea")).toBeNull();
+
+    display.showInput("second\nline");
+    const second = root.querySelector("textarea");
+    expect(second).toBe(first);
+    expect(second!.value).toBe("second\nline");
+    expect(document.activeElement).toBe(second);
+  });
+
   it("switching input → text replaces the surface", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
