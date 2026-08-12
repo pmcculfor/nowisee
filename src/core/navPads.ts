@@ -3,8 +3,9 @@ import type { NavIntent } from "./types.ts";
 /**
  * Edge pads for VoiceOver / explore-by-touch: native buttons at screen edges.
  * Navigation fires on accessibility focus (`focusin`) and on `click` (sighted
- * tap, or VoiceOver double-tap activate). A short debounce collapses focus+click
- * from the same gesture into a single intent.
+ * tap, or VoiceOver double-tap activate). A focusin that already fired an
+ * intent suppresses only the click that follows on that same button (one
+ * gesture); there is no time delay and no lockout of a later activation.
  */
 
 export interface NavPadsHost {
@@ -16,9 +17,6 @@ export interface NavPadsOptions {
   readonly parent: HTMLElement;
   readonly host: NavPadsHost;
 }
-
-/** Collapse focusin + click from one activation into a single intent. */
-const FIRE_DEBOUNCE_MS = 400;
 
 const PADS: readonly {
   readonly intent: NavIntent;
@@ -37,8 +35,8 @@ export class NavPads {
   private readonly onFocusIn: (event: Event) => void;
   private readonly onClick: (event: Event) => void;
   private attached = false;
-  private lastFiredAt = 0;
-  private lastFiredIntent: NavIntent | null = null;
+  /** Button whose focusin already fired; the paired click must not fire again. */
+  private suppressClickFor: HTMLButtonElement | null = null;
 
   constructor(options: NavPadsOptions) {
     this.host = options.host;
@@ -94,15 +92,11 @@ export class NavPads {
     if (this.host.isBlocked()) {
       return;
     }
-    const now = Date.now();
-    if (
-      this.lastFiredIntent === intent &&
-      now - this.lastFiredAt < FIRE_DEBOUNCE_MS
-    ) {
+    if (event.type === "click" && this.suppressClickFor === target) {
+      this.suppressClickFor = null;
       return;
     }
-    this.lastFiredIntent = intent;
-    this.lastFiredAt = now;
+    this.suppressClickFor = event.type === "focusin" ? target : null;
     this.host.onIntent(intent);
   }
 }

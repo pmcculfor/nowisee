@@ -69,7 +69,7 @@ describe("NavPads", () => {
     expect(intents).toEqual(["next", "enter"]);
   });
 
-  it("fires onIntent on click, and debounces focusin+click into one intent", () => {
+  it("fires onIntent on click, and collapses focusin+click on the same button into one intent", () => {
     const parent = document.createElement("div");
     document.body.appendChild(parent);
     const intents: NavIntent[] = [];
@@ -95,5 +95,30 @@ describe("NavPads", () => {
     pads.detach();
     next.click();
     expect(intents).toEqual(["next", "back"]);
+  });
+
+  it("does not delay or lock out a later activation of the same pad", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const intents: NavIntent[] = [];
+    const host: NavPadsHost = {
+      isBlocked: () => false,
+      onIntent: (intent) => {
+        intents.push(intent);
+      },
+    };
+
+    const pads = new NavPads({ parent, host });
+    pads.attach();
+
+    const next = parent.querySelector<HTMLButtonElement>('button[data-nav-pad="bottom"]')!;
+    next.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    next.click();
+    next.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    next.click();
+    expect(intents).toEqual(["next", "next"]);
+
+    next.click();
+    expect(intents).toEqual(["next", "next", "next"]);
   });
 });

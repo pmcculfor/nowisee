@@ -370,7 +370,7 @@ Notes on the defaults:
 
 **Path:** `src/core/navPads.ts`
 
-VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them, and again on `click` (sighted tap or VoiceOver double-tap activate). A short debounce collapses focus+click from one gesture into a single intent.
+VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are large edge buttons that deliver the same four intents when accessibility focus lands on them, and again on `click` (sighted tap or VoiceOver double-tap activate). A `focusin` that already fired an intent suppresses only the click that follows on that same button (one gesture). There is no time delay and no lockout of a later activation.
 
 ### Responsibilities
 
