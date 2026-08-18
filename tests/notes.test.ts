@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CREATE_EDIT_NODE_ID,
   CREATE_NODE_ID,
+  CREATE_RESULT_NODE_ID,
   firstLineLabel,
   noteEditNodeId,
   noteNodeId,
@@ -42,6 +43,19 @@ describe("Notes app", () => {
     expect(result.navigationMap[CREATE_NODE_ID]?.enter).toEqual({
       kind: "node",
       toNodeId: CREATE_EDIT_NODE_ID,
+      stackBehavior: "replace",
+    });
+    const edit = await app.open("/create/edit");
+    expect(edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter).toMatchObject({
+      kind: "node",
+      toNodeId: CREATE_RESULT_NODE_ID,
+      stackBehavior: "replace",
+      passInputText: true,
+      action: true,
+    });
+    expect(edit.navigationMap[CREATE_EDIT_NODE_ID]?.back).toEqual({
+      kind: "node",
+      toNodeId: CREATE_NODE_ID,
       stackBehavior: "replace",
     });
   });
@@ -124,15 +138,18 @@ describe("Notes app", () => {
       label: "Line one\nLine two",
       kind: "input",
     });
-    // Back saves; enter is unbound so chord Right is a no-op while typing.
-    expect(edit.navigationMap[noteEditNodeId("n1")]?.back).toMatchObject({
+    expect(edit.navigationMap[noteEditNodeId("n1")]?.enter).toMatchObject({
       kind: "node",
       toNodeId: noteNodeId("n1"),
       stackBehavior: "replace",
       passInputText: true,
       action: true,
     });
-    expect(edit.navigationMap[noteEditNodeId("n1")]?.enter).toBeUndefined();
+    expect(edit.navigationMap[noteEditNodeId("n1")]?.back).toEqual({
+      kind: "node",
+      toNodeId: noteNodeId("n1"),
+      stackBehavior: "replace",
+    });
   });
 
   it("create action writes a note; edit action updates body and updatedAt", async () => {

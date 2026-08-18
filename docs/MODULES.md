@@ -293,26 +293,26 @@ onIntent(intent):
 
 ### Responsibilities
 
-- Render exactly one interactive surface.
-- `showText(label)` for `kind: "text"` (default) — remount + focus.
-- `showInput(initialText)` for `kind: "input"` — single-line `<input type="text">`; expose `getInputText()`. Soft newlines in the label are kept across the control via U+2028 (text inputs strip U+000A).
+- Render the current tip.
+- `showText(label)` for `kind: "text"` (default) — remount + focus a `role="application"` surface so NVDA / JAWS / VoiceOver pass arrow keys to the page.
+- `showInput(initialText)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
-- **Why not `<textarea>`:** after programmatic focus, VoiceOver on iOS often announces a textarea as “multi-line text field, double tap to edit” and that activate gesture fails to enter editing or raise the keyboard. A text field enters editing and raises the keyboard. Core keeps the robust control; a true multiline editor is deferred rather than papered over with pad timing hacks.
+- Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done).
 
 ### Edge cases
 
 | Case | Behavior |
 |------|----------|
 | Long label | Single blob; no truncation required in MVP |
-| Switch text → input | Replace surface; focus input |
-| Switch input → text | Replace surface; focus text surface |
+| Switch text → input | Replace surface; focus textarea |
+| Switch input → text | Replace surface; focus application text surface |
 | Identical tip revalidated | Navigator skips Display; no remount / no re-focus |
 | Same text tip, new label | Remount + focus once so the new label is announced |
 
 ### Non-goals
 
-- Multi-field forms, visible chrome, Escape-to-blur platform behavior.
+- Multi-field forms, Escape-to-blur platform behavior.
 - A second SR-only status channel (deferred — see DESIGN-REVIEW §6).
 
 ---
@@ -342,20 +342,22 @@ export interface KeyBinding {
 
 ### Default binding table
 
-Same chord on **text** and **input** tips. Plain arrows stay unbound so the caret keeps them in fields.
+Plain arrows on **text** tips (`role="application"`). Unbound on **input** tips so the caret keeps them. Leave an input via Cancel / Done.
 
 | Tip kind | Key | Intent |
 |----------|-----|--------|
-| text / input | `Ctrl+Alt+Shift+ArrowUp` / `ArrowDown` | `prev` / `next` |
-| text / input | `Ctrl+Alt+Shift+ArrowRight` / `ArrowLeft` | `enter` / `back` |
-| either | plain arrows | *unbound* |
+| text | `ArrowUp` / `ArrowDown` | `prev` / `next` |
+| text | `ArrowRight` / `ArrowLeft` | `enter` / `back` |
+| input | plain arrows | *unbound* (caret) |
+| either | Escape, Tab, Enter | *unbound* |
 
 Notes on the defaults:
 
-- The full `Ctrl+Alt+Shift` chord avoids colliding with caret movement (`Ctrl+Arrow`), browser/OS shortcuts, and common screen-reader keys.
-- `Tab` / `Shift+Tab` must **not** be bound. Consuming Tab would trap the keyboard inside the page (WCAG 2.1.2).
+- `role="application"` on the text surface is what lets these keys reach the page under NVDA / JAWS / desktop VoiceOver. It is not a substitute for Cancel / Done on input tips.
+- `Tab` / `Shift+Tab` must **not** be bound. Consuming Tab would trap the keyboard inside the page (WCAG 2.1.2). Tab moves between the textarea and Cancel / Done.
 - Right-to-left locales swap the `enter` / `back` arrows here. Apps are unaffected.
 - Changing defaults is a change to this table only; apps author intents, never keys.
+- Keystrokes that originate in a `<textarea>` or `<input>` are ignored even if a binding would otherwise match.
 
 ### Non-goals
 
@@ -379,6 +381,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - Listen for `focusin` and `click` on those buttons only; call `navigator.onIntent(intent)`.
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
+- Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done or fire on explore-by-touch.
 
 | Edge | Intent |
 |------|--------|
@@ -528,7 +531,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - List order: **Create a note**, then notes sorted by `updatedAt` descending.
 - Open `/`: tip is the first note if any, otherwise Create. Prev from the first note reaches Create.
 - List tips show the **first line** of each note body (empty → “Empty note”).
-- Enter on Create or a note → input tip with the full body (single-line text field). **Back** commits with `passInputText` + `action: true`; **enter** is unbound on the input so chord Right is a no-op while typing. There is no discard-via-back path.
+- Enter on Create or a note → input tip with the full body (multiline field). **Done** (`enter`) commits with `passInputText` + `action: true`; **Cancel** (`back`) returns to the list/create node without saving.
 - Side effects (create/update) run **only** when `extras.action` is true.
 - Root list tips: `back` is an `app` edge to Home.
 - Persistence behind an injected `NotesStore` (shell wires localStorage for MVP). Schema carries `id`, `body`, `createdAt`, `updatedAt` — no owner yet; swap the store for a DB/API later without core changes.

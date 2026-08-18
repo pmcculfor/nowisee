@@ -201,11 +201,10 @@ function buildNavigationMap(
         enter: edgeNode(CREATE_EDIT_NODE_ID, "replace"),
       },
     },
-    // Back saves; enter is unbound so chord Right is a no-op while typing
-    // (plain Enter inserts a soft newline in the text field).
+    // Done (enter) saves; Cancel (back) returns to Create a note.
     inputEdges(CREATE_EDIT_NODE_ID, {
       commitTo: CREATE_RESULT_NODE_ID,
-      commitOn: "back",
+      backTo: CREATE_NODE_ID,
       action: true,
       commitStackBehavior: "replace",
     }),
@@ -224,7 +223,7 @@ function buildNavigationMap(
     fragments.push(
       inputEdges(editId, {
         commitTo: id,
-        commitOn: "back",
+        backTo: id,
         action: true,
         commitStackBehavior: "replace",
       }),

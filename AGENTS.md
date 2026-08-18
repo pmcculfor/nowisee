@@ -63,13 +63,13 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | App API | `open(path)` + `refresh(stack, extras)` → navigation map + warm + tip + location |
 | Prefetch | App pushes `warm` + navigation-map edges; core only stores/serves |
 | Navigation map | `(fromNodeId, intent) → node \| app \| external` edge; missing = silent no-op; nested structure, no delimiter |
-| Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes and edge-pad focus to intents |
+| Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes, edge pads, and input Cancel/Done to intents |
 | Actions | `action: true` on an edge; core sets `extras.action` on that traversal **only**; never re-issues, retries, aborts, or coalesces it; apps run side effects only then |
 | Stack | Per **current app** only; opening a location resets stack |
 | Node edge stackBehavior | `push` / `replace` / `pop` (on `pop`, omit `toNodeId`; stack tip wins) |
 | Cross-app / leave app | `app` location edges only; app root `back` **MUST** be an `app` edge to home |
 | Home | An `AppModule`, not a core-special UI; identified by `config.rootAppId`, never a core constant |
-| Input leave | The same `enter` / `back` intents and chord/pads as text tips; plain arrows unbound for the caret; **no Escape exit** |
+| Input leave | Done → `enter`, Cancel → `back`; plain arrows unbound for the caret; **no Escape exit** |
 | Sibling ends | App choice via edges (wrap not mandated) |
 | Dead-end intent | Silent no-op |
 | Status / action aftermath | Stay on node until user navigates; refresh may update text in place |
@@ -97,4 +97,4 @@ Frontend-only static SPA (Vanilla TS + Vite). No backend, database, environment 
 - **Lint / typecheck:** there is no ESLint/Prettier. The static check is the strict `tsc -p tsconfig.app.json --noEmit` that runs as the first half of `npm run build`.
 - **Build:** `npm run build` (typecheck + `vite build`). It emits one large (~4 MB) JS chunk because the committed KJV JSON is bundled; the "chunks are larger than 500 kB" warning is expected, not an error.
 - **KJV data:** already committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
-- **Navigating the running app:** navigation is driven only by the `Ctrl+Alt+Shift+Arrow` chord (Up=prev, Down=next, Right=enter, Left=back) or the invisible full-height/width screen-edge pads (right edge = enter, left = back, top = prev, bottom = next). Plain arrows, Tab, and Escape are intentionally unbound.
+- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Tab and Escape stay unbound.

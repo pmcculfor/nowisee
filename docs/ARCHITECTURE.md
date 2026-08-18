@@ -286,14 +286,15 @@ export interface ShellConfig {
 
 ### Display
 
-- Text node: show `label` in one focusable surface (`tabindex="-1"`). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS).
-- Input node: show one single-line text field (same single-surface rule); seed from `label` or app `data` as the app defines. Not a `<textarea>` — VoiceOver on iOS often fails to enter editing after programmatic focus on textareas (MODULES §8).
+- Text node: show `label` in one focusable `role="application"` surface (`tabindex="-1"`). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS).
+- Input node: show a multiline `<textarea>` seeded from the label, plus Cancel (`back`) and Done (`enter`) after it in DOM order. Activate on click only. Hide NavPads while this surface is up.
 
 ### Keyboard
 
 - Owns the physical → intent binding table; resolves `(event, tipKind) → NavIntent | none`.
 - Unbound key: no call to Navigator, no `preventDefault`.
-- Plain arrows on an input tip are not bound, so the caret keeps them.
+- Default table: plain arrows on text tips only. Input tips leave via Cancel / Done.
+- Keystrokes from a textarea/input are ignored so the caret and Enter-as-newline keep them.
 - While blocked: ignore intents.
 - Escape is **not** a platform exit.
 

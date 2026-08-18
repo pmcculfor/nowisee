@@ -29,7 +29,7 @@ body {
 }
 
 #app [data-surface="text"],
-#app input[data-surface="input"] {
+#app textarea[data-surface="input"] {
   display: block;
   width: 100%;
   max-width: 40rem;
@@ -40,10 +40,33 @@ body {
   color: inherit;
 }
 
-#app input[data-surface="input"] {
+#app textarea[data-surface="input"] {
+  min-height: 12rem;
+  resize: vertical;
   outline: 2px solid #333;
   outline-offset: 4px;
   padding: 0.25rem 0;
+}
+
+#app [data-input-actions] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  max-width: 40rem;
+  margin-top: 1rem;
+}
+
+#app button[data-input-action] {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border: 2px solid #333;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+}
+
+#app[data-input-open] button[data-nav-pad] {
+  display: none;
 }
 
 /* VoiceOver edge pads: huge hit targets, no visible chrome, name via aria-label only. */

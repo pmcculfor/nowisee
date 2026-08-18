@@ -75,14 +75,20 @@ export function startShell(
   surface.dataset.shell = "surface";
   mount.appendChild(surface);
 
-  const display = new Display(surface);
+  let navigator!: Navigator;
+  const display = new Display(surface, {
+    isBlocked: () => navigator.isBlocked(),
+    onIntent: (intent: NavIntent) => {
+      void navigator.onIntent(intent);
+    },
+  });
   const map = new NavigationMapStore();
   const cache = new NodeCache();
   const stack = new Stack();
   const platform = new PlatformCapabilities();
 
   let router!: Router;
-  const navigator = new Navigator({
+  navigator = new Navigator({
     config,
     registry,
     display,

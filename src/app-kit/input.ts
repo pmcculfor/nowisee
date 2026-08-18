@@ -7,9 +7,9 @@ export type InputEdgesOptions = {
   readonly commitTo: string;
   /**
    * Which intent commits.
-   * - `"enter"` (default): `enter` commits; `back` abandons via `backTo`
-   * - `"back"`: `back` commits; `enter` is omitted (silent no-op) so chord
-   *   Right does not leave the field while typing
+   * - `"enter"` (default): `enter` commits (Done); `back` abandons via `backTo` (Cancel)
+   * - `"back"`: `back` commits; `enter` is omitted. Prefer `"enter"` — the
+   *   shell's Done button fires `enter`.
    */
   readonly commitOn?: "enter" | "back";
   /**

@@ -13,9 +13,13 @@ import type { AppLocation, AppModule } from "../src/core/types.ts";
 import { createFakeApp, createRootApp } from "./helpers/fakeApp.ts";
 
 function visibleText(root: HTMLElement): string {
-  const input = root.querySelector<HTMLInputElement>("input[data-surface='input']");
+  const input = root.querySelector<HTMLTextAreaElement>("textarea[data-surface='input']");
   if (input) {
     return input.value;
+  }
+  const text = root.querySelector("[data-surface='text']");
+  if (text) {
+    return text.textContent ?? "";
   }
   return root.textContent ?? "";
 }
@@ -220,14 +224,14 @@ describe("Navigator + Router contracts", () => {
 
     const opening = h.navigator.onIntent("enter"); // input (warm)
     expect(h.display.getMode()).toBe("input");
-    const input = h.root.querySelector<HTMLInputElement>("input[data-surface='input']")!;
+    const input = h.root.querySelector<HTMLTextAreaElement>("textarea[data-surface='input']")!;
     input.value = "hello";
 
     await opening;
     await flush();
 
     expect(h.display.getMode()).toBe("input");
-    expect(h.root.querySelector("input[data-surface='input']")).toBe(input);
+    expect(h.root.querySelector("textarea[data-surface='input']")).toBe(input);
     expect(h.display.getInputText()).toBe("hello");
   });
 
@@ -427,7 +431,7 @@ describe("Navigator + Router contracts", () => {
     await intent(h.navigator, "enter"); // input
     expect(h.navigator.getTipKind()).toBe("input");
 
-    const input = h.root.querySelector<HTMLInputElement>("input[data-surface='input']")!;
+    const input = h.root.querySelector<HTMLTextAreaElement>("textarea[data-surface='input']")!;
     input.value = "hello";
 
     await intent(h.navigator, "enter"); // commit with passInputText + action

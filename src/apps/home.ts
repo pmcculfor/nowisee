@@ -51,12 +51,12 @@ function appNodeId(appId: string): string {
 function helpLabel(): string {
   return [
     "Help.",
-    "Control Alt Shift and the arrow keys navigate.",
+    "The arrow keys navigate.",
     "Up and Down move between items.",
     "Right opens.",
     "Left goes back.",
-    "The same keys work on a typing screen; plain arrows still move the caret.",
-    "On a phone with VoiceOver, touch the top, bottom, left, or right edge of the screen to navigate.",
+    "On a typing screen, type in the box. Enter makes a new line. Move to Done to save, or to Cancel to go back.",
+    "On a phone with VoiceOver, touch the top, bottom, left, or right edge of the screen to navigate. On a typing screen, swipe to Done or Cancel.",
   ].join(" ");
 }
 

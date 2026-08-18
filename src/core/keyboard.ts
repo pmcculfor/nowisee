@@ -11,16 +11,16 @@ export interface KeyEventLike {
 
 /**
  * Defaults from MODULES §9.
- * Escape is never bound. Tab / Shift+Tab are never bound (WCAG 2.1.2).
- * Same chord on text and input tips so plain arrows stay with the caret on inputs.
+ * Plain arrows navigate on text tips (`role="application"`). They are unbound
+ * on input tips so the caret keeps them. Escape and Tab are never bound.
+ * Leave an input via Cancel / Done, not a chord.
  */
 export function defaultKeyBindings(): readonly KeyBinding[] {
-  const chord = { ctrl: true, alt: true, shift: true } as const;
   return [
-    { intent: "prev", key: "ArrowUp", mods: chord },
-    { intent: "next", key: "ArrowDown", mods: chord },
-    { intent: "enter", key: "ArrowRight", mods: chord },
-    { intent: "back", key: "ArrowLeft", mods: chord },
+    { intent: "prev", key: "ArrowUp", whenTip: "text" },
+    { intent: "next", key: "ArrowDown", whenTip: "text" },
+    { intent: "enter", key: "ArrowRight", whenTip: "text" },
+    { intent: "back", key: "ArrowLeft", whenTip: "text" },
   ];
 }
 
@@ -62,6 +62,12 @@ function modsMatch(
     event.altKey === wantAlt &&
     event.shiftKey === wantShift &&
     event.metaKey === wantMeta
+  );
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement
   );
 }
 
@@ -122,6 +128,9 @@ export class Keyboard {
 
   private handleKeyDown(event: KeyboardEvent): void {
     if (this.host.isBlocked()) {
+      return;
+    }
+    if (isTypingTarget(event.target)) {
       return;
     }
     const intent = resolveIntent(event, this.host.getTipKind(), this.bindings);

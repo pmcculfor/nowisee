@@ -9,7 +9,7 @@
 
 **Nowisee** is a website for blind (and screen-reader / keyboard-primary) users who struggle with modern, cluttered UIs.
 
-**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label. When the current node is an **input** node, that surface is a single input box. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to `Ctrl+Alt+Shift`+arrows by default (and to VoiceOver edge pads on focus or click) and which a user or locale can rebind without any app changing.
+**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label (`role="application"` so arrow keys reach the page). When the current node is an **input** node, that surface is a multiline text box plus Cancel and Done. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to the arrow keys by default on text tips (and to VoiceOver edge pads on focus or click) and which a user or locale can rebind without any app changing.
 
 **Why it exists:** typical sites force tabbing through chrome or exploring by touch. Users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
 
@@ -31,17 +31,17 @@
 
 Apps author **intents**. Core owns which keystroke produces each one (defaults in [`MODULES.md`](MODULES.md) §9).
 
-| Intent | Default input (text and input tips) | Typical meaning (authored by apps via navigation map) |
-|--------|-------------------------------------|--------------------------------------------------------|
-| `prev` / `next` | `Ctrl+Alt+Shift+ArrowUp` / `ArrowDown`; VoiceOver pads top / bottom | Move among siblings (`stackBehavior: replace`) |
-| `enter` | `Ctrl+Alt+Shift+ArrowRight`; VoiceOver pad right | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions |
-| `back` | `Ctrl+Alt+Shift+ArrowLeft`; VoiceOver pad left | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home** |
-| plain arrows on an **input** tip | unbound | Caret keeps them. Leave input via the same `enter` / `back` intents as everywhere else. |
+| Intent | Default input | Typical meaning (authored by apps via navigation map) |
+|--------|---------------|--------------------------------------------------------|
+| `prev` / `next` | `ArrowUp` / `ArrowDown` on a text tip; VoiceOver pads top / bottom | Move among siblings (`stackBehavior: replace`) |
+| `enter` | `ArrowRight` on a text tip; VoiceOver pad right; **Done** on an input tip | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions and input commit |
+| `back` | `ArrowLeft` on a text tip; VoiceOver pad left; **Cancel** on an input tip | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home**. On an input tip: abandon |
+| plain arrows on an **input** tip | unbound | Caret keeps them. Leave via Done / Cancel, not a chord. |
 | Missing map edge | — | Silent no-op (stay) |
 
 Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.
 
-**Display:** one text blob or one input box. Screen reader announces updates by focusing the remounted text surface (no `aria-live` on that surface). Help lives **in the tree** as nodes, not modals.
+**Display:** one text blob, or a multiline field plus Cancel / Done. Screen reader announces updates by focusing the remounted text surface (no `aria-live` on that surface). Help lives **in the tree** as nodes, not modals.
 
 **Example paths:**
 
@@ -151,9 +151,9 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.8 Input nodes
 
-**Decision:** Input is a node type (single input box). Leave only via navigation-map edges — the same `enter` / `back` intents used everywhere else, bound to the same non-caret chord (and edge pads) as on text tips so plain arrows keep driving the caret. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode.
+**Decision:** Input is a node type (multiline `<textarea>` plus Cancel and Done). Leave only via navigation-map edges: **Done** fires `enter` (typically commit with `passInputText`); **Cancel** fires `back` (typically abandon). Plain arrows stay unbound so the caret keeps them. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode. The two buttons are the only extra chrome, and only while the tip is an input.
 
-**Why:** One consistent exit vocabulary, and apps author the same four intents whether the tip is text or input.
+**Why:** One consistent exit vocabulary that matches how people already leave a form (move to a named button and activate it), instead of a Nowisee-only chord or guessing every screen-reader blur path. Apps still author `enter` / `back`; core only supplies the controls.
 
 ### 4.9 Addressing
 
@@ -211,7 +211,7 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 2. **List ends:** Choose wrap/stop/message; do not assume platform wrap.
 3. **Action / send / copy:** Put `action: true` on the `enter` edge into a status node; “Sending…” → “Sent”/error in place; leave only via mapped intents; never silent stack jump. Resolve with an error label rather than rejecting — a rejected action call strands the user on “Sending…”.
 4. **Leaving the app:** Root `back` MUST be an `app` edge to Home.
-5. **Input:** Instruction node → input node; `enter` with `passInputText` to commit; `back` to abandon.
+5. **Input:** Instruction node → input node; `enter` (Done) with `passInputText` to commit; `back` (Cancel) to abandon.
 6. **Addressing:** Stable canonical location when bookmarkable; omit/null for status tips that should not change the bar (this also stops a reload from re-entering an action node).
 7. **Prefetch:** Publish likely edges + warm payloads.
 8. **Home:** Labels + `app` edges only.
