@@ -294,7 +294,7 @@ onIntent(intent):
 ### Responsibilities
 
 - Render the current tip.
-- `showText(label)` for `kind: "text"` (default) — remount + focus a `role="application"` surface so NVDA / JAWS / VoiceOver pass arrow keys to the page.
+- `showText(label)` for `kind: "text"` (default) — remount + focus a `role="application"` surface so NVDA / JAWS / VoiceOver pass arrow keys to the page. Set `aria-label` to the same string as the visible text: NVDA treats application as a named widget and otherwise announces only "application".
 - `showInput(initialText)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).

@@ -35,6 +35,7 @@ describe("Display", () => {
     expect(surface).not.toBeNull();
     expect(surface!.textContent).toBe("Hello");
     expect(surface!.getAttribute("role")).toBe("application");
+    expect(surface!.getAttribute("aria-label")).toBe("Hello");
     expect(surface!.hasAttribute("aria-live")).toBe(false);
     expect(surface!.getAttribute("tabindex")).toBe("-1");
     expect(display.getMode()).toBe("text");
@@ -144,6 +145,9 @@ describe("Display", () => {
     expect(root.querySelector("[data-surface='text']")!.textContent).toBe("back to text");
     expect(root.querySelector("[data-surface='text']")!.getAttribute("role")).toBe(
       "application",
+    );
+    expect(root.querySelector("[data-surface='text']")!.getAttribute("aria-label")).toBe(
+      "back to text",
     );
     expect(display.getInputText()).toBe("");
     expect(document.body.hasAttribute("data-input-open")).toBe(false);

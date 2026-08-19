@@ -7,9 +7,12 @@
  * change, which restarts mid-utterance even when the label never changes.
  *
  * Text tips use `role="application"` so NVDA / JAWS / VoiceOver pass plain
- * arrow keys to the page. Input tips are a native `<textarea>` (Enter = newline)
- * plus Cancel (`back`) and Done (`enter`) buttons. Those buttons fire on
- * activate/click only — never on focus.
+ * arrow keys to the page. An application is a named widget: without
+ * `aria-label`, NVDA announces only "application" and never the node text
+ * (the spike that *did* speak used an inner live region; we name the widget
+ * with the label instead so we do not put `aria-live` on the focused surface).
+ * Input tips are a native `<textarea>` (Enter = newline) plus Cancel (`back`)
+ * and Done (`enter`) buttons. Those buttons fire on click only — never on focus.
  */
 
 import type { NavIntent } from "./types.ts";
@@ -46,6 +49,8 @@ export class Display {
     el.dataset.surface = "text";
     el.setAttribute("role", "application");
     el.setAttribute("tabindex", "-1");
+    // Name the widget. NVDA will not read textContent of role=application.
+    el.setAttribute("aria-label", label);
     el.textContent = label;
 
     this.root.appendChild(el);
