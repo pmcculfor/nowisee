@@ -65,6 +65,14 @@ body {
   cursor: pointer;
 }
 
+#app button[data-input-action]:focus,
+#app button[data-input-action]:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 4px;
+  background: #111;
+  color: #fff;
+}
+
 #app[data-input-open] button[data-nav-pad] {
   display: none;
 }
