@@ -148,9 +148,10 @@ export interface RefreshResult {
    */
   node: NodePayload;
   /**
-   * Canonical location for the tip, or null/undefined to keep the previous address bar.
+   * Canonical location for the tip, or null to keep the previous address bar.
+   * Required — omit is not the same as null.
    */
-  location?: AppLocation | null;
+  location: AppLocation | null;
 }
 
 export interface AppModule {

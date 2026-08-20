@@ -40,6 +40,10 @@ export function bookPathSegment(name: string): string {
   return encodeURIComponent(name);
 }
 
-export function decodeBookSegment(segment: string): string {
-  return decodeURIComponent(segment);
+export function decodeBookSegment(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
 }

@@ -160,7 +160,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 - Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a browser URL, so the hash-vs-path decision, a sub-path mount, or a locale segment never reaches app code.
 - Shareable tips **may** return a location from refresh; not required for every node.
 - Aliases OK; app canonicalizes on open.
-- Null/omit location → core **keeps** the previous address bar.
+- Null location → core **keeps** the previous address bar. The field is required; omitting it is not the same as null.
 - Cross-app and Home exit: `kind: "app"` edges only. `kind: "external"` leaves the platform.
 
 ### 4.10 App boundary: data in, data out
@@ -212,7 +212,7 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 3. **Action / send / copy:** Put `action: true` on the `enter` edge into a status node; “Sending…” → “Sent”/error in place; leave only via mapped intents; never silent stack jump. Resolve with an error label rather than rejecting — a rejected action call strands the user on “Sending…”.
 4. **Leaving the app:** Root `back` MUST be an `app` edge to Home.
 5. **Input:** Instruction node → input node; `enter` (Done) with `passInputText` to commit; `back` (Cancel) to abandon.
-6. **Addressing:** Stable canonical location when bookmarkable; omit/null for status tips that should not change the bar (this also stops a reload from re-entering an action node).
+6. **Addressing:** Stable canonical location when bookmarkable; `location: null` for status tips that should not change the bar (this also stops a reload from re-entering an action node).
 7. **Prefetch:** Publish likely edges + warm payloads.
 8. **Home:** Labels + `app` edges only.
 9. **App kit:** Prefer shared helpers for edge/list/input/neighborhood boilerplate.

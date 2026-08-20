@@ -59,16 +59,14 @@ export async function openNotesPath(
 }
 
 function tipIdForPath(path: string, notes: readonly NoteRecord[]): string {
-  const normalized = path === "" ? "/" : path;
-
-  if (normalized === "/create/edit") {
+  if (path === "/create/edit") {
     return CREATE_EDIT_NODE_ID;
   }
-  if (normalized === "/create") {
+  if (path === "/create") {
     return CREATE_NODE_ID;
   }
 
-  const editMatch = /^\/note\/([^/]+)\/edit\/?$/.exec(normalized);
+  const editMatch = /^\/note\/([^/]+)\/edit\/?$/.exec(path);
   if (editMatch) {
     const id = editMatch[1]!;
     if (notes.some((n) => n.id === id)) {
@@ -77,7 +75,7 @@ function tipIdForPath(path: string, notes: readonly NoteRecord[]): string {
     return defaultListTip(notes);
   }
 
-  const noteMatch = /^\/note\/([^/]+)\/?$/.exec(normalized);
+  const noteMatch = /^\/note\/([^/]+)\/?$/.exec(path);
   if (noteMatch) {
     const id = noteMatch[1]!;
     if (notes.some((n) => n.id === id)) {
@@ -105,7 +103,11 @@ async function applyAction(
   tipId: string,
   extras: RefreshExtras,
 ): Promise<RefreshResult> {
-  const text = extras.inputText ?? "";
+  if (extras.inputText === undefined) {
+    const notes = await deps.store.list();
+    return viewFromNotes(deps, notes, tipId);
+  }
+  const text = extras.inputText;
 
   if (tipId === CREATE_RESULT_NODE_ID) {
     const created = await deps.store.create(text);
@@ -113,20 +115,14 @@ async function applyAction(
     return viewFromNotes(deps, notes, noteNodeId(created.id));
   }
 
-  // Edit commit pops back onto the note tip with action + inputText.
-  const noteId = parseNoteNodeId(tipId) ?? parseNoteEditNodeId(tipId);
+  const noteId = parseNoteNodeId(tipId);
   if (noteId) {
-    try {
-      await deps.store.update(noteId, text);
-    } catch {
-      // Stale id — fall through to default tip after reload.
-    }
+    const updated = await deps.store.update(noteId, text);
     const notes = await deps.store.list();
-    const stillThere = notes.some((n) => n.id === noteId);
     return viewFromNotes(
       deps,
       notes,
-      stillThere ? noteNodeId(noteId) : defaultListTip(notes),
+      updated ? noteNodeId(noteId) : defaultListTip(notes),
     );
   }
 

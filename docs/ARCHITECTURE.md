@@ -152,9 +152,10 @@ export interface RefreshResult {
    */
   node: NodePayload;
   /**
-   * Canonical location for the tip, or null/undefined to keep the previous address bar.
+   * Canonical location for the tip, or null to keep the previous address bar.
+   * Required — omitting the field is not the same as null.
    */
-  location?: AppLocation | null;
+  location: AppLocation | null;
 }
 
 export interface AppModule {
@@ -256,7 +257,7 @@ export interface ShellConfig {
 
 ### Router (pure boundary)
 
-- `parse(href) → AppLocation | null` — `#/` → `{ rootAppId, "/" }`; `#/<appId>/rest` → `{ appId, "/rest" }`.
+- `parse(href) → AppLocation` — `#/` → `{ rootAppId, "/" }`; `#/<appId>/rest` → `{ appId, "/rest" }`. Always a location; unknown or corrupt hrefs resolve to the root app.
 - `hrefFor(location) → string` — the only place a `#/...` string is produced.
 - Listens for `hashchange` and forwards the parsed location to Navigator.
 - Unknown appId / corrupt href: resolve to the root app; do not crash.
@@ -265,18 +266,18 @@ export interface ShellConfig {
 ### Navigator (single owner of state transitions)
 
 1. Own per-app **stack**, **blocked** (intents ignored while true; “busy” in older wording means the same flag), and a monotonic transition token.
-2. `onIntent(intent)`: look up `(tipId, intent)`; missing → silent no-op.
-3. `openLocation(location, extras)`: clear stack, clear cache/map, set current app, call `app.open(path)`, apply.
+2. `onIntent(intent)`: look up `(tipId, intent)`; missing or malformed edge → silent no-op (does not increment the transition token).
+3. `openLocation(location, extras)`: increment token, block, call `app.open(path)`. On success, then clear stack/cache/map, set current app, and apply. On failure, keep the previous session.
 4. `kind: "app"` edge → `openLocation`. `kind: "external"` → hand the href to the browser.
 5. `kind: "node"`:
    - `push`: push `toNodeId`
    - `replace`: replace tip with `toNodeId`
-   - `pop`: pop; destination = new tip; **ignore any toNodeId**
+   - `pop`: pop; destination = new tip; **ignore any toNodeId**. If pop would empty the stack, open the root app *without* popping first.
 6. If destination payload in warm (or pinned stack): display immediately; start `refresh`.
 7. Else: block until `refresh` returns; then display.
 8. Apply: replace map; replace warm (re-pin stack); set tip from `result.node` (**including its id**); set address bar from `result.location` rules. Remount Display only when the tip changed; identical warm revalidation must not remount (screen readers restart on remount). Same-id text label changes remount once so focus can announce the new label.
 9. Every transition increments the token. A result is applied only if its token is the newest issued — tip-id comparison is not sufficient.
-10. On refresh failure: keep display; clear block/busy.
+10. On refresh or open failure: keep display, stack, map, and cache; clear block/busy.
 
 ### NodeCache
 

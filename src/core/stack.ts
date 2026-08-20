@@ -24,8 +24,7 @@ export class Stack {
 
   replaceTip(entry: StackEntry): void {
     if (this.entries.length === 0) {
-      this.entries.push(entry);
-      return;
+      throw new Error("Stack.replaceTip: stack is empty");
     }
     this.entries[this.entries.length - 1] = entry;
   }

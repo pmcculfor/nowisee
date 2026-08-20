@@ -1,28 +1,18 @@
 import type { NavEdge, NavIntent, NavigationMap } from "../core/types.ts";
 import { edgeNode } from "./edges.ts";
 
-export type MapEntry = {
-  readonly from: string;
-  readonly intent: NavIntent;
-  readonly edge: NavEdge;
-};
-
 export type MapFragment = Readonly<
   Record<string, Readonly<Partial<Record<NavIntent, NavEdge>>>>
 >;
 
 /**
  * Assemble the nested `fromNodeId → intent → edge` structure.
- * Later entries / fragments overwrite earlier ones for the same (from, intent).
+ * Later fragments overwrite earlier ones for the same (from, intent).
  */
-export function buildMap(...parts: ReadonlyArray<MapEntry | MapFragment | NavigationMap>): NavigationMap {
+export function buildMap(...parts: ReadonlyArray<MapFragment | NavigationMap>): NavigationMap {
   const out: Record<string, Record<string, NavEdge>> = {};
 
   for (const part of parts) {
-    if (isMapEntry(part)) {
-      write(out, part.from, part.intent, part.edge);
-      continue;
-    }
     for (const [from, intents] of Object.entries(part)) {
       for (const intent of Object.keys(intents) as NavIntent[]) {
         const edge = intents[intent];
@@ -34,16 +24,6 @@ export function buildMap(...parts: ReadonlyArray<MapEntry | MapFragment | Naviga
   }
 
   return out;
-}
-
-function isMapEntry(value: MapEntry | MapFragment | NavigationMap): value is MapEntry {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "from" in value &&
-    "intent" in value &&
-    "edge" in value
-  );
 }
 
 function write(

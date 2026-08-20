@@ -487,9 +487,98 @@ describe("Navigator + Router contracts", () => {
       },
     });
     const before = visibleText(h.root);
+    const token = h.navigator.getTransitionToken();
     h.navigator.onIntent("next");
     expect(visibleText(h.root)).toBe(before);
     expect(h.stack.tip()?.nodeId).toBe("root");
+    expect(h.navigator.getTransitionToken()).toBe(token);
+  });
+
+  it("malformed edge does not abort an in-flight refresh", async () => {
+    let release!: () => void;
+    const waiters: Array<() => void> = [];
+    let hold = true;
+    const gate = () =>
+      new Promise<void>((resolve) => {
+        if (!hold) {
+          resolve();
+          return;
+        }
+        waiters.push(resolve);
+      });
+    release = () => {
+      hold = false;
+      for (const w of waiters.splice(0)) {
+        w();
+      }
+    };
+
+    const h = harness({ gate });
+    hold = false;
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    hold = true;
+
+    h.navigator.onIntent("next"); // refresh A in flight
+    h.map.replace({
+      a: {
+        next: { kind: "node", stackBehavior: "replace" },
+      },
+    });
+    h.navigator.onIntent("next"); // malformed — must not abort
+
+    h.fake.setNodeLabel("a", "A-from-flight");
+    release();
+    await flush();
+    await flush();
+
+    expect(visibleText(h.root)).toBe("A-from-flight");
+    const refreshCalls = h.fake.calls.filter((c) => c.method === "refresh");
+    expect(refreshCalls[0]!.extras.signal?.aborted).toBe(false);
+  });
+
+  it("failed open keeps the previous session", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "next");
+    expect(visibleText(h.root)).toBe("A");
+
+    const boom: AppModule = {
+      id: "boom",
+      label: "Boom",
+      open: () => {
+        throw new Error("boom");
+      },
+      refresh: () => {
+        throw new Error("boom");
+      },
+    };
+    h.registry.register(boom);
+    h.map.replace({
+      a: {
+        enter: { kind: "app", to: { appId: "boom", path: "/" } },
+      },
+    });
+
+    await h.navigator.onIntent("enter");
+    await flush();
+
+    expect(h.navigator.isBlocked()).toBe(false);
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(visibleText(h.root)).toBe("A");
+    expect(h.stack.tip()?.nodeId).toBe("a");
+  });
+
+  it("pop of the last entry opens Home without dropping the tip first", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    h.map.replace({
+      root: {
+        back: { kind: "node", stackBehavior: "pop" },
+      },
+    });
+    await intent(h.navigator, "back");
+    expect(h.navigator.getCurrentAppId()).toBe("home");
+    expect(visibleText(h.root)).toBe("Home");
   });
 });
 

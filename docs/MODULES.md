@@ -77,8 +77,8 @@ Router is a **pure boundary**: it translates between browser URLs and `AppLocati
 
 ### Responsibilities
 
-- `parse(href) → AppLocation | null`.
-- `hrefFor(location) → string` — **the only place in the codebase that produces a `#/...` string.**
+- `parse(href) → AppLocation`.
+- `hrefFor(location) → string` — **the only place in the codebase that produces a `#/...` string.** `location.path` must already be canonical (non-empty, starts with `/`); hrefFor does not rewrite empty or unslashed paths.
 - `setAddressBar(location)` — write the address bar without triggering a reopen.
 - Subscribe to `hashchange` for external URL changes: parse and hand the location to `Navigator.openLocation`. **Interaction with browser Back/Forward beyond “hashchange → openLocation” is deferred** (open item); do not invent session-stack sync yet.
 
@@ -92,7 +92,7 @@ Because apps address `AppLocation` rather than URL strings, moving from hash rou
 | `#/<rootAppId>` | same as above (alias) |
 | `#/<appId>/rest` | `{ appId, path: "/rest" }` |
 
-Paths are normalized to a single leading `/`. Apps must document their own path grammar; core never interprets it.
+Paths on `AppLocation` are canonical: non-empty, starting with `/`. `parse` recovers messy hrefs into that shape. Apps must not emit empty or unslashed paths; `hrefFor` rejects them.
 
 ### Edge cases
 
@@ -171,12 +171,12 @@ The map is nested (`fromNodeId → intent → edge`), so no delimiter is needed 
 
 - Maintain `StackEntry[]` for the current app only.
 - Operations: `push(entry)`, `replaceTip(entry)`, `pop() → entry | null`, `clear()`, `snapshot()` for refresh.
+- `replaceTip` refuses when the stack is empty (callers that mean push must `push`).
 - Tip = last entry.
 
 ### Pop rules
 
-- `pop` when stack length is 1: after pop, stack is empty—Navigator should not leave the user nowhere. **Apps MUST offer root `back` as an `app` edge to `config.rootAppId`** before the user is stuck. If a buggy app pops the last entry without such an edge, core recovers by opening the root app.
-- Recommended invariant: never complete a `pop` edge that empties the stack without immediately opening the root app; prefer treating empty-after-pop as `openLocation({ appId: config.rootAppId, path: "/" })`.
+- `pop` when stack length is 1: Navigator must not leave the user nowhere. **Apps MUST offer root `back` as an `app` edge to `config.rootAppId`** before the user is stuck. If a buggy app authors a `pop` on the last entry, core recovers by calling `openLocation({ appId: config.rootAppId, path: "/" })` **without popping first**, so a failed recovery leaves the last screen intact.
 
 ### Known consequence: deep links have a one-entry stack
 
@@ -209,6 +209,9 @@ onIntent(intent):
   if blocked: return
   edge = map.lookup(tip.id, intent)
   if !edge: return                                   // silent no-op
+  if edge is malformed (push/replace missing toNodeId,
+     app location path not canonical, empty external href):
+    return                                           // no token bump
 
   extras = {}
   if edge.passInputText and tip.kind == "input":
@@ -225,13 +228,12 @@ onIntent(intent):
 
   // node edge
   if edge.stackBehavior == "pop":
-    stack.pop()
-    if stack.isEmpty():
+    if stack.length <= 1:
       openLocation({ appId: config.rootAppId, path: "/" }); return
+    stack.pop()
     destId = stack.tip.nodeId
   else:
-    destId = edge.toNodeId                           // required for push/replace
-    if !destId: return                               // malformed → silent no-op
+    destId = edge.toNodeId                           // required; already validated
 
   payload = cache.get(destId)
   if payload:
@@ -246,7 +248,7 @@ onIntent(intent):
     // on result (if token is newest): apply; blocked = false
 ```
 
-`openLocation(location, extras)` runs the same transition machinery: increment token, clear stack, clear cache and map, set current app, `blocked = true`, call `app.open(location.path, extras)`, apply, clear blocked.
+`openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. Unknown `appId` still resolves to `config.rootAppId` with path `/`. A known app with a non-canonical path is a silent no-op.
 
 **Local move vs refresh authority:** After a warm hit, display `payload.label` immediately, then refresh may replace the tip with `result.node` (same id or a stale-repair fallback). Core adopts `result.node.id` as the tip id, since subsequent map lookups key off it. Do not teleport to an unrelated workflow destination.
 
@@ -268,15 +270,15 @@ onIntent(intent):
 
 ### Address bar
 
-- If `result.location` is present → `router.setAddressBar(location)`.
-- If null/undefined → leave the address bar unchanged.
+- If `result.location` is an `AppLocation` with a canonical path → `router.setAddressBar(location)`.
+- If `result.location` is null → leave the address bar unchanged.
+- Omitting the field is not allowed.
 
 ### Refresh failure
 
 - Log/debug as appropriate.
 - `blocked = false`, busy clear.
-- Display unchanged.
-- Map/cache unchanged (last good).
+- Display, stack, map, and cache unchanged (last good).
 - Note: with no status channel in MVP, a rejected action call leaves the user reading "Sending…" indefinitely. This is why apps **MUST** resolve with a status node instead of rejecting. Distinguishing busy / dead-end / failure for the user is deferred — see [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §6.
 
 ### Non-goals
@@ -455,10 +457,10 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | `edgeNode / edgePop / edgeApp / edgeExternal` | Construct `NavEdge` values; `edgePop` omits `toNodeId` |
 | `edgeAction(toNodeId)` | `enter` edge with `action: true` — the one-line button press |
 | `siblingListEdges(ids, opts)` | `prev` / `next` `replace` edges; `wrap?: boolean` |
-| `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) / `back` from an input node |
+| `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) commits; `back` abandons (`backTo` is a node id or `"pop"`) |
 | `rootBackToHome(rootId, rootAppId)` | `back` app edge to the root app |
 | `collectNeighborhood({ tipId, neighbors, payload, depth, maxNodes })` | Callback-driven walk → warm payloads + map fragment |
-| `buildMap(entries)` | Assemble the nested `fromNodeId → intent → edge` structure |
+| `buildMap(fragments)` | Assemble the nested `fromNodeId → intent → edge` structure |
 
 ### Non-goals
 

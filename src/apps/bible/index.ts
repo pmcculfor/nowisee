@@ -31,9 +31,9 @@ export function createBibleApp(deps: BibleAppDeps): AppModule {
   return {
     id: "bible",
     label: "Bible",
-    open(path: string, extras: RefreshExtras = {}): RefreshResult {
+    open(path: string): RefreshResult {
       const tipId = parseBiblePath(deps.data, path);
-      return buildBibleView(viewDeps, tipId, extras);
+      return buildBibleView(viewDeps, tipId);
     },
     refresh(
       stack: readonly StackEntry[],
@@ -44,7 +44,7 @@ export function createBibleApp(deps: BibleAppDeps): AppModule {
       if (parsed?.kind === "copy-status" && extras.action) {
         return resolveCopyStatus(viewDeps, parsed.ref, extras);
       }
-      return buildBibleView(viewDeps, tipId, extras);
+      return buildBibleView(viewDeps, tipId);
     },
   };
 }

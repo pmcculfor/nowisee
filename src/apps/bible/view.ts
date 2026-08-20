@@ -5,12 +5,10 @@ import {
   edgePop,
   rootBackToHome,
   siblingListEdges,
-  type MapEntry,
   type MapFragment,
 } from "../../app-kit/index.ts";
 import type {
   AppLocation,
-  NavigationMap,
   NodePayload,
   RefreshExtras,
   RefreshResult,
@@ -47,12 +45,11 @@ export type BibleViewDeps = {
 };
 
 export function parseBiblePath(data: KjvData, path: string): string {
-  const normalized = path === "" ? "/" : path;
-  if (normalized === "/" || normalized === "/kjv") {
+  if (path === "/" || path === "/kjv") {
     return testamentId("OT");
   }
 
-  const parts = normalized.replace(/^\/+/, "").split("/").filter(Boolean);
+  const parts = path.replace(/^\/+/, "").split("/").filter(Boolean);
   // Expect kjv / Book / chapter / verse
   if (parts[0]?.toLowerCase() !== "kjv") {
     return testamentId("OT");
@@ -62,6 +59,9 @@ export function parseBiblePath(data: KjvData, path: string): string {
   }
 
   const bookName = decodeBookSegment(parts[1]!);
+  if (bookName === null) {
+    return testamentId("OT");
+  }
   const book = findBook(data, bookName);
   if (!book) {
     return testamentId("OT");
@@ -86,14 +86,10 @@ export function parseBiblePath(data: KjvData, path: string): string {
   return verseId({ book: book.name, chapter, verse });
 }
 
-export function buildBibleView(
-  deps: BibleViewDeps,
-  tipId: string,
-  _extras: RefreshExtras = {},
-): RefreshResult {
+export function buildBibleView(deps: BibleViewDeps, tipId: string): RefreshResult {
   const parsed = parseNodeId(tipId);
   if (!parsed) {
-    return buildBibleView(deps, testamentId("OT"), _extras);
+    return buildBibleView(deps, testamentId("OT"));
   }
 
   if (parsed.kind === "copy-status") {
@@ -101,7 +97,7 @@ export function buildBibleView(
   }
 
   const payloads = new Map<string, NodePayload>();
-  const fragments: Array<MapEntry | MapFragment> = [];
+  const fragments: MapFragment[] = [];
 
   addNode(payloads, tipPayload(deps, parsed));
 
@@ -119,7 +115,7 @@ export function buildBibleView(
       addVerseLevel(deps, payloads, fragments, parsed.ref);
       break;
     case "option":
-      addOptionLevel(deps, payloads, fragments, parsed.ref, parsed.option);
+      addOptionLevel(deps, payloads, fragments, parsed.ref);
       break;
     case "commentary":
       addCommentaryLevel(deps, payloads, fragments, parsed.ref);
@@ -128,7 +124,7 @@ export function buildBibleView(
 
   const tip = payloads.get(tipId) ?? tipPayload(deps, { kind: "testament", testament: "OT" });
   return {
-    navigationMap: buildMap(...fragments) as NavigationMap,
+    navigationMap: buildMap(...fragments),
     warm: [...payloads.values()],
     node: tip,
     location: locationFor(parsed),
@@ -202,7 +198,7 @@ function addNode(payloads: Map<string, NodePayload>, node: NodePayload): void {
 function addTestamentLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  fragments: Array<MapEntry | MapFragment>,
+  fragments: MapFragment[],
   current: TestamentId,
 ): void {
   const ids = TESTAMENTS.map(testamentId);
@@ -218,9 +214,7 @@ function addTestamentLevel(
     const first = books[0];
     if (first) {
       fragments.push({
-        from: testamentId(t),
-        intent: "enter",
-        edge: edgeNode(bookId(first.name), "push"),
+        [testamentId(t)]: { enter: edgeNode(bookId(first.name), "push") },
       });
     }
     fragments.push(rootBackToHome(testamentId(t), deps.rootAppId));
@@ -229,13 +223,12 @@ function addTestamentLevel(
   for (const book of booksForTestament(deps.data, current).slice(0, 8)) {
     addNode(payloads, { id: bookId(book.name), label: book.name });
   }
-  void current;
 }
 
 function addBookLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  fragments: Array<MapEntry | MapFragment>,
+  fragments: MapFragment[],
   bookName: string,
 ): void {
   const book = findBook(deps.data, bookName);
@@ -250,14 +243,10 @@ function addBookLevel(
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   fragments.push({
-    from: bookId(book.name),
-    intent: "enter",
-    edge: edgeNode(chapterId(book.name, 1), "push"),
-  });
-  fragments.push({
-    from: bookId(book.name),
-    intent: "back",
-    edge: edgePop(),
+    [bookId(book.name)]: {
+      enter: edgeNode(chapterId(book.name, 1), "push"),
+      back: edgePop(),
+    },
   });
   // Warm chapter labels
   for (let ch = 1; ch <= Math.min(book.chapters.length, 12); ch++) {
@@ -276,7 +265,7 @@ function addBookLevel(
 function addChapterLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  fragments: Array<MapEntry | MapFragment>,
+  fragments: MapFragment[],
   bookName: string,
   chapter: number,
 ): void {
@@ -294,24 +283,20 @@ function addChapterLevel(
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   fragments.push({
-    from: chapterId(book.name, chapter),
-    intent: "enter",
-    // Replace so verse↔verse chapter joins keep a clean [book, verse] stack.
-    edge: edgeNode(verseId({ book: book.name, chapter, verse: 1 }), "replace"),
+    [chapterId(book.name, chapter)]: {
+      // Replace so verse↔verse chapter joins keep a clean [book, verse] stack.
+      enter: edgeNode(verseId({ book: book.name, chapter, verse: 1 }), "replace"),
+      back: edgePop(),
+    },
   });
-  fragments.push({
-    from: chapterId(book.name, chapter),
-    intent: "back",
-    edge: edgePop(),
-  });
-  warmVerses(deps, payloads, book, chapter, 8);
+  warmVerses(payloads, book, chapter, 8);
   addNode(payloads, { id: bookId(book.name), label: book.name });
 }
 
 function addVerseLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  fragments: Array<MapEntry | MapFragment>,
+  fragments: MapFragment[],
   ref: BibleRef,
 ): void {
   const book = findBook(deps.data, ref.book);
@@ -339,9 +324,9 @@ function addVerseLevel(
     const nextRef = { book: book.name, chapter: ref.chapter + 1, verse: 1 };
     const nextText = book.chapters[ref.chapter]?.[0];
     fragments.push({
-      from: verseId({ book: book.name, chapter: ref.chapter, verse: lastVerse }),
-      intent: "next",
-      edge: edgeNode(verseId(nextRef), "replace"),
+      [verseId({ book: book.name, chapter: ref.chapter, verse: lastVerse })]: {
+        next: edgeNode(verseId(nextRef), "replace"),
+      },
     });
     if (nextText !== undefined) {
       addNode(payloads, {
@@ -360,9 +345,9 @@ function addVerseLevel(
         verse: prevLast,
       };
       fragments.push({
-        from: verseId({ book: book.name, chapter: ref.chapter, verse: 1 }),
-        intent: "prev",
-        edge: edgeNode(verseId(prevRef), "replace"),
+        [verseId({ book: book.name, chapter: ref.chapter, verse: 1 })]: {
+          prev: edgeNode(verseId(prevRef), "replace"),
+        },
       });
       addNode(payloads, {
         id: verseId(prevRef),
@@ -372,15 +357,11 @@ function addVerseLevel(
   }
 
   fragments.push({
-    from: tip,
-    intent: "enter",
-    edge: edgeNode(optionId(ref, "copy"), "push"),
-  });
-  fragments.push({
-    from: tip,
-    intent: "back",
-    // Replace to this verse's chapter (works after cross-chapter joins).
-    edge: edgeNode(chapterId(book.name, ref.chapter), "replace"),
+    [tip]: {
+      enter: edgeNode(optionId(ref, "copy"), "push"),
+      // Replace to this verse's chapter (works after cross-chapter joins).
+      back: edgeNode(chapterId(book.name, ref.chapter), "replace"),
+    },
   });
   addOptionPayloads(payloads, ref);
   addNode(payloads, {
@@ -392,11 +373,9 @@ function addVerseLevel(
 function addOptionLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  fragments: Array<MapEntry | MapFragment>,
+  fragments: MapFragment[],
   ref: BibleRef,
-  option: "copy" | "commentary",
 ): void {
-  void option;
   const copy = optionId(ref, "copy");
   const commentary = optionId(ref, "commentary");
   addOptionPayloads(payloads, ref);
@@ -409,39 +388,27 @@ function addOptionLevel(
 
   fragments.push(siblingListEdges([copy, commentary], { wrap: true }));
   fragments.push({
-    from: copy,
-    intent: "enter",
-    edge: edgeAction(copyStatusId(ref)),
-  });
-  fragments.push({
-    from: commentary,
-    intent: "enter",
-    edge: edgeNode(commentaryId(ref), "push"),
-  });
-  fragments.push({
-    from: copy,
-    intent: "back",
-    edge: edgePop(),
-  });
-  fragments.push({
-    from: commentary,
-    intent: "back",
-    edge: edgePop(),
+    [copy]: {
+      enter: edgeAction(copyStatusId(ref)),
+      back: edgePop(),
+    },
+    [commentary]: {
+      enter: edgeNode(commentaryId(ref), "push"),
+      back: edgePop(),
+    },
   });
 }
 
 function addCommentaryLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  fragments: Array<MapEntry | MapFragment>,
+  fragments: MapFragment[],
   ref: BibleRef,
 ): void {
   addNode(payloads, tipPayload(deps, { kind: "commentary", ref }));
   addOptionPayloads(payloads, ref);
   fragments.push({
-    from: commentaryId(ref),
-    intent: "back",
-    edge: edgePop(),
+    [commentaryId(ref)]: { back: edgePop() },
   });
 }
 
@@ -457,7 +424,6 @@ function addOptionPayloads(payloads: Map<string, NodePayload>, ref: BibleRef): v
 }
 
 function warmVerses(
-  deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
   book: KjvBook,
   chapter: number,
@@ -471,7 +437,6 @@ function warmVerses(
       label: verseLabel(v, verses[v - 1]!),
     });
   }
-  void deps;
 }
 
 function buildIdleCopyStatus(deps: BibleViewDeps, ref: BibleRef): RefreshResult {
@@ -483,9 +448,7 @@ function buildIdleCopyStatus(deps: BibleViewDeps, ref: BibleRef): RefreshResult 
 
   return {
     navigationMap: buildMap({
-      from: statusNodeId,
-      intent: "back",
-      edge: edgePop(),
+      [statusNodeId]: { back: edgePop() },
     }),
     warm: [...payloads.values()],
     node: { id: statusNodeId, label: "Copied" },
@@ -524,9 +487,7 @@ export async function resolveCopyStatus(
 
   return {
     navigationMap: buildMap({
-      from: statusNodeId,
-      intent: "back",
-      edge: edgePop(),
+      [statusNodeId]: { back: edgePop() },
     }),
     warm: [...payloads.values()],
     node: { id: statusNodeId, label },

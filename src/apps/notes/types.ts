@@ -1,5 +1,3 @@
-import type { JsonValue } from "../../core/types.ts";
-
 /**
  * One note. No owner field yet — MVP is a single shared pool.
  * When auth arrives, add `ownerId` (or equivalent) and filter in the store;
@@ -22,7 +20,7 @@ export interface NotesStore {
   list(): Promise<readonly NoteRecord[]>;
   get(id: string): Promise<NoteRecord | null>;
   create(body: string): Promise<NoteRecord>;
-  update(id: string, body: string): Promise<NoteRecord>;
+  update(id: string, body: string): Promise<NoteRecord | null>;
 }
 
 /** Shape persisted by the local adapter — keep versioned for migrations. */
@@ -58,16 +56,4 @@ export function isNoteRecord(value: unknown): value is NoteRecord {
     typeof n.createdAt === "string" &&
     typeof n.updatedAt === "string"
   );
-}
-
-export function snapshotToJson(snapshot: NotesSnapshotV1): JsonValue {
-  return {
-    version: snapshot.version,
-    notes: snapshot.notes.map((n) => ({
-      id: n.id,
-      body: n.body,
-      createdAt: n.createdAt,
-      updatedAt: n.updatedAt,
-    })),
-  };
 }
