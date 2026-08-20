@@ -98,33 +98,30 @@ function buildNavigationMap(
   ids: readonly string[],
   appIdByNode: ReadonlyMap<string, string>,
 ): NavigationMap {
-  const enterEntries = ids.flatMap((id) => {
+  const enterFragments = ids.flatMap((id) => {
     const appId = appIdByNode.get(id);
     if (!appId) {
       return [];
     }
     return [
       {
-        from: id,
-        intent: "enter" as const,
-        edge: edgeApp({ appId, path: "/" }),
+        [id]: { enter: edgeApp({ appId, path: "/" }) },
       },
     ];
   });
 
   // No `back` edges — already home (silent no-op).
-  return buildMap(siblingListEdges(ids, { wrap: true }), ...enterEntries);
+  return buildMap(siblingListEdges(ids, { wrap: true }), ...enterFragments);
 }
 
 function viewForPath(deps: HomeAppDeps, path: string): RefreshResult {
   const cat = catalog(deps);
-  const normalized = path === "" ? "/" : path;
 
-  if (normalized === "/help") {
+  if (path === "/help") {
     return resultForCatalog(cat, HELP_NODE_ID);
   }
 
-  const appMatch = /^\/app\/([^/]+)\/?$/.exec(normalized);
+  const appMatch = /^\/app\/([^/]+)\/?$/.exec(path);
   if (appMatch) {
     const nodeId = appNodeId(appMatch[1]!);
     if (cat.appIdByNode.has(nodeId)) {

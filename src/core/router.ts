@@ -18,6 +18,14 @@ export interface RouterOptions {
 }
 
 /**
+ * An app-owned path: non-empty, starts with `/`.
+ * Raw href recovery lives in `parse`; AppLocation values must already be canonical.
+ */
+export function isCanonicalPath(path: string): boolean {
+  return path.startsWith("/");
+}
+
+/**
  * Pure URL boundary: browser hash ↔ AppLocation.
  * Owns no stack, cache, map, blocked flag, or display.
  * The only module that produces `#/...` strings.
@@ -53,6 +61,7 @@ export class Router {
   /**
    * Parse a hash or full href into an AppLocation.
    * Unknown / corrupt values resolve to the root app (do not crash).
+   * Always returns a location — never null.
    */
   parse(href: string): AppLocation {
     const hash = extractHash(href);
@@ -64,14 +73,10 @@ export class Router {
     }
 
     const rest = hash.slice(2); // after "#/"
-    if (rest === "") {
-      return { appId: this.rootAppId, path: "/" };
-    }
-
     const slash = rest.indexOf("/");
     const appId = slash === -1 ? rest : rest.slice(0, slash);
     const pathRaw = slash === -1 ? "/" : rest.slice(slash);
-    const path = normalizePath(pathRaw);
+    const path = pathFromHash(pathRaw);
 
     if (appId === this.rootAppId && path === "/") {
       return { appId: this.rootAppId, path: "/" };
@@ -86,22 +91,23 @@ export class Router {
 
   /** The only place in the codebase that produces a `#/...` string. */
   hrefFor(location: AppLocation): string {
-    const path = normalizePath(location.path);
-    if (location.appId === this.rootAppId && path === "/") {
+    if (!isCanonicalPath(location.path)) {
+      throw new Error('Router.hrefFor: path must be non-empty and start with "/"');
+    }
+    if (location.appId === this.rootAppId && location.path === "/") {
       return "#/";
     }
-    if (path === "/") {
+    if (location.path === "/") {
       return `#/${location.appId}`;
     }
-    return `#/${location.appId}${path}`;
+    return `#/${location.appId}${location.path}`;
   }
 
   /**
    * Write the address bar without re-entering openLocation via hashchange.
    */
   setAddressBar(location: AppLocation): void {
-    const href = this.hrefFor(location);
-    const nextHash = href.startsWith("#") ? href : `#${href}`;
+    const nextHash = this.hrefFor(location);
     if (this.locationApi.getHash() === nextHash) {
       return;
     }
@@ -131,19 +137,16 @@ function extractHash(href: string): string {
   if (index >= 0) {
     return href.slice(index);
   }
-  // Bare "#/…" or "/…" forms used in tests.
-  if (href.startsWith("#")) {
-    return href;
-  }
+  // Bare path forms used in tests ("/…" or "app/…").
   return href.startsWith("/") ? `#${href}` : `#/${href}`;
 }
 
-function normalizePath(path: string): string {
-  if (path === "" || path === "/") {
+/** Href recovery only — empty or unslashed segments become a canonical path. */
+function pathFromHash(pathRaw: string): string {
+  if (pathRaw === "" || pathRaw === "/") {
     return "/";
   }
-  const withSlash = path.startsWith("/") ? path : `/${path}`;
-  // Collapse duplicate leading slashes only; apps own the rest.
+  const withSlash = pathRaw.startsWith("/") ? pathRaw : `/${pathRaw}`;
   return withSlash.replace(/^\/+/, "/");
 }
 

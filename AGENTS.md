@@ -73,7 +73,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Sibling ends | App choice via edges (wrap not mandated) |
 | Dead-end intent | Silent no-op |
 | Status / action aftermath | Stay on node until user navigates; refresh may update text in place |
-| Addressing | Apps use `AppLocation`; Router alone serializes; null/omit keeps prior address bar |
+| Addressing | Apps use `AppLocation`; Router alone serializes; `location: null` keeps prior address bar |
 | App boundary | Plain data in, plain data out — must survive being sent as a message. `PlatformContext` and the abort signal are the only non-data members |
 | Platform capabilities | Browser operations core can mediate go through `extras.platform` (clipboard in MVP); apps feature-detect and never touch browser APIs directly |
 | Concurrency | One monotonic transition token in Navigator decides what applies; tip-id comparison is not a staleness guard |

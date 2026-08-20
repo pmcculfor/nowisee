@@ -42,6 +42,16 @@ describe("Router", () => {
     expect(router.parse("%%%")).toEqual({ appId: "home", path: "/" });
   });
 
+  it("hrefFor rejects a path that does not start with /", () => {
+    const router = makeRouter();
+    expect(() => router.hrefFor({ appId: "fake", path: "no-slash" })).toThrow(
+      /must be non-empty and start with/,
+    );
+    expect(() => router.hrefFor({ appId: "fake", path: "" })).toThrow(
+      /must be non-empty and start with/,
+    );
+  });
+
   it("hrefFor round-trips with parse", () => {
     const router = makeRouter();
     const locations: AppLocation[] = [

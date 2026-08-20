@@ -3,6 +3,7 @@ import type { NavigationMapStore } from "./navigationMap.ts";
 import type { NodeCache } from "./nodeCache.ts";
 import type { PlatformCapabilities } from "./platform.ts";
 import type { AppRegistry } from "./registry.ts";
+import { isCanonicalPath } from "./router.ts";
 import type { Stack } from "./stack.ts";
 import type {
   AppLocation,
@@ -38,6 +39,8 @@ type InFlight = {
   isAction: boolean;
 };
 
+type ApplyAs = { kind: "open"; appId: string } | { kind: "refresh" };
+
 /**
  * Single owner of every state transition: stack, cache, map, blocked, display,
  * address bar, and the monotonic transition token.
@@ -61,8 +64,8 @@ export class Navigator {
   /**
    * What Display is actually showing. Used so a warm-hit revalidation that
    * confirms the same tip does not remount the surface (VoiceOver would
-   * restart mid-utterance). Cleared on openLocation because the surface may
-   * still show a prior app's tip until the new result arrives.
+   * restart mid-utterance). Cleared when a successful open applies, because
+   * the new app's tip must remount even if ids happened to collide.
    */
   private displayed: {
     appId: string;
@@ -120,6 +123,10 @@ export class Navigator {
       return;
     }
 
+    if (!isWellFormedEdge(edge)) {
+      return;
+    }
+
     const extras: RefreshExtras = {};
     const tipPayload = this.cache.get(tip.nodeId);
     const kind = tipPayload?.kind ?? this.tipKind;
@@ -130,10 +137,9 @@ export class Navigator {
       extras.action = true;
     }
 
-    // Supersede anything in flight before branching.
     this.transitionToken += 1;
     const token = this.transitionToken;
-    this.supersedeInFlight(extras.action === true);
+    this.supersedeInFlight();
 
     if (edge.kind === "external") {
       this.handOffExternal(edge.href);
@@ -151,35 +157,32 @@ export class Navigator {
     location: AppLocation,
     extras: RefreshExtras = {},
   ): Promise<void> {
-    this.transitionToken += 1;
-    const token = this.transitionToken;
-    this.supersedeInFlight(extras.action === true);
-
-    this.stack.clear();
-    this.cache.clear();
-    this.map.replace({});
-    this.displayed = null;
-    this.blocked = true;
-
     let appId = location.appId;
+    let path = location.path;
     let app = this.registry.get(appId);
     if (!app) {
       appId = this.config.rootAppId;
       app = this.registry.get(appId);
+      path = "/";
     }
     if (!app) {
-      this.blocked = false;
+      return;
+    }
+    if (!isCanonicalPath(path)) {
       return;
     }
 
-    this.currentAppId = appId;
-    const path = location.appId === appId ? location.path : "/";
+    this.transitionToken += 1;
+    const token = this.transitionToken;
+    this.supersedeInFlight();
+    this.blocked = true;
 
     await this.startCall({
       token,
       isAction: extras.action === true,
       invoke: (callExtras) => app.open(path, callExtras),
       baseExtras: extras,
+      applyAs: { kind: "open", appId },
     });
   }
 
@@ -192,16 +195,13 @@ export class Navigator {
     let behavior: StackBehavior = edge.stackBehavior;
 
     if (edge.stackBehavior === "pop") {
-      this.stack.pop();
-      if (this.stack.length === 0) {
+      if (this.stack.length <= 1) {
         return this.openLocation({ appId: this.config.rootAppId, path: "/" });
       }
+      this.stack.pop();
       destId = this.stack.tip()!.nodeId;
     } else {
-      if (!edge.toNodeId) {
-        return; // malformed push/replace → silent no-op
-      }
-      destId = edge.toNodeId;
+      destId = edge.toNodeId!;
     }
 
     const payload = this.cache.get(destId);
@@ -212,6 +212,7 @@ export class Navigator {
         isAction: extras.action === true,
         invoke: (callExtras) => this.currentApp()!.refresh(this.stack.snapshot(), callExtras),
         baseExtras: extras,
+        applyAs: { kind: "refresh" },
       });
     }
 
@@ -227,6 +228,7 @@ export class Navigator {
       isAction: extras.action === true,
       invoke: (callExtras) => this.currentApp()!.refresh(this.stack.snapshot(), callExtras),
       baseExtras: extras,
+      applyAs: { kind: "refresh" },
     });
   }
 
@@ -302,7 +304,7 @@ export class Navigator {
     return this.registry.get(this.currentAppId);
   }
 
-  private supersedeInFlight(nextIsAction: boolean): void {
+  private supersedeInFlight(): void {
     const prev = this.inFlight;
     if (!prev) {
       return;
@@ -311,14 +313,13 @@ export class Navigator {
     if (!prev.isAction) {
       prev.controller.abort();
     }
-    // nextIsAction reserved for future coalescing policy; token handles correctness.
-    void nextIsAction;
   }
 
   private async startCall(args: {
     token: number;
     isAction: boolean;
     baseExtras: RefreshExtras;
+    applyAs: ApplyAs;
     invoke: (extras: RefreshExtras) => Promise<RefreshResult> | RefreshResult;
   }): Promise<void> {
     const controller = new AbortController();
@@ -349,13 +350,13 @@ export class Navigator {
       if (args.token !== this.transitionToken) {
         return; // stale
       }
-      this.applyResult(result);
+      this.applyResult(result, args.applyAs);
       this.blocked = false;
     } catch (err) {
       if (args.token !== this.transitionToken) {
         return;
       }
-      // Refresh failure: keep display; clear blocked; leave map/cache as last good.
+      // Keep display, stack, map, and cache as last good.
       console.warn("Navigator: refresh/open failed", err);
       this.blocked = false;
     } finally {
@@ -368,22 +369,34 @@ export class Navigator {
     }
   }
 
-  private applyResult(result: RefreshResult): void {
+  private applyResult(result: RefreshResult, applyAs: ApplyAs): void {
+    if (applyAs.kind === "open") {
+      this.stack.clear();
+      this.cache.clear();
+      this.map.replace({});
+      this.displayed = null;
+      this.currentAppId = applyAs.appId;
+    }
+
     this.map.replace(result.navigationMap);
+
+    const priorLocation = this.stack.tip()?.location ?? null;
+    const location =
+      result.location === null
+        ? priorLocation
+        : isCanonicalPath(result.location.path)
+          ? result.location
+          : priorLocation;
 
     const tipEntry: StackEntry = {
       nodeId: result.node.id,
       label: result.node.label,
-      location:
-        result.location === undefined || result.location === null
-          ? (this.stack.tip()?.location ?? null)
-          : result.location,
+      location,
     };
 
     if (this.stack.length === 0) {
       this.stack.push(tipEntry);
     } else {
-      // Adopt authoritative tip id (may repair a stale id).
       this.stack.replaceTip(tipEntry);
     }
 
@@ -398,8 +411,18 @@ export class Navigator {
       this.tipKind = result.node.kind ?? "text";
     }
 
-    if (result.location !== undefined && result.location !== null) {
+    if (result.location !== null && isCanonicalPath(result.location.path)) {
       this.setAddressBar(result.location);
     }
   }
+}
+
+function isWellFormedEdge(edge: NavEdge): boolean {
+  if (edge.kind === "node") {
+    return edge.stackBehavior === "pop" || Boolean(edge.toNodeId);
+  }
+  if (edge.kind === "app") {
+    return Boolean(edge.to.appId) && isCanonicalPath(edge.to.path);
+  }
+  return edge.href.length > 0;
 }

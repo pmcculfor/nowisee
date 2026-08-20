@@ -88,26 +88,13 @@ describe("inputEdges", () => {
 
     const withPop = inputEdges("field", {
       commitTo: "sent",
-      backTo: { pop: true },
+      backTo: "pop",
       action: true,
     });
     expect(withPop.field?.enter).toEqual(
       edgeAction("sent", { passInputText: true }),
     );
     expect(withPop.field?.back).toEqual(edgePop());
-  });
-
-  it("commitOn back saves via back and omits enter", () => {
-    const map = inputEdges("field", {
-      commitTo: "saved",
-      commitOn: "back",
-      action: true,
-      commitStackBehavior: "replace",
-    });
-    expect(map.field?.back).toEqual(
-      edgeAction("saved", { passInputText: true, stackBehavior: "replace" }),
-    );
-    expect(map.field?.enter).toBeUndefined();
   });
 });
 
@@ -122,12 +109,12 @@ describe("rootBackToHome", () => {
 });
 
 describe("buildMap", () => {
-  it("merges entries and fragments into a nested map", () => {
+  it("merges fragments into a nested map", () => {
     const map = buildMap(
       siblingListEdges(["a", "b"]),
       rootBackToHome("a", "home"),
-      { from: "a", intent: "enter", edge: edgeNode("child", "push") },
-      { from: "a", intent: "enter", edge: edgeNode("other", "push") }, // overwrite
+      { a: { enter: edgeNode("child", "push") } },
+      { a: { enter: edgeNode("other", "push") } }, // overwrite
     );
     expect(map.a?.prev).toBeUndefined();
     expect(map.a?.next).toEqual(edgeNode("b", "replace"));

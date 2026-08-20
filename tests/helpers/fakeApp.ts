@@ -50,7 +50,7 @@ export function createFakeApp(options: FakeAppOptions): {
     return { id, label: labels.get(id) ?? id, kind };
   }
 
-  function mapFor(tipId: string): NavigationMap {
+  function mapFor(): NavigationMap {
     const rootBack = {
       back: {
         kind: "app" as const,
@@ -107,7 +107,6 @@ export function createFakeApp(options: FakeAppOptions): {
         back: { kind: "node", stackBehavior: "pop" },
       },
     };
-    void tipId;
     return base;
   }
 
@@ -162,7 +161,7 @@ export function createFakeApp(options: FakeAppOptions): {
         : { appId: options.id, path: path ?? `/${tipId}` };
 
     return {
-      navigationMap: mapFor(tipId),
+      navigationMap: mapFor(),
       warm: warmAround(node),
       node,
       location,
@@ -173,8 +172,8 @@ export function createFakeApp(options: FakeAppOptions): {
     id: options.id,
     label: options.label,
     async open(path, extras = {}) {
-      const tipId = path === "/" || path === "" ? "root" : path.replace(/^\//, "");
-      return respond("open", tipId || "root", extras, path);
+      const tipId = path === "/" ? "root" : path.replace(/^\//, "");
+      return respond("open", tipId, extras, path);
     },
     async refresh(stack, extras = {}) {
       const tipId = stack[stack.length - 1]?.nodeId ?? "root";

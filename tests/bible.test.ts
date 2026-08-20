@@ -196,6 +196,12 @@ describe("Bible app", () => {
     const result = await app.open("/kjv/NotABook/99/1");
     expect(result.node.id).toBe(testamentId("OT"));
   });
+
+  it("malformed percent-encoding in a book name uses the same fallback", async () => {
+    const app = bible();
+    const result = await app.open("/kjv/%E0%A4%A/1/1");
+    expect(result.node.id).toBe(testamentId("OT"));
+  });
 });
 
 describe("Bible packaging", () => {

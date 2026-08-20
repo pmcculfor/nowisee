@@ -24,11 +24,9 @@ describe("Stack", () => {
     expect(stack.tip()?.label).toBe("C");
   });
 
-  it("replaceTip on empty stack pushes", () => {
+  it("replaceTip on empty stack throws", () => {
     const stack = new Stack();
-    stack.replaceTip(entry("solo"));
-    expect(stack.tip()?.nodeId).toBe("solo");
-    expect(stack.length).toBe(1);
+    expect(() => stack.replaceTip(entry("solo"))).toThrow(/empty/);
   });
 
   it("pop returns tip and shortens", () => {

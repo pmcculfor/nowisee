@@ -16,53 +16,6 @@ export type MemoryNotesStoreOptions = {
   readonly now?: () => string;
 };
 
-/**
- * In-memory store (tests, or a session that does not persist).
- */
-export function createMemoryNotesStore(
-  options: MemoryNotesStoreOptions = {},
-): NotesStore {
-  const notes = new Map<string, NoteRecord>();
-  for (const n of options.initial ?? []) {
-    notes.set(n.id, n);
-  }
-  const idFactory = options.idFactory ?? defaultIdFactory;
-  const now = options.now ?? (() => new Date().toISOString());
-
-  return {
-    async list() {
-      return sortByUpdatedDesc([...notes.values()]);
-    },
-    async get(id) {
-      return notes.get(id) ?? null;
-    },
-    async create(body) {
-      const ts = now();
-      const record: NoteRecord = {
-        id: idFactory(),
-        body,
-        createdAt: ts,
-        updatedAt: ts,
-      };
-      notes.set(record.id, record);
-      return record;
-    },
-    async update(id, body) {
-      const existing = notes.get(id);
-      if (!existing) {
-        throw new Error(`NotesStore: unknown note ${id}`);
-      }
-      const record: NoteRecord = {
-        ...existing,
-        body,
-        updatedAt: now(),
-      };
-      notes.set(id, record);
-      return record;
-    },
-  };
-}
-
 export type LocalNotesStoreOptions = MemoryNotesStoreOptions & {
   /** Browser `localStorage`-shaped KV. Shell supplies this — the app never imports DOM. */
   readonly kv: NotesKv;
@@ -70,44 +23,71 @@ export type LocalNotesStoreOptions = MemoryNotesStoreOptions & {
 };
 
 /**
- * Durable browser-local store. Same schema as a future DB row set; swap the
- * adapter when a shared backend exists. No per-user scoping yet.
+ * In-memory store (tests, or a session that does not persist).
+ */
+export function createMemoryNotesStore(
+  options: MemoryNotesStoreOptions = {},
+): NotesStore {
+  return createNotesStore(options);
+}
+
+/**
+ * Durable browser-local store. Same rules as the memory store; persistence is
+ * a wrapper around one implementation. Swap the adapter when a shared backend exists.
  */
 export function createLocalNotesStore(options: LocalNotesStoreOptions): NotesStore {
+  return createNotesStore(options);
+}
+
+function createNotesStore(
+  options: MemoryNotesStoreOptions & {
+    readonly kv?: NotesKv;
+    readonly storageKey?: string;
+  },
+): NotesStore {
   const key = options.storageKey ?? NOTES_STORAGE_KEY;
   const idFactory = options.idFactory ?? defaultIdFactory;
   const now = options.now ?? (() => new Date().toISOString());
+  const kv = options.kv;
+
+  let memory = new Map<string, NoteRecord>();
+  for (const n of options.initial ?? []) {
+    memory.set(n.id, n);
+  }
 
   function load(): Map<string, NoteRecord> {
-    const map = new Map<string, NoteRecord>();
-    for (const n of options.initial ?? []) {
-      map.set(n.id, n);
+    if (!kv) {
+      return memory;
     }
-    const raw = options.kv.get(key);
-    if (!raw) {
-      return map;
+    const raw = kv.get(key);
+    if (raw === null) {
+      return new Map(memory);
     }
     try {
       const parsed: unknown = JSON.parse(raw);
       if (!isNotesSnapshotV1(parsed)) {
-        return map;
+        return new Map(memory);
       }
-      // Persisted notes win over seed for the same id.
+      const map = new Map(memory);
       for (const n of parsed.notes) {
         map.set(n.id, n);
       }
       return map;
     } catch {
-      return map;
+      return new Map(memory);
     }
   }
 
   function save(notes: Map<string, NoteRecord>): void {
+    if (!kv) {
+      memory = notes;
+      return;
+    }
     const snapshot: NotesSnapshotV1 = {
       version: 1,
       notes: sortByUpdatedDesc([...notes.values()]),
     };
-    options.kv.set(key, JSON.stringify(snapshot));
+    kv.set(key, JSON.stringify(snapshot));
   }
 
   return {
@@ -134,7 +114,7 @@ export function createLocalNotesStore(options: LocalNotesStoreOptions): NotesSto
       const notes = load();
       const existing = notes.get(id);
       if (!existing) {
-        throw new Error(`NotesStore: unknown note ${id}`);
+        return null;
       }
       const record: NoteRecord = {
         ...existing,

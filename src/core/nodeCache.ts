@@ -62,14 +62,6 @@ export class NodeCache {
     this.evictIfNeeded();
   }
 
-  /** Pin stack entry ids without replacing other warm entries. */
-  pin(stackIds: readonly string[]): void {
-    this.pinned.clear();
-    for (const id of stackIds) {
-      this.pinned.add(id);
-    }
-  }
-
   size(): number {
     return this.entries.size;
   }

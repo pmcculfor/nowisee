@@ -198,6 +198,31 @@ describe("Notes app", () => {
     expect((await store.get("n1"))?.body).toBe("Keep me");
   });
 
+  it("does not save when action is set but typed text is missing", async () => {
+    const store = createMemoryNotesStore({
+      initial: [note({ id: "n1", body: "Keep me" })],
+    });
+    const app = createNotesApp({ rootAppId: "home", store });
+    await app.refresh(
+      [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
+      { action: true },
+    );
+    expect((await store.get("n1"))?.body).toBe("Keep me");
+  });
+
+  it("stale edit id does not throw; list falls back to the default tip", async () => {
+    const store = createMemoryNotesStore({
+      initial: [note({ id: "n1", body: "Keep me" })],
+    });
+    const app = createNotesApp({ rootAppId: "home", store });
+    const result = await app.refresh(
+      [{ nodeId: noteNodeId("gone"), label: "Gone", location: null }],
+      { action: true, inputText: "nope" },
+    );
+    expect(await store.get("n1")).toMatchObject({ body: "Keep me" });
+    expect(result.node.id).toBe(noteNodeId("n1"));
+  });
+
   it("deep-links resolve create and note paths", async () => {
     const store = createMemoryNotesStore({
       initial: [note({ id: "abc", body: "Hello" })],
@@ -243,5 +268,10 @@ describe("Notes local store seam", () => {
         updatedAt: "2026-04-01T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("update of an unknown id returns null", async () => {
+    const store = createMemoryNotesStore();
+    expect(await store.update("missing", "nope")).toBeNull();
   });
 });
