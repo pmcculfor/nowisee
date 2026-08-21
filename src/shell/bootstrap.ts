@@ -1,13 +1,5 @@
-import { createBibleApp } from "../apps/bible/index.ts";
-import type { KjvData } from "../apps/bible/types.ts";
-import kjvJson from "../apps/bible/data/kjv.json" with { type: "json" };
-import { createHomeApp } from "../apps/home.ts";
-import {
-  createLocalNotesStore,
-  createMemoryNotesStore,
-  createNotesApp,
-  type NotesStore,
-} from "../apps/notes/index.ts";
+import { createRemoteApp } from "../apps/remote.ts";
+import { createFetchRpc, type AppRpc } from "../apps/rpc.ts";
 import { Display } from "../core/display.ts";
 import { defaultKeyBindings, Keyboard } from "../core/keyboard.ts";
 import { NavPads } from "../core/navPads.ts";
@@ -30,17 +22,16 @@ export type ShellHandle = {
 
 export type StartShellOptions = {
   readonly config?: ShellConfig;
-  readonly kjv?: KjvData;
   /**
-   * Injected Notes persistence. Defaults to a localStorage-backed store when
-   * available; tests may pass a memory store. Swap for a remote adapter later.
+   * How the client talks to apps. Defaults to POST /api/apps/:id/…
+   * Tests inject the in-process app host.
    */
-  readonly notesStore?: NotesStore;
+  readonly rpc?: AppRpc;
 };
 
 /**
  * Bootstrap the shell. Core never names a product app — `rootAppId` comes from config.
- * Mail registers in a later slice.
+ * Home and Bible are remote stubs; Notes is not registered in this slice.
  */
 export function startShell(
   mount: HTMLElement,
@@ -51,24 +42,10 @@ export function startShell(
     keyBindings: options.config?.keyBindings,
   };
 
+  const rpc = options.rpc ?? createFetchRpc();
   const registry = new AppRegistry();
-  const home = createHomeApp({
-    listEnabled: () => registry.listEnabled(),
-    rootAppId: config.rootAppId,
-  });
-  registry.register(home);
-  registry.register(
-    createBibleApp({
-      rootAppId: config.rootAppId,
-      data: options.kjv ?? (kjvJson as KjvData),
-    }),
-  );
-  registry.register(
-    createNotesApp({
-      rootAppId: config.rootAppId,
-      store: options.notesStore ?? defaultNotesStore(),
-    }),
-  );
+  registry.register(createRemoteApp({ id: "home", label: "Home", rpc }));
+  registry.register(createRemoteApp({ id: "bible", label: "Bible", rpc }));
 
   mount.replaceChildren();
   const surface = document.createElement("div");
@@ -150,21 +127,4 @@ export function startShell(
       router.detach();
     },
   };
-}
-
-/** Browser-local MVP store. Shell owns the localStorage touch — not the app. */
-function defaultNotesStore(): NotesStore {
-  const storage = globalThis.localStorage;
-  if (storage && typeof storage.getItem === "function") {
-    return createLocalNotesStore({
-      kv: {
-        get: (key) => storage.getItem(key),
-        set: (key, value) => {
-          storage.setItem(key, value);
-        },
-      },
-    });
-  }
-  // Non-browser hosts (or blocked storage): in-memory only for the session.
-  return createMemoryNotesStore();
 }

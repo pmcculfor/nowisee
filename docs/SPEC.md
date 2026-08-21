@@ -165,15 +165,15 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.10 App boundary: data in, data out
 
-**Decision:** `open` / `refresh` is a **message protocol that currently runs in-process**. Everything crossing it — stack, input text, node payloads, navigation map, result, location — must be plain data that would survive being serialized and sent as a message. The only non-data things core passes are the abort signal and a **platform context**, and both have message-based equivalents.
+**Decision:** `open` / `refresh` is a **message protocol**. Home and Bible currently run on the server; the browser holds generic RPC stubs. Everything crossing the boundary — stack, input text, node payloads, navigation map, result, location, `clipboardText` — must be plain data that would survive being serialized and sent as a message. The abort signal cancels the HTTP request. Platform context stays on the client (core uses it to write `clipboardText`).
 
-Browser operations core can mediate go through that platform context, not through app code: clipboard in MVP; durable storage, screen-reader status, and app-initiated refresh are declared but not provided yet. The registry hands Home plain `{ id, label }` descriptors, never the registry object.
+Copy is `clipboardText` on the result; core writes the clipboard. Durable storage, screen-reader status, and app-initiated refresh are not in this slice. The registry hands Home plain `{ id, label }` descriptors, never the registry object.
 
 **Why:** the roadmap includes third-party apps and an App Store, and code we did not write cannot share a page with everyone's data. The realistic containment is a worker, an iframe, or a server, and all three exchange messages rather than objects. Keeping the boundary message-shaped now costs nothing and preserves that option; letting apps quietly depend on being in-page forecloses it.
 
 **This is a discipline, not a sandbox.** No isolation is being built. See [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`MODULES.md`](MODULES.md) §10.
 
-**Immediate payoff:** the clipboard. Browsers only permit a write while the user's keypress is still fresh, so an app calling `writeText` after an async refresh fails intermittently. Core traverses the action edge inside the keydown, so core is the only party that can open the write in time. Apps call one method and never see the problem.
+**Immediate payoff:** the clipboard. Browsers only permit a write while the user's keypress is still fresh, so copying after an async (or server) refresh fails intermittently. Core opens the write inside the keydown. Apps return `clipboardText` on the action result; they never write the clipboard themselves.
 
 ### 4.11 Client vs server cache
 
@@ -218,7 +218,7 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 9. **App kit:** Prefer shared helpers for edge/list/input/neighborhood boilerplate.
 10. **Intents only:** Never assume a keystroke, a direction, or a screen.
 11. **Plain data only:** Return nothing that would not survive being sent as a message.
-12. **Platform capabilities:** Use `extras.platform` for clipboard and (later) storage; feature-detect before calling; never touch browser APIs directly.
+12. **Copy:** return `clipboardText` on the action refresh result; never touch `navigator.clipboard`.
 
 ---
 

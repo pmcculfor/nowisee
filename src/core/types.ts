@@ -100,8 +100,6 @@ export interface RefreshExtras {
    * Core never aborts an action call.
    */
   signal?: AbortSignal;
-  /** Browser and platform operations an app may not perform itself. */
-  platform?: PlatformContext;
 }
 
 /**
@@ -152,6 +150,12 @@ export interface RefreshResult {
    * Required — omit is not the same as null.
    */
   location: AppLocation | null;
+  /**
+   * Text the client should copy during an action traversal.
+   * Apps return this string; they never write the clipboard themselves.
+   * Core copies it (or reports failure on the status label).
+   */
+  clipboardText?: string;
 }
 
 export interface AppModule {

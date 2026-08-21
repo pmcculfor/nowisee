@@ -336,7 +336,6 @@ export class Navigator {
     const callExtras: RefreshExtras = {
       ...args.baseExtras,
       signal: controller.signal,
-      platform: this.platform.createContext(),
     };
     // Action flag only when this traversal requested it — never invent on revalidation.
     if (args.isAction) {
@@ -347,10 +346,11 @@ export class Navigator {
 
     try {
       const result = await args.invoke(callExtras);
+      const settled = await this.fulfillClipboardText(result, args.isAction);
       if (args.token !== this.transitionToken) {
-        return; // stale
+        return; // stale — copy may already have run
       }
-      this.applyResult(result, args.applyAs);
+      this.applyResult(settled, args.applyAs);
       this.blocked = false;
     } catch (err) {
       if (args.token !== this.transitionToken) {
@@ -366,6 +366,30 @@ export class Navigator {
       if (args.isAction) {
         this.platform.endClipboardWrite();
       }
+    }
+  }
+
+  /**
+   * Apps return `clipboardText`; core writes the device clipboard.
+   * Runs even if this result is later discarded, so Copy still happens.
+   */
+  private async fulfillClipboardText(
+    result: RefreshResult,
+    isAction: boolean,
+  ): Promise<RefreshResult> {
+    const text = result.clipboardText;
+    if (!isAction || text === undefined || text.length === 0) {
+      return result;
+    }
+    const clipboard = this.platform.createContext().clipboard;
+    if (!clipboard) {
+      return withStatusLabel(result, "Copy failed: clipboard unavailable.");
+    }
+    try {
+      await clipboard.writeText(text);
+      return result;
+    } catch {
+      return withStatusLabel(result, "Copy failed.");
     }
   }
 
@@ -415,6 +439,14 @@ export class Navigator {
       this.setAddressBar(result.location);
     }
   }
+}
+
+function withStatusLabel(result: RefreshResult, label: string): RefreshResult {
+  return {
+    ...result,
+    clipboardText: undefined,
+    node: { ...result.node, label },
+  };
 }
 
 function isWellFormedEdge(edge: NavEdge): boolean {

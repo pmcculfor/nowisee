@@ -416,6 +416,30 @@ describe("Navigator + Router contracts", () => {
     expect(h.fake.calls.filter((c) => c.extras.action === true)).toHaveLength(1);
   });
 
+  it("copies clipboardText from an action result onto the device clipboard", async () => {
+    const written: string[] = [];
+    const h = harness({
+      clipboard: {
+        writeText: async (text) => {
+          written.push(text);
+        },
+      },
+    });
+    await h.navigator.openLocation({ appId: "fake", path: "/a" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "enter");
+    expect(written).toEqual(["copied-text"]);
+    expect(visibleText(h.root)).toBe("Copied");
+  });
+
+  it("Copy reports clipboard unavailable when the host cannot copy", async () => {
+    const h = harness({ clipboard: null });
+    await h.navigator.openLocation({ appId: "fake", path: "/a" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "enter");
+    expect(visibleText(h.root)).toContain("clipboard unavailable");
+  });
+
   it("walking sibling options past an effectful node performs no effect", async () => {
     const h = harness();
     await h.navigator.openLocation({ appId: "fake", path: "/b" });

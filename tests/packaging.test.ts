@@ -27,4 +27,18 @@ describe("packaging boundary", () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  it("browser shell does not import Bible data, Notes, or in-page Home/Bible modules", () => {
+    const bootstrap = readFileSync(join(process.cwd(), "src", "shell", "bootstrap.ts"), "utf8");
+    expect(bootstrap).not.toContain("kjv.json");
+    expect(bootstrap).not.toContain("apps/bible");
+    expect(bootstrap).not.toContain("apps/notes");
+    expect(bootstrap).not.toContain("apps/home");
+  });
+
+  it("remote stub does not import a specific app", () => {
+    const remote = readFileSync(join(process.cwd(), "src", "apps", "remote.ts"), "utf8");
+    expect(remote).not.toContain("bible");
+    expect(remote).not.toContain("kjv");
+  });
 });

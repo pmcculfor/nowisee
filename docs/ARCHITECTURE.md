@@ -104,8 +104,6 @@ export interface RefreshExtras {
    * Core never aborts an action call.
    */
   signal?: AbortSignal;
-  /** Browser and platform operations an app may not perform itself. */
-  platform?: PlatformContext;
 }
 
 /**
@@ -156,6 +154,11 @@ export interface RefreshResult {
    * Required — omitting the field is not the same as null.
    */
   location: AppLocation | null;
+  /**
+   * Text the client should copy during an action traversal.
+   * Apps return this string; they never write the clipboard themselves.
+   */
+  clipboardText?: string;
 }
 
 export interface AppModule {
@@ -208,17 +211,17 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ## App boundary: data in, data out
 
-`open` and `refresh` are a **message protocol that currently happens to run in-process**. Preserving that property is what makes it possible to later run an app in a Worker, an iframe, or on a server without changing the contract — which is the only realistic way to run apps we did not write.
+`open` and `refresh` are a **message protocol**. Home and Bible currently run on the server; the browser holds generic RPC stubs. Preserving the data-only property is what makes that split (and a later Worker or iframe) possible without changing the contract.
 
 | Crossing the boundary | Rule |
 |-----------------------|------|
 | `stack`, `inputText`, `NodePayload`, `NavigationMap`, `RefreshResult`, `AppLocation` | **Plain data only.** Must survive being serialized and sent as a message. No functions, class instances, DOM nodes, or live references. |
-| `PlatformContext`, `AbortSignal` | Call mechanics, not payload. These are the sanctioned non-data members, and each has a message-based equivalent (an RPC proxy, and an abort message) when a sandbox arrives. |
+| `AbortSignal` | Call mechanic, not payload. Core never aborts an action call. On the wire, abort cancels the HTTP request. |
 | Anything else | Not permitted. Core hands apps no other live object; apps return no other live object. |
 
 Consequences, all normative:
 
-- Apps do not touch browser APIs that core can mediate. Clipboard goes through `platform.clipboard`; durable storage will go through `platform.storage`. An app reaching for `navigator.clipboard` or `localStorage` directly is a bug even though nothing stops it today.
+- Apps do not touch browser APIs that core can mediate. Copy text is `clipboardText` on the refresh result; core writes the clipboard. An app reaching for `navigator.clipboard` or `localStorage` directly is a bug even though nothing stops it today.
 - The registry hands Home `AppDescriptor[]`, never the `AppRegistry` object.
 - `NodePayload.data` is typed as `JsonValue` so the compiler catches accidents rather than a sandbox migration years later.
 
@@ -306,9 +309,8 @@ export interface ShellConfig {
 
 ### Platform capabilities
 
-- Builds the `PlatformContext` core passes on every `open` / `refresh`.
-- Owns the browser-side mechanics apps must not perform themselves — in MVP, the clipboard and its user-activation problem (MODULES §10).
-- Offers a capability only when the host can actually honour it, so feature detection means something.
+- Owns the browser-side clipboard write for `clipboardText` on an action result (MODULES §10).
+- Offers clipboard only when the host can actually honour it.
 
 ---
 
@@ -336,8 +338,7 @@ export interface ShellConfig {
 8. Treat stack tip as possibly stale; return a valid fallback `node` when needed (repair, not teleport).
 9. Author edges by intent only; never assume a keystroke.
 10. Return plain data only — nothing that would fail to survive being sent as a message.
-11. Use `extras.platform` for browser operations core can mediate; never reach for `navigator.clipboard`, `localStorage`, or the DOM directly.
-12. Feature-detect every platform capability before calling it.
+11. Return copy text as `clipboardText` on the refresh result when the user should copy; never call `navigator.clipboard`. Core performs the write.
 
 ### SHOULD
 
@@ -367,6 +368,6 @@ Unit-test without DOM where possible:
 - Rebinding the keyboard table changes behavior with zero app changes.
 - `Router.hrefFor(Router.parse(href))` round-trips; no other module emits a `#` string.
 - Every `RefreshResult` an MVP app returns survives a `structuredClone` round-trip.
-- An app calling a platform capability the host did not provide fails gracefully (status text, not a crash).
+- Copy with no device clipboard → Navigator shows “clipboard unavailable”; the app still only returned `clipboardText`.
 - `listEnabled()` returns descriptors; the registry object is not reachable from any app.
 - App refresh: wrap-or-not is app-defined; action tip updates label in place without stack jump.

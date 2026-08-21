@@ -44,8 +44,8 @@ function deferred<T>(): Deferred<T> {
 }
 
 /**
- * Builds PlatformContext and owns the action-scoped clipboard write channel.
- * storage / announce / requestRefresh are declared on the type but not provided.
+ * Owns the action-scoped clipboard write channel.
+ * storage / announce / requestRefresh are declared on PlatformContext but not provided.
  */
 export class PlatformCapabilities {
   private readonly clipboardHost: ClipboardHost | null;
@@ -62,7 +62,7 @@ export class PlatformCapabilities {
   }
 
   /**
-   * Context handed to apps on every open/refresh.
+   * Clipboard write surface for Navigator during an action.
    * `clipboard` is absent when the host cannot honour it.
    */
   createContext(): PlatformContext {

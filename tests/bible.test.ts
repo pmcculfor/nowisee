@@ -120,9 +120,8 @@ describe("Bible app", () => {
     expect(result.navigationMap[copyId]?.next).not.toHaveProperty("action");
   });
 
-  it("Copy action writes clipboard with book and chapter; display is verse number only", async () => {
+  it("Copy action returns clipboardText with book and chapter; display is verse number only", async () => {
     const app = bible();
-    const written: string[] = [];
     const ref = { book: "Genesis", chapter: 1, verse: 1 };
     const statusId = `bible:s:${ref.book}:${ref.chapter}:${ref.verse}:copy`;
     const copyId = optionId(ref, "copy");
@@ -133,7 +132,6 @@ describe("Bible app", () => {
     );
 
     await refresh(app, [{ nodeId: copyId, label: "Copy", location: null }]);
-    expect(written).toEqual([]);
 
     const copied = await refresh(
       app,
@@ -141,48 +139,27 @@ describe("Bible app", () => {
         { nodeId: copyId, label: "Copy", location: null },
         { nodeId: statusId, label: "Copying…", location: null },
       ],
-      {
-        action: true,
-        platform: {
-          clipboard: {
-            writeText: async (text) => {
-              written.push(text);
-            },
-          },
-        },
-      },
+      { action: true },
     );
     expect(copied.node.label).toBe("Copied");
     expect(copied.location).toBeNull();
-    expect(written).toHaveLength(1);
-    expect(written[0]).toBe(
+    expect(copied.clipboardText).toBe(
       "Genesis 1:1. In the beginning God created the heaven and the earth.",
     );
 
-    await refresh(
-      app,
-      [{ nodeId: statusId, label: "Copied", location: null }],
-      {
-        platform: {
-          clipboard: {
-            writeText: async (text) => {
-              written.push(text);
-            },
-          },
-        },
-      },
-    );
-    expect(written).toHaveLength(1);
+    const idle = await refresh(app, [{ nodeId: statusId, label: "Copied", location: null }]);
+    expect(idle.clipboardText).toBeUndefined();
   });
 
-  it("Copy fails gracefully when clipboard missing", async () => {
+  it("Copy without a verse line does not ask the client to copy", async () => {
     const app = bible();
     const result = await refresh(
       app,
-      [{ nodeId: "bible:s:Genesis:1:1:copy", label: "Copying…", location: null }],
-      { action: true, platform: {} },
+      [{ nodeId: "bible:s:NotABook:1:1:copy", label: "Copying…", location: null }],
+      { action: true },
     );
-    expect(result.node.label).toContain("clipboard unavailable");
+    expect(result.node.label).toContain("verse not found");
+    expect(result.clipboardText).toBeUndefined();
   });
 
   it("RefreshResult survives structuredClone for open", async () => {
@@ -220,12 +197,7 @@ describe("Bible packaging", () => {
     await refresh(
       app,
       [{ nodeId: "bible:s:Genesis:1:1:copy", label: "Copying…", location: null }],
-      {
-        action: true,
-        platform: {
-          clipboard: { writeText: async () => undefined },
-        },
-      },
+      { action: true },
     );
     expect(clipboardGetter).not.toHaveBeenCalled();
     vi.unstubAllGlobals();

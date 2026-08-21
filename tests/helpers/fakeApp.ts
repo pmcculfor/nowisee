@@ -143,7 +143,6 @@ export function createFakeApp(options: FakeAppOptions): {
     if (extras.action && tipId === "copy-status") {
       effects.push("copy");
       labels.set("copy-status", "Copied");
-      await extras.platform?.clipboard?.writeText("copied-text");
     }
     if (extras.action && tipId === "sent") {
       effects.push(`send:${extras.inputText ?? ""}`);
@@ -165,6 +164,9 @@ export function createFakeApp(options: FakeAppOptions): {
       warm: warmAround(node),
       node,
       location,
+      ...(extras.action && tipId === "copy-status"
+        ? { clipboardText: "copied-text" }
+        : {}),
     };
   }
 
