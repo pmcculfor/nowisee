@@ -1,6 +1,6 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Agreed direction (owner, August 2026). **Not implemented.** First code slice is **Bible on the server**, not login. Product locks still live in [`SPEC.md`](SPEC.md) until that slice lands and those files are updated. Preparedness record: [`PREPAREDNESS.md`](PREPAREDNESS.md).
+**Status:** Agreed direction (owner, August 2026). **Bible on the server has landed** (Home + Bible via `/api`; Notes unplugged). Login, SQLite, the secret lockbox, and the Account app are **not** implemented. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md).
 
 ---
 
@@ -12,7 +12,7 @@
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**First slice:** Home and Bible run on the server. Notes is **not registered** (code can stay in the repo; the running app does not load it). No login, no SQLite, no secret lockbox.
+**Landed:** Home and Bible run on the server. Notes is **not registered** (code can stay in the repo; the running app does not load it). Still not built: login, SQLite, secret lockbox.
 
 ---
 
