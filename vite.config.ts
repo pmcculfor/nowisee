@@ -1,9 +1,8 @@
 import { defineConfig } from "vitest/config";
+import { nowiseeApiPlugin } from "./server/vitePlugin.ts";
 
 export default defineConfig({
-  // GitHub project Pages: https://<user>.github.io/nowisee/
-  // Dev server keeps "/" so local `npm run dev` stays at the site root.
-  base: process.env.NODE_ENV === "production" ? "/nowisee/" : "/",
+  plugins: [nowiseeApiPlugin()],
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],

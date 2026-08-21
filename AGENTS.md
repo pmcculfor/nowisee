@@ -47,7 +47,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - Any module other than Router producing a `#/…` string
 - Router (or anything but Navigator) mutating stack, cache, map, busy, or display
 - Live objects across the app boundary (handing an app the registry, the DOM, or a class instance)
-- Apps calling `navigator.clipboard`, `localStorage`, or the DOM instead of a platform capability
+- Apps calling `navigator.clipboard`, `localStorage`, or the DOM instead of returning `clipboardText` / using a platform capability
 - Detecting staleness by comparing tip ids instead of the transition token
 - `back` = tree parent only (use navigation-map edges; inside an app, typical `back` is `pop`)
 - Assuming every node has a unique permanent URL
@@ -74,12 +74,12 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Dead-end intent | Silent no-op |
 | Status / action aftermath | Stay on node until user navigates; refresh may update text in place |
 | Addressing | Apps use `AppLocation`; Router alone serializes; `location: null` keeps prior address bar |
-| App boundary | Plain data in, plain data out — must survive being sent as a message. `PlatformContext` and the abort signal are the only non-data members |
-| Platform capabilities | Browser operations core can mediate go through `extras.platform` (clipboard in MVP); apps feature-detect and never touch browser APIs directly |
+| App boundary | Plain data in, plain data out — must survive being sent as a message. The abort signal is the only non-data member |
+| Platform capabilities | Copy is `clipboardText` on the refresh result; core writes the clipboard during an action. Apps never touch browser APIs directly |
 | Concurrency | One monotonic transition token in Navigator decides what applies; tip-id comparison is not a staleness guard |
 | Ownership | Navigator owns every state transition; Router is a pure URL boundary |
 | Client vs server cache | Core owns client warm only; server cache/session behind apps |
-| MVP apps | Home + KJV Bible + demo mail as portable `AppModule`s |
+| MVP apps | Home + KJV Bible as server `AppModule`s reached via a generic client RPC stub. Notes exists in `src/apps/notes` but is not registered. |
 | Auth/DB | Not MVP; clipboard is the only platform capability provided; storage/auth arrive later on the same seam |
 
 ## Mental model
@@ -90,11 +90,11 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 
 ## Cursor Cloud specific instructions
 
-Frontend-only static SPA (Vanilla TS + Vite). No backend, database, environment variables, or secrets are needed to run, test, or build. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/pages.yml`).
+Frontend SPA (Vanilla TS + Vite) plus a same-origin app host under `server/` (Home + Bible `open`/`refresh`). No database, environment variables, or secrets are needed to run, test, or build. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/ci.yml`).
 
-- **Dev server:** `npm run dev` serves at `http://localhost:5173/` (Vite `base` stays `/` in dev, `/nowisee/` only in production builds).
+- **Dev server:** `npm run dev` serves at `http://localhost:5173/`. POST `/api/apps/:id/open` and `/refresh` are served in-process. Production with server apps needs a Node host that serves the site and `/api` together.
 - **Tests:** `npm test` (Vitest, node environment). `tests/navigator.test.ts` intentionally logs `Navigator: refresh/open failed Error: boom` to stderr while exercising the failure path — that stderr line is expected and does **not** mean the suite failed.
-- **Lint / typecheck:** there is no ESLint/Prettier. The static check is the strict `tsc -p tsconfig.app.json --noEmit` that runs as the first half of `npm run build`.
-- **Build:** `npm run build` (typecheck + `vite build`). It emits one large (~4 MB) JS chunk because the committed KJV JSON is bundled; the "chunks are larger than 500 kB" warning is expected, not an error.
-- **KJV data:** already committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
-- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Tab and Escape stay unbound.
+- **Lint / typecheck:** there is no ESLint/Prettier. `npm run build` runs `tsc -p tsconfig.app.json --noEmit` and `tsc -p tsconfig.node.json --noEmit`, then `vite build`.
+- **Build:** the client bundle should **not** include KJV JSON (that file is loaded by the server host). A "chunks are larger than 500 kB" warning, if it still appears, is not an error.
+- **KJV data:** committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
+- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Tab and Escape stay unbound. Notes is not in the running catalog.

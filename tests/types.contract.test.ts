@@ -27,6 +27,7 @@ describe("RefreshResult plain-data contract", () => {
       ],
       node: { id: "n::1", label: "One" },
       location: { appId: "demo", path: "/n/1" },
+      clipboardText: "copy me",
     };
 
     const cloned = structuredClone(result);

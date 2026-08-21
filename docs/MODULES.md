@@ -404,37 +404,38 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 **Path:** `src/core/platform.ts`
 
-Apps are handed a `PlatformContext` on every `open` / `refresh`. It is the only channel for effects an app cannot or should not perform itself, and the only non-data thing core passes besides the abort signal. Keeping browser access here — rather than letting apps reach for `navigator.*` — is what leaves the door open to running an app in a Worker, an iframe, or on a server later.
+Apps are not handed a live clipboard. Copy text is `clipboardText` on the refresh result. Core still owns the browser clipboard write (user-activation) and fills it from that string. `PlatformContext` remains the seam for later capabilities (`storage`, `identity`). Keeping those operations out of app code is what leaves the door open to running an app on a server.
 
 ### Responsibilities
 
-- Construct the context; expose a capability **only** when the host can honour it, so `if (platform.clipboard)` means something.
-- Own the browser-side mechanics, including the awkward ones below.
+- Own the clipboard write channel used when an action result includes `clipboardText`.
+- Honour it only when the host can actually write.
 
 ### Clipboard, and why core has to own it
 
-Browsers only permit a clipboard write while the user's keypress is still counted as recent (*transient user activation*). An action `refresh` is asynchronous, so by the time an app could call `writeText` the activation has often expired — Safari strictly, Chrome under some focus conditions. **Routing the call through core does not fix this on its own; the write has to begin inside the keypress, and core is the only party holding it.**
+Browsers only permit a clipboard write while the user's keypress is still counted as recent (*transient user activation*). `refresh` is asynchronous (and may be a server round-trip), so a write that starts after the response often fails — Safari strictly, Chrome under some focus conditions.
 
-Core therefore opens a write channel at the moment it traverses an `action: true` edge — synchronously, inside the keydown, before any app call:
+Apps **do not write the clipboard**. On an action they return `clipboardText` on the refresh result. Core opens a write channel synchronously inside the keydown, then fills it from that string:
 
 ```text
 keydown → edge has action: true
   ├─ open a pending clipboard write (a promise core will resolve)
-  ├─ call app.refresh(stack, { action: true, platform })
-  │     └─ app calls platform.clipboard.writeText(text)  → resolves the pending write
-  └─ if the app never calls it, cancel the pending write
+  ├─ call app.refresh (may be HTTP) with extras.action = true
+  │     └─ result.clipboardText  → core writeText → resolves the pending write
+  └─ if the result has no clipboardText, cancel the pending write
 ```
 
-Where the browser supports a promise-valued `ClipboardItem`, core hands that promise straight to `navigator.clipboard.write` during the keydown. Where it does not, core falls back to calling `writeText` when the app asks, which still succeeds while the activation window is open. Either way the app's side is one line and it never sees the problem.
+If the host has no clipboard, core changes the status label to “Copy failed: clipboard unavailable.” If the browser denies the write, the label becomes “Copy failed.”
+
+Where the browser supports a promise-valued `ClipboardItem`, core hands that promise straight to `navigator.clipboard.write` during the keydown. Where it does not, core falls back to `writeText` when the string arrives.
 
 ### Edge cases
 
 | Case | Behavior |
 |------|----------|
-| App calls `writeText` outside an action call | Reject; no channel is open |
-| App calls `writeText` twice in one action call | Last call wins; log the first as an app bug |
-| Browser denies the write | Reject the app's promise; the app turns it into an error label |
-| Host does not offer a capability | The member is absent; apps must feature-detect |
+| `clipboardText` outside an action call | Ignored (no channel; core does not write) |
+| Browser denies the write | Status label “Copy failed.” |
+| Host has no clipboard | Status label “Copy failed: clipboard unavailable.” |
 
 ### Non-goals (MVP)
 
@@ -498,7 +499,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Chapter → verse uses `replace` (not `push`) so cross-chapter verse joins keep a clean stack; verse `back` replaces to that verse’s chapter.
 - `open(path)` parses canonical verse/book paths; bootstrap stack tip = resolved node (stack may be a single leaf after open reset—the app still exposes internal pops via map once the user pushes deeper in-session).
 - After open, user builds in-app stack via `push` / `replace` edges; `back` = `pop` or chapter `replace` within bible; root `back` = `app` edge to the root app.
-- Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) calls `extras.platform.clipboard?.writeText(verse)` and returns “Copied” / an error label in place. `prev` / `next` over the Copy option carry no flag and therefore do nothing. The app never touches `navigator.clipboard`, and never has to think about user activation — see §10.
+- Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) returns `clipboardText` (the line `Book C:V. text`) and “Copied”, or an error label with no `clipboardText`. Core writes the clipboard. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
 - Warm + map: use app kit neighborhood helper or hand-built edges for nearby books/chapters/verses as appropriate.
 - Search (optional/later): input node → results list as normal nodes in warm/map; client warm holds the hit list.
 
@@ -551,9 +552,9 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 ### Responsibilities
 
 - Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
-- Construct registry; register Home, Bible, Mail.
+- Construct registry; register remote stubs for Home and Bible (`createRemoteApp`). Notes is not registered in this slice.
+- Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
-- Pass Home a `listEnabled` callback returning descriptors (never the registry itself).
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
 - Do **not** call `display.focus()` again after open resolves — `showText` / `showInput` already focused; a second focus restarts VoiceOver.
 

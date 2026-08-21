@@ -10,7 +10,6 @@ import {
 import type {
   AppLocation,
   NodePayload,
-  RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
 import {
@@ -456,29 +455,15 @@ function buildIdleCopyStatus(deps: BibleViewDeps, ref: BibleRef): RefreshResult 
   };
 }
 
-/** Perform copy side effect and return status result. Only when extras.action. */
-export async function resolveCopyStatus(
-  deps: BibleViewDeps,
-  ref: BibleRef,
-  extras: RefreshExtras,
-): Promise<RefreshResult> {
+/**
+ * Copy action: return the verse line for the client to copy.
+ * The app never writes the clipboard.
+ */
+export function resolveCopyStatus(deps: BibleViewDeps, ref: BibleRef): RefreshResult {
   const statusNodeId = copyStatusId(ref);
-  let label = "Copied";
   const text = verseText(deps.data, ref);
   const line = text ? `${formatRef(ref)}. ${text}` : null;
-
-  if (!line) {
-    label = "Copy failed: verse not found.";
-  } else if (!extras.platform?.clipboard) {
-    label = "Copy failed: clipboard unavailable.";
-  } else {
-    try {
-      await extras.platform.clipboard.writeText(line);
-      label = "Copied";
-    } catch {
-      label = "Copy failed.";
-    }
-  }
+  const label = line ? "Copied" : "Copy failed: verse not found.";
 
   const payloads = new Map<string, NodePayload>();
   addNode(payloads, { id: statusNodeId, label });
@@ -492,5 +477,6 @@ export async function resolveCopyStatus(
     warm: [...payloads.values()],
     node: { id: statusNodeId, label },
     location: null,
+    ...(line ? { clipboardText: line } : {}),
   };
 }

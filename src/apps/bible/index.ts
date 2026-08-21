@@ -42,7 +42,7 @@ export function createBibleApp(deps: BibleAppDeps): AppModule {
       const tipId = stack[stack.length - 1]?.nodeId ?? parseBiblePath(deps.data, "/");
       const parsed = parseNodeId(tipId);
       if (parsed?.kind === "copy-status" && extras.action) {
-        return resolveCopyStatus(viewDeps, parsed.ref, extras);
+        return resolveCopyStatus(viewDeps, parsed.ref);
       }
       return buildBibleView(viewDeps, tipId);
     },
