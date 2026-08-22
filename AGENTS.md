@@ -17,11 +17,12 @@ Nowisee is an accessibility-first website for blind and keyboard/screen-reader-p
 
 | Layer | Role |
 |-------|------|
-| **Core** | Router (URL ↔ location only), per-app stack, navigation-map store, client warm cache, display, keyboard binding table, registry, busy/errors. Talks to apps only via `open` / `refresh`. |
+| **Core** | Client shell. Router (URL ↔ location only), per-app stack, navigation-map store, client warm cache, display, keyboard binding table, registry, busy/errors. Talks to apps only via `open` / `refresh`. |
+| **Server host** | Runs `AppModule`s off-device and owns everything the browser must not: HTTP boundary and its CSRF checks, the database and migrations, the secret lockbox, and an **identity service** module that owns credentials, sessions, and cookie → user resolution. Calls apps through the same `open` / `refresh`, adding a server-only context argument. It resolves who the user is; it does **not** gate apps on being signed in — each app decides what signed-out means. Not core, not an app. See [`docs/IDENTITY.md`](docs/IDENTITY.md). |
 | **App kit** | Optional helpers apps *import* (edge builders, list edges, input edges, optional neighborhood warm walk). Navigator never calls these automatically. |
 | **App domain** | That app’s data, queries, graph shape, side effects, URLs. |
 
-If any answer is “only Bible / mail / notes / our first apps,” it does **not** belong in core. Prefer app kit for shared boilerplate; keep domain logic in the app.
+If any answer is “only Bible / mail / notes / our first apps,” it does **not** belong in core. Prefer app kit for shared boilerplate; keep domain logic in the app. Anything the page must never see — secrets, session lookup, raw database access — belongs to the server host, and reaches an app as plain data on the context argument.
 
 ## Genericity checklist (before anything enters core)
 
@@ -55,6 +56,11 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - Silent stack teleport after workflows (e.g. jump to inbox after send)
 - Auto-dismissing status/confirmation text without an explicit intent
 - Escape-as-platform-exit from input nodes
+- Trusting a user or owner id that came from the client (`stack`, `path`, `extras`) instead of from the session cookie on the server
+- Resolving a node id out of the stack without the owner in the query — the browser resends that stack, unverified, on every refresh
+- Core learning what "signed in" means: no `401` branch, no account app id in core, no shell-wide sign-in redirect. A signed-out user reaches the app like anyone else, and the app answers with an ordinary node
+- Splitting authentication between the host and the Account app. One identity service owns credentials, hashing, and sessions; the Account app owns only the screens over it, through an injected capability — the same shape as `NotesStore`
+- The host calling an app in order to authenticate a request. The dependency runs Account app → identity service, never the reverse
 
 ## Locked behaviors (do not change without owner approval)
 
@@ -80,12 +86,16 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Ownership | Navigator owns every state transition; Router is a pure URL boundary |
 | Client vs server cache | Core owns client warm only; server cache/session behind apps |
 | MVP apps | Home + KJV Bible as server `AppModule`s reached via a generic client RPC stub. Notes exists in `src/apps/notes` but is not registered. |
-| Auth/DB | Not MVP; clipboard is the only platform capability provided; storage/auth arrive later on the same seam |
+| Identity ownership | A host-layer **identity service** owns credentials, hashing, sessions, and cookie → user resolution. The Account app owns only the screens, through `ctx.identity`, which the host grants per request to allowed apps only. See [`docs/IDENTITY.md`](docs/IDENTITY.md) §6 |
+| Signed out | `ctx.userId` is `null`; the request still reaches the app; the **app** decides what that means. No `401`, no core redirect, no host gate |
+| Sessions | One per visitor from the first `/api` call. Anonymous **session**, never an anonymous *user* id. Opaque token, only its hash stored, rotated on sign-in |
+| Auth/DB | Identity slice specified in [`docs/IDENTITY.md`](docs/IDENTITY.md) and not yet built; clipboard remains the only platform capability the client provides |
 
 ## Mental model
 
 - **Core** = shell for a text-node browser (keys, stack, map, cache, registry, display, router).
 - **Apps** = authorities that answer `open` / `refresh` with navigation maps and warm nodes.
+- **Server host** = where apps run and where anything the page must not hold lives (sessions, database, secrets).
 - When unsure, push knowledge into the app (or optional app kit); keep core smaller.
 
 ## Cursor Cloud specific instructions

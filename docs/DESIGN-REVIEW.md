@@ -26,6 +26,7 @@ The risk is not in the layering. It is that several **contract details** encode 
 | 10 | Two map representations, `::` collision | **Accepted** — nested map; applied |
 | 11 | No contract version / unknown-value fallbacks | **Deferred** — revisit with third-party apps |
 | 12 | Core trusts app responses | **Deferred** — first-party apps only for now |
+| 13 | Should the stack move to the server? | **Explored, not now** — owner question, August 2026; every benefit is available more cheaply |
 
 Applied items are now normative in `SPEC.md`, `ARCHITECTURE.md`, `MODULES.md`, and the lock table in `AGENTS.md`. Deferred items are listed in `SPEC.md` §7 with their cost, and in `MODULES.md` §17. This document is kept as the reasoning record — including for the items that were declined.
 
@@ -341,6 +342,41 @@ Since every app response passes through one function, validation is a single cho
 
 ---
 
+## 13. Should the stack move to the server?
+
+**Status: explored August 2026 (owner question); not now.** Recorded so it is not relitigated from scratch, and so the pieces worth keeping are not thrown out with it.
+
+**The proposal.** The server holds the stack, keyed by session. The client keeps only warm nodes and the navigation map, sends intents, and the server applies them. Three benefits were expected: node ids could no longer be forged, so apps would stop authorizing every entry; a per-app stack could survive leaving an app and coming back; and rapid keys would still be local, because the app can ship the ancestors as warm nodes with `back` edges pointing down the stack.
+
+**Does it work mechanically?** Largely, and the reconstruction argument is right as far as it goes — the client does call `refresh` at every intermediate node, so the server sees the whole sequence even when the user is three nodes ahead. Three things get in the way:
+
+1. **The contract explicitly permits the client to drop those calls.** Read-only revalidations may be coalesced, and superseded ones are aborted (§3). "The server sees every intermediate node" is therefore not guaranteed today — it becomes true only by giving up coalescing and aborting, which are what keep fast navigation cheap.
+2. **Abort does not roll back the server.** A cancelled fetch may already have been processed. The server's stack advances and the client's does not. The transition token cannot catch this: it decides which *response* is applied, not what the server already did.
+3. **Ordering.** Requests can arrive out of order. Applying intents in arrival order diverges silently, so you need a per-session sequence number and idempotent application. A small protocol — and exactly the kind whose bugs show up once a week and never in a test.
+
+**What it costs beyond that.**
+
+- **The map moves too.** To resolve an intent the server needs the current node's edges, so the host must retain the last navigation map per session (or re-ask the app for it). The alternative is the client telling the server which edge it took, which is trusting the client again. So this is not "move the stack," it is "move the session."
+- **`pop` largely disappears.** Today `stackBehavior: "pop"` means core pops its own stack and the tip wins, so no app ever computes a parent — listed in §0 as a decision that removes a whole class of desync bug. With history on the server, every `back` becomes a concrete `toNodeId` the app computes per request, and every ancestor must ride along in `warm` on every response to keep back-back-back instant. Bigger payloads, more app boilerplate, and a locked behavior given up.
+- **Multi-tab.** One session, one stack, two tabs fighting over it. Needs a per-tab stack id — client-supplied state again. Safer than a forgeable node id, but not free.
+- **Anonymous sessions become mandatory**, because signed-out visitors still navigate: a cookie and a row for every visitor, plus a sweep. That cost is partly shared, since [`IDENTITY.md`](IDENTITY.md) §11.2 wants anonymous sessions anyway.
+
+**The three benefits, priced.**
+
+| Claimed benefit | Verdict |
+|-----------------|---------|
+| Apps stop authorizing every node | Weakest of the three. It removes forgery from *navigation*, but `open(path)` deep links stay client-supplied and must be authorized regardless — so the check shrinks rather than disappears. What it replaces is one `AND owner_id = ?` in a query the app is already writing. A stateful, ordered, session-scoped subsystem is a steep price for a WHERE clause |
+| Returning to an app where you left it | Real, and genuinely valuable for an audience that navigates by memory. But an app can already do this once `ctx.userId` exists: remember the last location in its own table and resume on `open("/")`. App-owned state, no protocol change, available as soon as identity lands |
+| Ancestry so `back` behaves consistently | Already has a cheaper answer in §8 — an optional `RefreshResult.stack` returned from `open` only. Deferred, purely additive, and it fixes deep links at the same time |
+
+**Recommendation: not now.** Each benefit is obtainable more cheaply, and the change works against the central bet of the whole design — the client-side stack plus warm cache is *why* a keypress is answered locally. Making the server authoritative for something the shell must answer in single-digit milliseconds is the one direction this architecture should be most reluctant to move.
+
+**When to revisit.** Two situations genuinely want it: untrusted third-party apps, where you would rather the host than the app decided what navigation is legal (§12 territory), and continuity across devices without every app modelling it. Neither is close. If it is revisited, do it as "the host owns the session" — stack, map, and sequencing together — rather than moving the stack alone and discovering the rest.
+
+**Worth taking from the exploration now:** an app remembering the user's last location in its own table, which needs nothing but `ctx.userId`.
+
+---
+
 ## Safe to defer (explicitly, so nobody over-builds)
 
 These are genuinely additive and will not force a refactor, provided the items above land:
@@ -350,7 +386,7 @@ These are genuinely additive and will not force a refactor, provided the items a
 | Optional `init` / `dispose` lifecycle hooks on `AppModule` | Optional methods are backward-compatible additions. |
 | Telemetry / structured logging | A single core event hook can be added at the Navigator choke point later. |
 | IndexedDB, service worker, offline | Sits behind the `storage` capability from §5. |
-| Real auth and databases | The `platform` seam already exists; give it a shape (§5) and the rest follows. |
+| Real auth and databases | No longer open-ended: specified in [`IDENTITY.md`](IDENTITY.md) (sessions, CSRF, password hashing, SQLite, lockbox, and the server-only context argument that carries the verified user). Its §11 lists what that slice defers on purpose. Note the outcome differs from the `platform` seam guess here — identity is a **server host** concern, not a client capability. |
 | Browser Back/Forward ↔ session stack | Contained inside Router once Router is a pure boundary (§9). |
 | Per-user enabled apps, lazy app loading, App Store UI | Registry-level concerns; unaffected by the core protocol. |
 | Multi-tab coordination | No shared mutable state in the design today. |
@@ -372,6 +408,8 @@ The accepted ones are now in `ARCHITECTURE.md`. Recorded here for the deferred i
 ## Where this leaves the plan
 
 Applied: intents (§1), edge-flagged actions (§2), transition token and abort (§3), `AppLocation` (§4), the data-only boundary and platform capabilities (§5), Router/Navigator ownership split (§9), nested map (§10). These were the items that touch every app or every transition, so doing them before any code exists is the whole point.
+
+Explored and set aside with the reasoning kept: server-held stacks (§13).
 
 Deferred with the cost written down: the status channel (§6), deep-link ancestry (§8), versioning (§11), and response validation (§12). Each is additive, and each is recorded in `SPEC.md` §7 and `MODULES.md` §17 so it resurfaces rather than being quietly forgotten.
 
