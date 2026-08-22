@@ -1,6 +1,13 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Agreed direction (owner, August 2026). **Bible on the server has landed** (Home + Bible via `/api`; Notes unplugged). Login, SQLite, the secret lockbox, and the Account app are **not** implemented — §5–§13 are the agreed spec for building them, reviewed August 2026. **Every design decision in the slice is settled as of 22 August 2026; §5 is the build order.** iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Home, Bible, and Account run on the server host. SQLite (`node:sqlite`), the identity service, CSRF, session cookies, and the Account app are implemented as specified below. The secret lockbox is **not** built. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+
+**Owner deltas applied in this slice**
+
+- Registration is **open** by default. There is no invite code. `allowRegistration` on the host can close it later; the default is on because this product is not advertised.
+- Combined sign-in / register: one option, then email, then a secret password field, then “Signing in…”, then “You are signed in as …”. Signed-in Account opens on Settings (a dead-end placeholder) with Sign out as the next sibling.
+- Secret input is a `secret` flag on the existing `input` kind, not a new `NodeKind`.
+- SQLite on a host that can keep a file; `npm start` serves the SPA and `/api` together.
 
 ---
 
@@ -12,7 +19,7 @@
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**Landed:** Home and Bible run on the server. Notes is **not registered** (code can stay in the repo; the running app does not load it). Still not built: login, SQLite, secret lockbox.
+**Landed:** Home, Bible, and Account run on the server. Notes is **not registered** (code can stay in the repo; the running app does not load it). Still not built: secret lockbox.
 
 ---
 
@@ -60,24 +67,22 @@ Encryption at rest (plain picture): the database stores scrambled bytes. A **mas
 ## 4. Data and hosting
 
 - **Bible slice (landed):** no login, no SQLite. KJV stays a JSON file next to the server.
-- **Identity slice onward:** one SQLite database, many tables (users/sessions vs notes vs later mail). Runtime details in §12.
-- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. A static-only host cannot run the app API. Many serverless copies sharing one SQLite *file* is a bad fit; choosing that kind of host means giving up §12 for the host’s SQLite product (e.g. Cloudflare D1) or Postgres.
-
-**Host choice comes first.** It decides whether §12 is viable at all, and cookies marked `Secure` cannot be exercised end to end until something real serves the site. Standing up a Node entry point that serves the SPA and `/api` together over HTTPS is step zero of the identity slice, before any auth code. There is no such entry point today: `/api` exists only as a Vite dev/preview plugin, and CI builds and tests but does not deploy.
+- **Identity slice (landed):** one SQLite database (`node:sqlite`), `users` / `sessions` / `account_flow` tables. Runtime details in §12.
+- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy.
 
 ---
 
 ## 5. Identity slice — order of work
 
-Login, cookies, Account, and SQLite are **one slice**, not four projects. A user row has to exist before a session cookie means anything, and the database has to exist before the Account app can persist anyone.
+Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
-1. **Host.** Node entry point serving the SPA and `/api` on one origin over HTTPS.
-2. **Database.** SQLite file, migration runner, `users` and `sessions` tables (§12).
-3. **Identity service.** A host-layer module owning credentials and sessions (§6, §7, §8).
-4. **Request plumbing.** CSRF checks and the verified user id reaching `AppModule`s (§7, §9).
-5. **Account app.** Ordinary `AppModule` with the sign-in screens (§6, §9, §11).
+1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
+2. **Database.** `server/db/` — `node:sqlite`, WAL, foreign_keys, busy_timeout, numbered migrations (`001_identity.sql`, `002_account_flow.sql`).
+3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
+4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
+5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
 
-Propose the Account app's node graph for review before writing step 5 (§11.4). The lockbox (§3) waits for the first confidential OAuth client. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md).
+The lockbox (§3) waits for the first confidential OAuth client. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md).
 
 ---
 
@@ -145,11 +150,11 @@ export interface IdentityService {
 
 /** Structured, not prose — the Account app owns the words the user hears. */
 export type AuthOutcome =
-  | { ok: true; userId: string; issuedToken: { value: string; expiresAt: number } }
-  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" };
+  | { ok: true; userId: string }
+  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" | "registration-closed" };
 ```
 
-The host calls `resolve` once per request and sets a cookie when `issuedToken` comes back. The Account app calls `signIn` through `ctx.identity` and renders the outcome. Neither does the other's job.
+The host calls `resolve` once per request and sets a cookie when `issuedToken` comes back. The Account app calls `signIn` / `register` through `ctx.identity` (which returns `AuthOutcome` without the token) and renders the outcome. The HTTP layer owns `Set-Cookie`. Neither does the other's job. The service also exposes `changePassword`, which deletes every session row for that user and issues a new token.
 
 ---
 
@@ -206,7 +211,7 @@ Owned by the identity service (§6). Argon2id would be the first choice, but it 
 
 The concurrency cap is not optional bookkeeping: at 128 MiB and ~250 ms each, a few dozen simultaneous sign-in attempts are a memory and CPU exhaustion attack on their own. Rate limiting proper is deferred (§13), but the cap ships with the hashing because the hashing is what creates the exposure.
 
-**Registration stays gated** — behind a host config flag or an invite code — for as long as rate limiting and email verification are deferred (§13). This is not a new product decision; it is what "small known user base" in that deferral already assumes. Opening it is one config change once those land.
+**Registration is open by default.** Owner decision, August 2026: this product is not advertised, so anyone who finds it may register. There is no invite code. `allowRegistration` on the host (default `true`) can close it later without a schema change; closed registration returns `registration-closed`. Rate limiting and email verification remain deferred (§13).
 
 ### Approved delta to a locked behavior: secret input mode
 
@@ -346,27 +351,32 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
 - **Only apps the host allows receive `ctx.identity`** (today: the Account app). A third-party app must never be able to mint a session — this is the one capability that would be catastrophic to hand out by default.
 - Sign-out is the same capability, and it is what performs the row deletion §7 requires.
 
-### 11.4 The sign-in flow on screen — decided
+### 11.4 The sign-in flow on screen — landed
 
-**Owner decision, August 2026.** Sign-in reuses the action-edge status pattern exactly as Copy does. Nothing new is required in core.
+**Owner decision, August 2026.** Sign-in reuses the action-edge status pattern exactly as Copy does. Combined register / sign-in (one option, not two):
 
 ```text
-password input  --enter (action: true, passInputText)-->  "Signing in…"  (warm, shown immediately)
-                                                                │
-                                                                └── refresh(extras.action = true) → "Signed in as …"
-                                                                                                  or "That did not match."
+"Sign in or register"
+    --enter-->  email input (autocomplete=username)
+                    --enter (action, passInputText)-->  password input (secret, autocomplete=current-password)
+                                                          --enter (action, passInputText)-->  "Signing in…"  (warm)
+                                                                                                │
+                                                                                                └── refresh(action) → "You are signed in as …"
+                                                                                                                    or an error label
 ```
 
-Every property this needs is already contracted: a warm hit displays immediately and then refreshes; an action call is never aborted, retried, or coalesced; a same-id label change remounts once so the screen reader announces the new text in place; and a rapid double Done is naturally safe, because after the local move the tip is the status node and the trigger edge belonged to the input node.
+Typed email is stored against `ctx.sessionId` in `account_flow` (never in a node id, label, or URL). Authenticate tries `register`, then `signIn` on `email-taken`.
 
-This pattern is not cosmetic here. Hashing costs roughly a quarter second by design (§8), and longer when queued behind the concurrency cap, so the alternative to a status node is silence during the one operation users are most anxious about.
+Signed-in Account at `/`:
 
-Two details that are easy to miss:
+```text
+Settings (dead-end placeholder)  --next-->  Sign out  --enter (action)-->  "Signing out…"
+                                                                              └── "You are signed out."  (enter/back → Home)
+```
 
-- The status node returns **`location: null`**, so reloading does not land the user back on the action node.
-- The password arrives in `extras.inputText` on that action call. The host must **never log `/api` request bodies** — an obvious thing to add while debugging and an obvious thing to regret.
+Status nodes return `location: null`. Sign-out is an action to a status node whose enter/back are `app` edges to Home, which clears the client cache.
 
-What remains unsketched is the rest of the graph — register, sign out, "signed in as…", and the recovery paths — using the secret input mode from §8. Worth drawing before writing code, the same way Bible was.
+The password arrives in `extras.inputText` on that action call. The host never logs `/api` request bodies.
 
 ---
 
@@ -390,9 +400,9 @@ Recorded so these are decisions rather than oversights. None of them change the 
 
 | Deferred | Why it is safe for now | What makes it urgent |
 |----------|------------------------|----------------------|
-| **Rate limiting / brute-force protection** on sign-in | Small known user base, kept small by gated registration (§8); the §8 concurrency cap covers the memory-exhaustion half | Any public sign-up. Per-account throttling belongs to the identity service, per-IP to the HTTP layer. **CAPTCHA is not an option for this audience** — throttling and delays are the whole defense |
-| **Request body size limit** on `/api` | `readBody` buffers an unbounded body into memory today; harmless while the payload is a public KJV lookup | The first authenticated endpoint. Cheap to add with the host entry point |
-| **`Cache-Control: no-store` on `/api` responses** | Nothing user-specific is served yet | The first user-scoped response. Without it, shared caches and the browser may retain another user's text |
+| **Rate limiting / brute-force protection** on sign-in | Registration is open but the product is unadvertised; the §8 concurrency cap covers the memory-exhaustion half | Public discovery or abuse. Per-account throttling belongs to the identity service, per-IP to the HTTP layer. **CAPTCHA is not an option for this audience** |
+| **Request body size limit** on `/api` | **Landed** — 1 MiB in `server/readBody.ts` | — |
+| **`Cache-Control: no-store` on `/api` responses** | **Landed** on the session HTTP pipeline | — |
 | **Status channel** (busy vs dead-end vs failure) | Already a known gap in [`PREPAREDNESS.md`](PREPAREDNESS.md) | After §10, transport failure is the only silent case left — but it is still silent, and sign-in is when people notice |
 | **Password reset** | No reset flow means "contact the owner" for a small user base | It needs an email sender, which is a new dependency and a new cost. Budget it before sign-up is public |
 | **Email verification** | Same dependency as reset | Public sign-up, or anything that mails the user |

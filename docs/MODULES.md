@@ -297,7 +297,7 @@ onIntent(intent):
 
 - Render the current tip.
 - `showText(label)` for `kind: "text"` (default) — remount + focus a `role="application"` surface so NVDA / JAWS / VoiceOver pass arrow keys to the page. Set `aria-label` to the same string as the visible text: NVDA treats application as a named widget and otherwise announces only "application".
-- `showInput(initialText)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. Buttons activate on click only, never on focus.
+- `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
 - Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done).
@@ -462,6 +462,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | `rootBackToHome(rootId, rootAppId)` | `back` app edge to the root app |
 | `collectNeighborhood({ tipId, neighbors, payload, depth, maxNodes })` | Callback-driven walk → warm payloads + map fragment |
 | `buildMap(fragments)` | Assemble the nested `fromNodeId → intent → edge` structure |
+| `signedOut({ accountAppId, rootAppId, text })` | Complete `RefreshResult` for a signed-out user-scoped app |
 
 ### Non-goals
 
@@ -545,6 +546,23 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ---
 
+## 15b. App: Account (`id: "account"`)
+
+Ordinary `AppModule`. Credentials and sessions are **not** here — they live in `server/identity/`. The app receives `ctx.identity` only because the host grants it to this app id.
+
+### Signed out
+
+- Tip: **Sign in or register**. `enter` → email input (`autocomplete=username`). Email Done (`action` + `passInputText`) → password input (`secret`, `autocomplete=current-password`). Password Done (`action` + `passInputText`) → warm **Signing in…**, then **You are signed in as …** or an error.
+- Combined register then sign-in on `email-taken`. Email is stored against `sessionId` in `account_flow`, never in a node id, label, or URL.
+- Root `back` → Home.
+
+### Signed in
+
+- Tip: **Settings** (placeholder, no enter). `next` → **Sign out**. Sign-out `enter` is `action: true` to a status node; after the action, enter/back are `app` edges to Home (clears client cache).
+- Home lists this app as **Sign in** when `ctx.userId` is null and **Account** when it is set. Home does not hardcode the id; the host’s catalog callback relabels.
+
+---
+
 ## 16. Shell bootstrap
 
 **Path:** `src/shell/` + `main.ts`
@@ -552,7 +570,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 ### Responsibilities
 
 - Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
-- Construct registry; register remote stubs for Home and Bible (`createRemoteApp`). Notes is not registered in this slice.
+- Construct registry; register remote stubs for Home, Bible, and Account (`createRemoteApp`). Notes is not registered in this slice.
 - Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
@@ -569,7 +587,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | Item | Notes |
 |------|-------|
 | Browser Back/Forward vs session stack | Hashchange → `openLocation` is enough for MVP; deeper sync deferred |
-| Server session TTL / auth | App/backend; platform context seam reserved empty |
+| Server session TTL / auth | Landed on the host (identity service + Account). Not a client platform capability. See [`IDENTITY.md`](IDENTITY.md) |
 | Warm etags | Deferred |
 | aria-live assertive vs polite | **Settled:** neither — announce via focus only; no `aria-live` on the content surface (VoiceOver iOS double-speaks live+focus) |
 | Busy / dead-end / failure are indistinguishable to the user | Accepted for MVP; status channel deferred (review §6) |

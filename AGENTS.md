@@ -85,11 +85,12 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Concurrency | One monotonic transition token in Navigator decides what applies; tip-id comparison is not a staleness guard |
 | Ownership | Navigator owns every state transition; Router is a pure URL boundary |
 | Client vs server cache | Core owns client warm only; server cache/session behind apps |
-| MVP apps | Home + KJV Bible as server `AppModule`s reached via a generic client RPC stub. Notes exists in `src/apps/notes` but is not registered. |
+| MVP apps | Home + KJV Bible + Account as server `AppModule`s reached via a generic client RPC stub. Notes exists in `src/apps/notes` but is not registered. |
 | Identity ownership | A host-layer **identity service** owns credentials, hashing, sessions, and cookie → user resolution. The Account app owns only the screens, through `ctx.identity`, which the host grants per request to allowed apps only. See [`docs/IDENTITY.md`](docs/IDENTITY.md) §6 |
 | Signed out | `ctx.userId` is `null`; the request still reaches the app; the **app** decides what that means. No `401`, no core redirect, no host gate |
 | Sessions | One per visitor from the first `/api` call. Anonymous **session**, never an anonymous *user* id. Opaque token, only its hash stored, rotated on sign-in |
-| Auth/DB | Identity slice specified in [`docs/IDENTITY.md`](docs/IDENTITY.md) and not yet built; clipboard remains the only platform capability the client provides |
+| Auth/DB | Identity slice landed: SQLite, identity service, CSRF, Account app. Secret lockbox is not built. Clipboard remains the only platform capability the client provides |
+| Secret input | A `secret` flag on `kind: "input"` (not a new NodeKind). Display renders `type="password"` and honest `autocomplete` tokens. Leave path unchanged: Done → `enter`, Cancel → `back` |
 
 ## Mental model
 
@@ -100,11 +101,12 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 
 ## Cursor Cloud specific instructions
 
-Frontend SPA (Vanilla TS + Vite) plus a same-origin app host under `server/` (Home + Bible `open`/`refresh`). No database, environment variables, or secrets are needed to run, test, or build. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/ci.yml`).
+Frontend SPA (Vanilla TS + Vite) plus a same-origin app host under `server/` (Home + Bible + Account `open`/`refresh`). Tests use an in-memory SQLite database and need no environment variables or secrets. Dev and `npm start` create `data/nowisee.db` (gitignored) if `NOWISEE_DB` is unset. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/ci.yml`).
 
-- **Dev server:** `npm run dev` serves at `http://localhost:5173/`. POST `/api/apps/:id/open` and `/refresh` are served in-process. Production with server apps needs a Node host that serves the site and `/api` together.
+- **Dev server:** `npm run dev` serves at `http://localhost:5173/`. POST `/api/apps/:id/open` and `/refresh` are served in-process with CSRF, sessions, and SQLite.
+- **Production:** `npm run build && npm start` — `server/index.ts` serves `dist/` and `/api` together (`PORT`, optional `NOWISEE_ORIGIN`, `NOWISEE_DB`, `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`).
 - **Tests:** `npm test` (Vitest, node environment). `tests/navigator.test.ts` intentionally logs `Navigator: refresh/open failed Error: boom` to stderr while exercising the failure path — that stderr line is expected and does **not** mean the suite failed.
 - **Lint / typecheck:** there is no ESLint/Prettier. `npm run build` runs `tsc -p tsconfig.app.json --noEmit` and `tsc -p tsconfig.node.json --noEmit`, then `vite build`.
 - **Build:** the client bundle should **not** include KJV JSON (that file is loaded by the server host). A "chunks are larger than 500 kB" warning, if it still appears, is not an error.
 - **KJV data:** committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
-- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Tab and Escape stay unbound. Notes is not in the running catalog.
+- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Password nodes use a masked field. Tab and Escape stay unbound. Signed-out Home lists Bible, Sign in, and Help. Notes is not in the running catalog. Anyone may register.

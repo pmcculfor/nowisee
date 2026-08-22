@@ -1,28 +1,31 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, Plugin } from "vite";
 import type { KjvData } from "../src/apps/bible/types.ts";
-import type { AppRpc } from "../src/apps/rpc.ts";
-import { handleAppHttp, isAppApiUrl } from "./http.ts";
+import { createNowiseeHost, type NowiseeHost } from "./host.ts";
+import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
+import { handleSessionHttp, isAppApiUrl } from "./http.ts";
+import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
 export type NowiseeApiPluginOptions = {
   readonly kjv?: KjvData;
+  readonly dbPath?: string;
 };
 
 /**
  * Serves POST /api/apps/:id/open|refresh on the Vite dev and preview servers
  * so the SPA and the app host are same-origin.
- *
- * The Bible JSON is loaded on the first API request so Vitest startup does
- * not pay for KJV when tests inject their own host.
  */
 export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin {
-  let rpcPromise: Promise<AppRpc> | undefined;
+  let host: NowiseeHost | undefined;
 
-  function rpc(): Promise<AppRpc> {
-    rpcPromise ??= import("./host.ts").then((mod) =>
-      mod.createAppHost({ kjv: options.kjv }),
-    );
-    return rpcPromise;
+  function getHost(): NowiseeHost {
+    host ??= createNowiseeHost({
+      kjv: options.kjv,
+      db: options.dbPath ?? process.env.NOWISEE_DB ?? "data/nowisee.db",
+      scrypt: SCRYPT_PRODUCTION,
+      configuredOrigin: process.env.NOWISEE_ORIGIN,
+    });
+    return host;
   }
 
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
@@ -40,18 +43,24 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
       return;
     }
     try {
-      const raw = req.method === "POST" ? await readBody(req) : "";
+      const raw = req.method === "POST" ? await readLimitedBody(req) : "";
       let body: unknown;
       if (raw.length > 0) {
         body = JSON.parse(raw) as unknown;
       }
-      const out = await handleAppHttp(await rpc(), {
+      const out = await handleSessionHttp(getHost(), {
         method: req.method ?? "GET",
         url,
+        headers: req.headers,
         body,
+        encrypted: Boolean((req.socket as { encrypted?: boolean }).encrypted),
       });
-      writeJson(res, out.status, out.body);
-    } catch {
+      writeJson(res, out.status, out.body, out.headers);
+    } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        writeJson(res, 413, { error: "Request body too large" });
+        return;
+      }
       writeJson(res, 400, { error: "Invalid JSON" });
     }
   }
@@ -67,18 +76,24 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
   };
 }
 
-function writeJson(res: ServerResponse, status: number, body: unknown): void {
+function writeJson(
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  extraHeaders?: Readonly<Record<string, string>>,
+): void {
   const json = JSON.stringify(body);
   res.statusCode = status;
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  const headers = extraHeaders ?? {
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json; charset=utf-8",
+  };
+  for (const [key, value] of Object.entries(headers)) {
+    res.setHeader(key, value);
+  }
+  if (!res.getHeader("Content-Type")) {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  }
   res.setHeader("Content-Length", Buffer.byteLength(json));
   res.end(json);
-}
-
-async function readBody(req: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks).toString("utf8");
 }

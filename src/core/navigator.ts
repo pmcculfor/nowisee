@@ -272,7 +272,10 @@ export class Navigator {
       };
     }
     if (kind === "input") {
-      this.display.showInput(payload.label);
+      this.display.showInput(payload.label, {
+        secret: payload.secret,
+        autocomplete: payload.autocomplete,
+      });
     } else {
       this.display.showText(payload.label);
     }

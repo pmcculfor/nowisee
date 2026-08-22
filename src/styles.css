@@ -29,7 +29,8 @@ body {
 }
 
 #app [data-surface="text"],
-#app textarea[data-surface="input"] {
+#app textarea[data-surface="input"],
+#app input[data-surface="input"] {
   display: block;
   width: 100%;
   max-width: 40rem;
@@ -40,12 +41,18 @@ body {
   color: inherit;
 }
 
-#app textarea[data-surface="input"] {
+#app textarea[data-surface="input"],
+#app input[data-surface="input"] {
   min-height: 12rem;
   resize: vertical;
   outline: 2px solid #333;
   outline-offset: 4px;
   padding: 0.25rem 0;
+}
+
+#app input[data-surface="input"] {
+  min-height: 2.5rem;
+  resize: none;
 }
 
 #app [data-input-actions] {

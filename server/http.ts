@@ -1,6 +1,10 @@
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
 import type { StackEntry } from "../src/core/types.ts";
+import { readSessionToken, serializeSessionCookie } from "./cookie.ts";
+import { checkCsrf, expectedOriginFromRequest } from "./csrf.ts";
 import { AppNotFoundError } from "./errors.ts";
+import type { NowiseeHost } from "./host.ts";
+import type { CookieSlot } from "./identity/context.ts";
 
 export type AppHttpRequest = {
   readonly method: string;
@@ -11,7 +15,25 @@ export type AppHttpRequest = {
 export type AppHttpResponse = {
   readonly status: number;
   readonly body: unknown;
+  readonly headers?: Readonly<Record<string, string>>;
 };
+
+export type SessionHttpRequest = {
+  readonly method: string;
+  readonly url: string;
+  readonly headers: HeadersLike;
+  readonly body?: unknown;
+  readonly encrypted?: boolean;
+};
+
+export type HeadersLike = {
+  readonly [name: string]: string | string[] | undefined;
+};
+
+const API_HEADERS = {
+  "Cache-Control": "no-store",
+  "Content-Type": "application/json; charset=utf-8",
+} as const;
 
 const OPEN_RE = /^\/api\/apps\/([^/]+)\/open\/?$/;
 const REFRESH_RE = /^\/api\/apps\/([^/]+)\/refresh\/?$/;
@@ -168,4 +190,120 @@ function parseStack(
     stack.push({ nodeId: rec.nodeId, label: rec.label, location });
   }
   return { ok: true, stack };
+}
+
+/**
+ * Full /api pipeline: CSRF, session cookie, ctx, at most one Set-Cookie.
+ * Never logs the body — passwords arrive in extras.inputText.
+ */
+export async function handleSessionHttp(
+  host: NowiseeHost,
+  req: SessionHttpRequest,
+): Promise<AppHttpResponse> {
+  if (req.method !== "POST") {
+    return json(405, { error: "Method not allowed" });
+  }
+
+  const expectedOrigin = expectedOriginFromRequest({
+    host: header(req.headers, "host"),
+    forwardedProto: header(req.headers, "x-forwarded-proto"),
+    encrypted: req.encrypted === true,
+    configuredOrigin: host.configuredOrigin,
+  });
+  const csrf = checkCsrf({
+    contentType: header(req.headers, "content-type"),
+    origin: header(req.headers, "origin"),
+    expectedOrigin: expectedOrigin ?? "",
+  });
+  if (!csrf.ok) {
+    return json(403, { error: csrf.reason === "origin" ? "Invalid origin" : "Invalid content type" });
+  }
+
+  const path = (req.url.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
+  const token = readSessionToken(header(req.headers, "cookie"));
+  const slot: CookieSlot = {};
+
+  const openMatch = OPEN_RE.exec(path);
+  if (openMatch) {
+    const appId = decodeAppId(openMatch[1]!);
+    const parsed = parseOpenBody(req.body);
+    if (!parsed.ok) {
+      return json(400, { error: parsed.error });
+    }
+    return callHost(host, slot, () =>
+      host.dispatch("open", {
+        appId,
+        path: parsed.path,
+        extras: parsed.extras,
+        token,
+        slot,
+      }),
+    );
+  }
+
+  const refreshMatch = REFRESH_RE.exec(path);
+  if (refreshMatch) {
+    const appId = decodeAppId(refreshMatch[1]!);
+    const parsed = parseRefreshBody(req.body);
+    if (!parsed.ok) {
+      return json(400, { error: parsed.error });
+    }
+    return callHost(host, slot, () =>
+      host.dispatch("refresh", {
+        appId,
+        stack: parsed.stack,
+        extras: parsed.extras,
+        token,
+        slot,
+      }),
+    );
+  }
+
+  return json(404, { error: "Not found" });
+}
+
+async function callHost(
+  _host: NowiseeHost,
+  slot: CookieSlot,
+  run: () => Promise<unknown>,
+): Promise<AppHttpResponse> {
+  try {
+    const body = await run();
+    return json(200, body, cookieHeader(slot));
+  } catch (err) {
+    if (err instanceof AppNotFoundError) {
+      return json(404, { error: err.message }, cookieHeader(slot));
+    }
+    return json(500, { error: "App RPC failed" }, cookieHeader(slot));
+  }
+}
+
+function cookieHeader(slot: CookieSlot): Record<string, string> | undefined {
+  if (slot.issued === undefined) {
+    return undefined;
+  }
+  if (slot.issued === null) {
+    return { "Set-Cookie": serializeSessionCookie(null) };
+  }
+  return { "Set-Cookie": serializeSessionCookie(slot.issued.value, slot.issued.expiresAt) };
+}
+
+function json(
+  status: number,
+  body: unknown,
+  extraHeaders?: Record<string, string>,
+): AppHttpResponse {
+  return {
+    status,
+    body,
+    headers: { ...API_HEADERS, ...extraHeaders },
+  };
+}
+
+function header(headers: HeadersLike, name: string): string | undefined {
+  const value = headers[name] ?? headers[name.toLowerCase()];
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
 }

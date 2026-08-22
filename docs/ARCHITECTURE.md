@@ -23,6 +23,9 @@ export type StackBehavior = "push" | "replace" | "pop";
 
 export type NodeKind = "text" | "input";
 
+/** HTML autocomplete tokens Display may set on an input node. */
+export type InputAutocomplete = "off" | "username" | "current-password" | "new-password";
+
 /** Plain data — anything that survives being sent as a message. */
 export type JsonValue =
   | null
@@ -37,6 +40,10 @@ export interface NodePayload {
   id: string;
   label: string;
   kind?: NodeKind; // default "text"
+  /** When kind is "input": mask typed characters (`<input type="password">`). */
+  secret?: boolean;
+  /** When kind is "input": HTML autocomplete token. Default "off". */
+  autocomplete?: InputAutocomplete;
   /** App-private optional data; core ignores it but requires it to be plain data. */
   data?: JsonValue;
 }
@@ -164,20 +171,37 @@ export interface RefreshResult {
 export interface AppModule {
   id: string;
   label: string;
-  /**
-   * Resolve an app-local path and return an initial refresh
-   * (stack is reset by core as part of open).
-   * `path` is `AppLocation.path` — the portion this app owns.
-   */
-  open(path: string, extras?: RefreshExtras): Promise<RefreshResult> | RefreshResult;
-  /**
-   * Revalidate current stack tip; return map + warm + tip + location.
-   * Perform side effects only when `extras.action` is true.
-   */
+  open(
+    path: string,
+    extras?: RefreshExtras,
+    ctx?: AppServerContext,
+  ): Promise<RefreshResult> | RefreshResult;
   refresh(
     stack: readonly StackEntry[],
     extras?: RefreshExtras,
+    ctx?: AppServerContext,
   ): Promise<RefreshResult> | RefreshResult;
+}
+
+/**
+ * Server-only. Never serialized to the browser. `userId` comes only from
+ * the identity service resolving the session cookie.
+ */
+export interface AppServerContext {
+  readonly userId: string | null;
+  readonly sessionId: string;
+  readonly accountAppId: string;
+  readonly identity?: IdentityCapability;
+}
+
+export type AuthOutcome =
+  | { ok: true; userId: string }
+  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" | "registration-closed" };
+
+export interface IdentityCapability {
+  register(email: string, password: string): Promise<AuthOutcome>;
+  signIn(email: string, password: string): Promise<AuthOutcome>;
+  signOut(): Promise<void>;
 }
 ```
 
@@ -235,7 +259,7 @@ This is a discipline, not a sandbox. Nothing here builds isolation; it only avoi
 |-----------------|----------|
 | `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities, busy |
 | `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk) |
-| `src/apps/` | `home`, `bible`, `mail` (and later `notes`) as `AppModule`s |
+| `src/apps/` | `home`, `bible`, `account` (and later `mail` / `notes`) as `AppModule`s |
 | `src/shell/` | Bootstrap: config, register apps, mount display, wire keyboard |
 
 **Smell test:** If a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app—not in core. If every session would break unless Navigator runs it, it belongs in core.
@@ -291,7 +315,7 @@ export interface ShellConfig {
 ### Display
 
 - Text node: show `label` in one focusable `role="application"` surface (`tabindex="-1"`, `aria-label` = the label). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS). The accessible name is required: NVDA will not read the text content of an unnamed application.
-- Input node: show a multiline `<textarea>` seeded from the label, plus Cancel (`back`) and Done (`enter`) after it in DOM order. Activate on click only. Hide NavPads while this surface is up.
+- Input node: show a multiline `<textarea>` seeded from the label, plus Cancel (`back`) and Done (`enter`) after it in DOM order. When `secret` is set, show `<input type="password">` instead, with honest `autocomplete` (`username`, `current-password`, `new-password`). Activate on click only. Hide NavPads while this surface is up.
 
 ### Keyboard
 
