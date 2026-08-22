@@ -17,9 +17,10 @@
 
 1. **Home** — lists enabled apps; links to each by URL.
 2. **Bible** — King James Version (public domain): Testament → book → chapter → verse → options (e.g. Copy, Commentary stub); search can be added as ordinary nodes.
-3. **Demo mail** — fake inbox, sample emails, compose stub (not real Gmail/OAuth).
+3. **Account** — sign in / register / sign out. Credentials live in the identity service, not in this app.
+4. **Notes** — per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
 
-**Later apps (must fit the same contracts with no core special cases):** e.g. **Notes** (create, list, open, edit).
+**Later apps (must fit the same contracts with no core special cases):** e.g. **Mail** (real Gmail/OAuth).
 
 **Long-term:** many apps; possibly third-party apps and an in-product App Store. Core must never special-case product names.
 
@@ -197,11 +198,11 @@ Copy is `clipboardText` on the result; core writes the clipboard. Durable storag
 
 ### 4.14 Auth / database
 
-Not in MVP. Clipboard is the only platform capability provided now (§4.10). Auth, durable storage, and shared login arrive later on that same seam — still no app-named core repositories.
+Identity and per-app SQLite have landed. Clipboard is still the only platform capability the **client** provides. Auth lives on the host identity service; each app opens its own database. See [`IDENTITY.md`](IDENTITY.md) and [`STORAGE.md`](STORAGE.md).
 
 ### 4.15 MVP scope
 
-Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned future app, not MVP.
+Home + real KJV Bible + Notes + Account. No real Gmail.
 
 ---
 
@@ -227,7 +228,7 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 1. Persist handoff + adversarial locks in-repo — **this revision**.
 2. Scaffold core + app kit + Home/Bible/Mail modules.
 3. Accessibility pass (SR + keyboard).
-4. Later: persistence, auth, real mail, notes, App Store groundwork; browser Back/Forward policy.
+4. Later: real mail, App Store groundwork; browser Back/Forward policy.
 
 ---
 
@@ -240,7 +241,7 @@ Home + real KJV Bible + basic demo mail. No real Gmail. Notes is a planned futur
 - Browser Back/Forward vs session stack (narrow core item later)
 - Server session TTL, cache keys, auth provider
 - Warm etag/hash protocol
-- Real auth, DB, real mail, commentary sources, notes storage
+- Real mail, commentary sources
 
 Deferred with a known cost, each recorded in [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) with the argument for and against:
 

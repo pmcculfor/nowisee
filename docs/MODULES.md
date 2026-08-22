@@ -530,20 +530,25 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ## 15. App: Notes (`id: "notes"`)
 
-### Responsibilities
+Ordinary server `AppModule`. Persistence is `NotesStore` on Notes' own SQLite file (`data/apps/notes.db`). Every store method takes `ownerId` (`ctx.userId`); the host does not inject the store. See [`STORAGE.md`](STORAGE.md).
 
-- Portable `AppModule` — list / create / edit via text + input nodes only.
+### Signed out
+
+`ctx.userId` is null. Tip: **Sign in to use Notes.** `enter` → `app` edge to `ctx.accountAppId`. `back` → Home. No notes are listed or created. Ownership is never `sessionId`.
+
+### Signed in
+
+- Open `/`: tip is the most recently edited note if any, otherwise **Create a note**. Prev from that first note reaches Create. Create has no prev; the oldest note has no next (no wrap).
 - List order: **Create a note**, then notes sorted by `updatedAt` descending.
-- Open `/`: tip is the first note if any, otherwise Create. Prev from the first note reaches Create.
 - List tips show the **first line** of each note body (empty → “Empty note”).
 - Enter on Create or a note → input tip with the full body (multiline field). **Done** (`enter`) commits with `passInputText` + `action: true`; **Cancel** (`back`) returns to the list/create node without saving.
 - Side effects (create/update) run **only** when `extras.action` is true.
+- Resolve stack node ids with the owner in the query. A note the user does not own is the default list tip, not a confirmation that it exists.
 - Root list tips: `back` is an `app` edge to Home.
-- Persistence behind `NotesStore` (memory / localStorage adapters in-repo; **not registered**). When Notes ships on the server it will open its own SQLite file and pass `ownerId` on every method — see [`STORAGE.md`](STORAGE.md). Schema today: `id`, `body`, `createdAt`, `updatedAt`.
 
 ### Non-goals
 
-- Per-user auth, shared multi-device sync, rich text, folders.
+- Shared multi-device sync beyond this server file, rich text, folders, delete.
 
 ---
 
@@ -571,7 +576,7 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 ### Responsibilities
 
 - Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
-- Construct registry; register remote stubs for Home, Bible, and Account (`createRemoteApp`). Notes is not registered in this slice.
+- Construct registry; register remote stubs for Home, Bible, Notes, and Account (`createRemoteApp`).
 - Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.

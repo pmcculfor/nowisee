@@ -8,14 +8,20 @@ function host() {
 }
 
 describe("app host", () => {
-  it("opens Home listing Bible and not Notes", async () => {
+  it("opens Home listing Bible, Notes, and Account", async () => {
     const result = await host().open("home", "/", {});
     expect(result.warm.map((n) => n.label)).toEqual([
       "Bible",
+      "Notes",
       "Account",
       expect.stringContaining("Help."),
     ]);
     expect(result.node.label).toBe("Bible");
+  });
+
+  it("opens Notes signed-out as a sign-in node", async () => {
+    const result = await host().open("notes", "/", {});
+    expect(result.node.label).toBe("Sign in to use Notes.");
   });
 
   it("opens a Bible verse", async () => {
@@ -50,7 +56,7 @@ describe("app HTTP", () => {
   it("unknown app is 404", async () => {
     const out = await handleAppHttp(host(), {
       method: "POST",
-      url: "/api/apps/notes/open",
+      url: "/api/apps/mail/open",
       body: { path: "/" },
     });
     expect(out.status).toBe(404);

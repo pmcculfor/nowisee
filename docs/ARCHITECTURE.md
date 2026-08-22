@@ -253,7 +253,7 @@ This is a discipline, not a sandbox. Nothing here builds isolation; it only avoi
 |-----------------|----------|
 | `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities, busy |
 | `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk) |
-| `src/apps/` | `home`, `bible`, `account` (and later `mail` / `notes`) as `AppModule`s |
+| `src/apps/` | `home`, `bible`, `notes`, `account` (and later `mail`) as `AppModule`s |
 | `src/shell/` | Bootstrap: config, register apps, mount display, wire keyboard |
 
 **Smell test:** If a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app—not in core. If every session would break unless Navigator runs it, it belongs in core.

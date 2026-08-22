@@ -21,6 +21,7 @@ describe("shell bootstrap", () => {
     expect(shell.registry.listEnabled()).toEqual([
       { id: "home", label: "Home" },
       { id: "bible", label: "Bible" },
+      { id: "notes", label: "Notes" },
       { id: "account", label: "Account" },
     ]);
     expect(mount.textContent).toContain("Bible");

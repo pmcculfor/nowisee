@@ -4,9 +4,11 @@ import {
   inputEdges,
   rootBackToHome,
   siblingListEdges,
+  signedOut,
 } from "../../app-kit/index.ts";
 import type {
   AppLocation,
+  AppServerContext,
   NavigationMap,
   NodePayload,
   RefreshExtras,
@@ -31,31 +33,50 @@ export type NotesViewDeps = {
 };
 
 const CREATE_LABEL = "Create a note";
+const SIGNED_OUT_TEXT = "Sign in to use Notes.";
 
 /**
- * Build the full list + edit graph for the current store contents.
+ * Build the full list + edit graph for the current owner's notes.
  */
 export async function buildNotesView(
   deps: NotesViewDeps,
   tipId: string,
   extras: RefreshExtras = {},
+  ctx?: AppServerContext,
 ): Promise<RefreshResult> {
-  // Side effects only on the action traversal that committed input text.
-  if (extras.action) {
-    return applyAction(deps, tipId, extras);
+  const ownerId = ctx?.userId ?? null;
+  if (!ownerId) {
+    return signedOutNotes(deps, ctx);
   }
 
-  const notes = await deps.store.list();
+  if (extras.action) {
+    return applyAction(deps, ownerId, tipId, extras);
+  }
+
+  const notes = await deps.store.list(ownerId);
   return viewFromNotes(deps, notes, tipId);
 }
 
 export async function openNotesPath(
   deps: NotesViewDeps,
   path: string,
+  ctx?: AppServerContext,
 ): Promise<RefreshResult> {
-  const notes = await deps.store.list();
+  const ownerId = ctx?.userId ?? null;
+  if (!ownerId) {
+    return signedOutNotes(deps, ctx);
+  }
+  const notes = await deps.store.list(ownerId);
   const tipId = tipIdForPath(path, notes);
   return viewFromNotes(deps, notes, tipId);
+}
+
+function signedOutNotes(deps: NotesViewDeps, ctx: AppServerContext | undefined): RefreshResult {
+  return signedOut({
+    accountAppId: ctx?.accountAppId ?? deps.rootAppId,
+    rootAppId: deps.rootAppId,
+    text: SIGNED_OUT_TEXT,
+  });
 }
 
 function tipIdForPath(path: string, notes: readonly NoteRecord[]): string {
@@ -100,25 +121,26 @@ function defaultListTip(notes: readonly NoteRecord[]): string {
 
 async function applyAction(
   deps: NotesViewDeps,
+  ownerId: string,
   tipId: string,
   extras: RefreshExtras,
 ): Promise<RefreshResult> {
   if (extras.inputText === undefined) {
-    const notes = await deps.store.list();
+    const notes = await deps.store.list(ownerId);
     return viewFromNotes(deps, notes, tipId);
   }
   const text = extras.inputText;
 
   if (tipId === CREATE_RESULT_NODE_ID) {
-    const created = await deps.store.create(text);
-    const notes = await deps.store.list();
+    const created = await deps.store.create(ownerId, text);
+    const notes = await deps.store.list(ownerId);
     return viewFromNotes(deps, notes, noteNodeId(created.id));
   }
 
   const noteId = parseNoteNodeId(tipId);
   if (noteId) {
-    const updated = await deps.store.update(noteId, text);
-    const notes = await deps.store.list();
+    const updated = await deps.store.update(ownerId, noteId, text);
+    const notes = await deps.store.list(ownerId);
     return viewFromNotes(
       deps,
       notes,
@@ -126,7 +148,7 @@ async function applyAction(
     );
   }
 
-  const notes = await deps.store.list();
+  const notes = await deps.store.list(ownerId);
   return viewFromNotes(deps, notes, defaultListTip(notes));
 }
 
