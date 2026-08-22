@@ -234,6 +234,7 @@ describe("Account app", () => {
     const home = opened.body as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
       "Bible",
+      "Notes",
       "Account",
       expect.stringContaining("Help."),
     ]);

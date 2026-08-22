@@ -31,7 +31,7 @@ export type StartShellOptions = {
 
 /**
  * Bootstrap the shell. Core never names a product app — `rootAppId` comes from config.
- * Home, Bible, and Account are remote stubs; Notes is not registered in this slice.
+ * Home, Bible, Notes, and Account are remote stubs.
  */
 export function startShell(
   mount: HTMLElement,
@@ -46,6 +46,7 @@ export function startShell(
   const registry = new AppRegistry();
   registry.register(createRemoteApp({ id: "home", label: "Home", rpc }));
   registry.register(createRemoteApp({ id: "bible", label: "Bible", rpc }));
+  registry.register(createRemoteApp({ id: "notes", label: "Notes", rpc }));
   registry.register(createRemoteApp({ id: "account", label: "Account", rpc }));
 
   mount.replaceChildren();

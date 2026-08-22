@@ -1,6 +1,6 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Identity slice **landed** (August 2026). Home, Bible, and Account run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). The secret lockbox is **not** built. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Home, Bible, Notes, and Account run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). The secret lockbox is **not** built. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
 
 **Owner deltas applied in this slice**
 
@@ -19,7 +19,7 @@
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**Landed:** Home, Bible, and Account run on the server. Notes is **not registered** (code can stay in the repo; the running app does not load it). Still not built: secret lockbox.
+**Landed:** Home, Bible, Notes, and Account run on the server. Still not built: secret lockbox.
 
 ---
 
@@ -77,7 +77,7 @@ Encryption at rest (plain picture): the database stores scrambled bytes. A **mas
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
 1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
-2. **Database.** `server/db/` — host identity only (`001_identity.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Account and Bible open their own files.
+2. **Database.** `server/db/` — host identity only (`001_identity.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Account, Bible, and Notes open their own files.
 3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
@@ -118,7 +118,7 @@ Two reasons it cannot live inside the Account app:
 
 ### The Account app is still not special
 
-This is the shape a domain store already established: the app owns the graph and the wording, a store the **app** opens owns persistence. Notes will own `NotesStore` (not `localStorage`, not the host `Db`). Bible owns `BibleStore` and its SQLite file. Home does not own the registry. Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
+This is the shape a domain store already established: the app owns the graph and the wording, a store the **app** opens owns persistence. Notes owns `NotesStore` (not `localStorage`, not the host `Db`). Bible owns `BibleStore` and its SQLite file. Home does not own the registry. Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
 
 The only asymmetry is a host config list naming which app ids receive `ctx.identity`. That is data, it belongs to the host, and it generalizes: the same mechanism governs the lockbox (§3) and, later, per-capability permissions for third-party apps. Building it now for one app brings a planned mechanism forward instead of carving out a special case.
 
@@ -298,7 +298,7 @@ Home is **not special here**. Like every app it receives `ctx.userId`: `null` wh
 
 The only core-side consequence is plumbing: the catalog callback currently takes no arguments and the host builds Home **once at startup**, so it must become per-request (or take the user) once `ctx` exists. Nothing about this belongs in core, and there is no host-level "requires a signed-in user" flag — that was an earlier idea, dropped with the decision above.
 
-Not needed for the first slice. Signed-out Home listing Bible, Account, and Help is enough to ship. The host does not rewrite any app's catalog label.
+Not needed for the first slice. Signed-out Home listing Bible, Notes, Account, and Help is enough to ship. The host does not rewrite any app's catalog label.
 
 ---
 
@@ -408,7 +408,7 @@ Recorded so these are decisions rather than oversights. None of them change the 
 | **Status channel** (busy vs dead-end vs failure) | Already a known gap in [`PREPAREDNESS.md`](PREPAREDNESS.md) | After §10, transport failure is the only silent case left — but it is still silent, and sign-in is when people notice |
 | **Password reset** | No reset flow means "contact the owner" for a small user base | It needs an email sender, which is a new dependency and a new cost. Budget it before sign-up is public |
 | **Email verification** | Same dependency as reset | Public sign-up, or anything that mails the user |
-| **Account deletion and data export** | No user data exists yet | Real users in a real jurisdiction |
+| **Account deletion and data export** | Notes exist but the user base is still private | Real users in a real jurisdiction |
 | **Server-held stacks** | Explored and set aside; see [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §13 | Untrusted third-party apps, or cross-device continuity |
 
 ---
@@ -419,5 +419,5 @@ Landed. Kept for context.
 
 - Generic client stub: `open` / `refresh` POST to `/api/apps/:appId/…` with plain JSON (stack, path, `inputText`, `action`). Abort cancels the fetch.
 - Apps return `clipboardText` when Copy should happen. Core writes the device clipboard. No fake clipboard on the server.
-- Client registers only generic remote stubs (`home`, `bible`). Notes is not in the running catalog.
+- Client registers only generic remote stubs (`home`, `bible`, `notes`, `account`).
 - Browser bootstrap does not bundle `kjv.json`. The Bible app loads and seeds it. The same Bible and Home modules are unit-tested in-process (that is not a second product path).
