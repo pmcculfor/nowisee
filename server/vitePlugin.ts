@@ -1,13 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, Plugin } from "vite";
-import type { KjvData } from "../src/apps/bible/types.ts";
 import { createNowiseeHost, type NowiseeHost } from "./host.ts";
 import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
 export type NowiseeApiPluginOptions = {
-  readonly kjv?: KjvData;
   readonly dbPath?: string;
 };
 
@@ -20,7 +18,6 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
 
   function getHost(): NowiseeHost {
     host ??= createNowiseeHost({
-      kjv: options.kjv,
       db: options.dbPath ?? process.env.NOWISEE_DB ?? "data/nowisee.db",
       scrypt: SCRYPT_PRODUCTION,
       configuredOrigin: process.env.NOWISEE_ORIGIN,

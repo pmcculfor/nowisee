@@ -9,7 +9,7 @@ const ORIGIN = "http://localhost:5173";
 
 function host(): NowiseeHost {
   return createNowiseeHost({
-    kjv: fixtureKjv,
+    bibleSeed: fixtureKjv,
     scrypt: SCRYPT_TEST,
     configuredOrigin: ORIGIN,
   });

@@ -1,6 +1,6 @@
 # Nowisee — architecture contracts
 
-Precise interfaces for the MVP and beyond. Behavior locks: [`SPEC.md`](SPEC.md). Module responsibilities: [`MODULES.md`](MODULES.md). Review history and open items: [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md). Do not put product names in core types.
+Precise interfaces for the MVP and beyond. Behavior locks: [`SPEC.md`](SPEC.md). Module responsibilities: [`MODULES.md`](MODULES.md). Persistence: [`STORAGE.md`](STORAGE.md). Review history and open items: [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md). Do not put product names in core types.
 
 ---
 
@@ -126,12 +126,6 @@ export interface PlatformContext {
    */
   readonly clipboard?: {
     writeText(text: string): Promise<void>;
-  };
-  /** Per-app namespaced durable storage. Not provided in MVP. */
-  readonly storage?: {
-    get(key: string): Promise<JsonValue | null>;
-    set(key: string, value: JsonValue): Promise<void>;
-    remove(key: string): Promise<void>;
   };
   /** Screen-reader-only status text. Does not move the tip. Not provided in MVP. */
   readonly announce?: (text: string) => void;

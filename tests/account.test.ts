@@ -10,7 +10,7 @@ const ORIGIN = "http://localhost:5173";
 
 function makeHost(extra?: { extraApps?: AppModule[]; identityAppIds?: string[] }): NowiseeHost {
   return createNowiseeHost({
-    kjv: fixtureKjv,
+    bibleSeed: fixtureKjv,
     scrypt: SCRYPT_TEST,
     configuredOrigin: ORIGIN,
     extraApps: extra?.extraApps,

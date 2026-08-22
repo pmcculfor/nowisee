@@ -1,0 +1,82 @@
+# Nowisee — data storage
+
+**Status:** App-owned databases landed (August 2026). Identity stays on the host. The secret lockbox is **not** built. Product locks: [`SPEC.md`](SPEC.md). Identity: [`IDENTITY.md`](IDENTITY.md).
+
+Core never sees a database. There is no `ctx.db`. There is no client `platform.storage`.
+
+## Four kinds of durable data
+
+| Kind | Example | Lives in | Owner | Scoped by |
+|------|---------|----------|-------|-----------|
+| **Identity** | email, password hash, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
+| **Secrets** | OAuth tokens (later) | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
+| **App data** | verses, account flow, later notes | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
+| **Large user files** | attachments (later) | Files next to that app's data, not the host db | That app (HTTP upload may pass through the host) | Owner on the metadata row |
+
+Not this layer: the client warm cache (tab-lifetime) and anything in a `RefreshResult` (plain JSON the user is meant to hear).
+
+## Who opens which file
+
+The host opens **only** the identity database ([`server/db/`](../server/db/)). It registers apps; it does not pass them a `Db` or a corpus.
+
+Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a library (`openSqlite`) — WAL, foreign keys, busy timeout, numbered migrations for *that* path. Third-party apps do not have to use it.
+
+| Database | Default path | Migrations |
+|----------|----------------|------------|
+| Host identity | `data/nowisee.db` | [`server/db/migrations/001_identity.sql`](../server/db/migrations/001_identity.sql) |
+| Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/) |
+| Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/) |
+| Notes | not registered | still the in-app `NotesStore` (local/memory); SQLite when that slice lands |
+
+Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account and Bible memory files so tests do not write `data/`.
+
+`ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, later `lockbox`). Never a database.
+
+## App-owned schemas
+
+Apps own columns, indexes, and when they read or write. Migrations are numbered files next to that app; never edit an applied file.
+
+**Owner in the query, every time** for user data — [`IDENTITY.md`](IDENTITY.md) §9. `ctx.userId` from the cookie only. Missing or other-user → "not found."
+
+**Do not put in an app database:** passwords (identity), OAuth tokens (lockbox), huge binaries (files).
+
+**Do not invent a host-wide KV.** `NotesStore` (when Notes is registered) stays Notes' own interface; the host does not inject it.
+
+## Bible
+
+Bible talks to a [`BibleStore`](../src/apps/bible/store.ts), not to JSON arrays in the view. Production opens `data/apps/bible.db` and seeds KJV from [`src/apps/bible/data/kjv.json`](../src/apps/bible/data/kjv.json) if the versions table is empty. The host does not import that file. The client bundle still must not contain it.
+
+Lookup is **version + book + chapter + verse**. KJV is the first `versions` row (`id = kjv`). Later translations are more rows in the same tables. The screens talk to a `BibleStore` interface; [`startBibleApp`](../src/apps/bible/store.ts) opens the file (Node-only). The graph module does not import SQLite.
+
+Paths are `/{version}/…` (e.g. `/kjv/Matthew/5/3`). Node ids include the version.
+
+Tables reserved for later, unused now:
+
+- `bookmarks` — `owner_kind` (`user` or `session`) + `owner_id` + verse ref
+- `commentaries` / `commentary_notes`
+- `search_queries` (keyed by `session_id`) / `search_hits`
+
+Graph stubs (not implemented): at the testament list, **Bookmarks** and **Search** after New Testament; on a verse menu, **Bookmark** between Copy and Commentary. Entering a stub says it is not available yet.
+
+## Secrets lockbox (specified, not built)
+
+[`IDENTITY.md`](IDENTITY.md) §3. Host database, host master key, `ctx.lockbox` for allowed apps only. Not a place for note bodies or files.
+
+## Attachments (path only)
+
+Bytes do not travel through `open` / `refresh` (JSON, 1 MiB cap). When attach exists: the HTTP layer may accept an upload (cookie + CSRF); the **app** stores the file next to its own data. No new `NodeKind` in this slice.
+
+## Transfer
+
+1. App ↔ its store (BibleStore, AccountFlowStore, later NotesStore).
+2. Host engine swap: [`server/db/index.ts`](../server/db/index.ts) for identity only.
+3. Account export / deletion: still deferred ([`IDENTITY.md`](IDENTITY.md) §13).
+4. No app-to-app `SELECT`.
+
+## Anti-patterns
+
+- `ctx.db` or the host constructing an app store from the host `Db`
+- One `nowisee.db` with every app's tables
+- Client `platform.storage` for durable app data
+- Putting KJV in the host process as a host-owned corpus
+- Resolving user records by id without `owner_id` in the query

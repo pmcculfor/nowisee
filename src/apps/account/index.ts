@@ -12,9 +12,12 @@ import { openAccount, refreshAccount, type AccountViewDeps } from "./view.ts";
 export type AccountAppDeps = {
   readonly rootAppId: string;
   readonly flow: AccountFlowStore;
+  readonly close?: () => void;
 };
 
-export function createAccountApp(deps: AccountAppDeps): AppModule {
+export type AccountApp = AppModule & { close(): void };
+
+export function createAccountApp(deps: AccountAppDeps): AccountApp {
   const viewDeps: AccountViewDeps = {
     rootAppId: deps.rootAppId,
     flow: deps.flow,
@@ -32,6 +35,9 @@ export function createAccountApp(deps: AccountAppDeps): AppModule {
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
       return refreshAccount(viewDeps, stack, extras, ctx);
+    },
+    close() {
+      deps.close?.();
     },
   };
 }

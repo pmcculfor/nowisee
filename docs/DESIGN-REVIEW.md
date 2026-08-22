@@ -216,6 +216,8 @@ export interface PlatformContext {
 }
 ```
 
+`storage` was later **removed** from the live `PlatformContext`. Durable data is app-owned SQLite on the server ([`STORAGE.md`](STORAGE.md)), not a client KV. `announce` and `requestRefresh` remain reserved and unimplemented.
+
 `requestRefresh` deserves attention on its own merits, independent of sandboxing: today the screen can only change when the user presses a key. Mail, notifications, and any live data source eventually need a way to say "the text on the current node changed". Reserving the capability costs nothing; retrofitting a push channel onto a pull-only protocol does not.
 
 ---
@@ -385,7 +387,7 @@ These are genuinely additive and will not force a refactor, provided the items a
 |------|----------------------|
 | Optional `init` / `dispose` lifecycle hooks on `AppModule` | Optional methods are backward-compatible additions. |
 | Telemetry / structured logging | A single core event hook can be added at the Navigator choke point later. |
-| IndexedDB, service worker, offline | Sits behind the `storage` capability from §5. |
+| IndexedDB, service worker, offline | Client cache is still tab-lifetime. Durable data is server-side per [`STORAGE.md`](STORAGE.md); do not revive `platform.storage` for that. |
 | Real auth and databases | No longer open-ended: specified in [`IDENTITY.md`](IDENTITY.md) (sessions, CSRF, password hashing, SQLite, lockbox, and the server-only context argument that carries the verified user). Its §11 lists what that slice defers on purpose. Note the outcome differs from the `platform` seam guess here — identity is a **server host** concern, not a client capability. |
 | Browser Back/Forward ↔ session stack | Contained inside Router once Router is a pure boundary (§9). |
 | Per-user enabled apps, lazy app loading, App Store UI | Registry-level concerns; unaffected by the core protocol. |

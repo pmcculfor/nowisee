@@ -5,7 +5,7 @@
  *
  * Environment:
  *   PORT              listen port (default 3000)
- *   NOWISEE_DB        SQLite file path (default data/nowisee.db)
+ *   NOWISEE_DB        host identity SQLite file (default data/nowisee.db)
  *   NOWISEE_ORIGIN    public origin for CSRF, e.g. https://example.com
  *   NOWISEE_TLS_CERT  optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
  *   NOWISEE_TLS_KEY   optional PEM path

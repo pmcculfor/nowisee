@@ -20,5 +20,6 @@
     "rootDir": ".",
     "types": []
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/apps/bible/store.ts", "src/apps/account/store.ts"]
 }

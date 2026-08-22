@@ -404,7 +404,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 **Path:** `src/core/platform.ts`
 
-Apps are not handed a live clipboard. Copy text is `clipboardText` on the refresh result. Core still owns the browser clipboard write (user-activation) and fills it from that string. `PlatformContext` remains the seam for later capabilities (`storage`, `identity`). Keeping those operations out of app code is what leaves the door open to running an app on a server.
+Apps are not handed a live clipboard. Copy text is `clipboardText` on the refresh result. Core still owns the browser clipboard write (user-activation) and fills it from that string. `PlatformContext` remains the seam for later capabilities (`announce`, `requestRefresh`). Identity is a **server** capability on `ctx`, not a client platform member.
 
 ### Responsibilities
 
@@ -439,7 +439,7 @@ Where the browser supports a promise-valued `ClipboardItem`, core hands that pro
 
 ### Non-goals (MVP)
 
-- `storage`, `announce`, `requestRefresh` — declared in the type, **not provided in MVP**.
+- `announce`, `requestRefresh` — declared in the type, **not provided in MVP**.
 - Per-app permissions or capability grants (arrives with third-party apps).
 - Any product-specific capability. Everything here is a browser or platform primitive.
 
@@ -494,8 +494,8 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ### Responsibilities
 
-- Own KJV data (static JSON or equivalent).
-- Graph: Testament → book → chapter → verse → option nodes (Copy, Commentary stub).
+- Own Bible data via `BibleStore` (SQLite, version + book + chapter + verse). Seed KJV from JSON on first open of an empty Bible file.
+- Graph: version root headings (Old Testament, New Testament, Bookmarks stub, Search stub) → book → chapter → verse → option nodes (Copy, Bookmark stub, Commentary stub).
 - Book lists and chapter lists wrap at the ends; verse `next` / `prev` join adjacent chapters (last verse → first of next chapter, and the reverse).
 - Chapter labels are `N (chapter)` (number first); verse labels are `N. text` only. Copy still writes `Book C:V. text`.
 - Chapter → verse uses `replace` (not `push`) so cross-chapter verse joins keep a clean stack; verse `back` replaces to that verse’s chapter.
@@ -503,7 +503,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - After open, user builds in-app stack via `push` / `replace` edges; `back` = `pop` or chapter `replace` within bible; root `back` = `app` edge to the root app.
 - Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) returns `clipboardText` (the line `Book C:V. text`) and “Copied”, or an error label with no `clipboardText`. Core writes the clipboard. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
 - Warm + map: use app kit neighborhood helper or hand-built edges for nearby books/chapters/verses as appropriate.
-- Search (optional/later): input node → results list as normal nodes in warm/map; client warm holds the hit list.
+- Search and bookmarks: headings and verse-menu options exist as stubs ("not available yet"). Schema already has `bookmarks`, `search_queries` / `search_hits` (session-scoped), and commentary tables. Do not implement those features in this module's current slice.
 
 ### Domain-only
 
@@ -539,7 +539,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Enter on Create or a note → input tip with the full body (multiline field). **Done** (`enter`) commits with `passInputText` + `action: true`; **Cancel** (`back`) returns to the list/create node without saving.
 - Side effects (create/update) run **only** when `extras.action` is true.
 - Root list tips: `back` is an `app` edge to Home.
-- Persistence behind an injected `NotesStore` (shell wires localStorage for MVP). Schema carries `id`, `body`, `createdAt`, `updatedAt` — no owner yet; swap the store for a DB/API later without core changes.
+- Persistence behind `NotesStore` (memory / localStorage adapters in-repo; **not registered**). When Notes ships on the server it will open its own SQLite file and pass `ownerId` on every method — see [`STORAGE.md`](STORAGE.md). Schema today: `id`, `body`, `createdAt`, `updatedAt`.
 
 ### Non-goals
 
@@ -597,7 +597,7 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 | Contract versioning + unknown-value fallbacks | Deferred until third-party apps (review §11) |
 | Validating / bounding app responses | Deferred; first-party apps only (review §12) |
 | Actual sandboxing (worker / iframe / server apps) | Deferred; §10 keeps the boundary message-shaped so it stays possible (review §5) |
-| `platform.storage` / `announce` / `requestRefresh` | Declared, not provided in MVP |
+| `announce` / `requestRefresh` | Declared, not provided in MVP |
 | Home URL canonical form | `#/` canonical; `#/<rootAppId>` may alias |
 
 ---

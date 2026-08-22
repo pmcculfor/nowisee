@@ -1,7 +1,6 @@
-import { createAccountApp } from "../src/apps/account/index.ts";
-import { createBibleApp } from "../src/apps/bible/index.ts";
+import { startAccountApp } from "../src/apps/account/store.ts";
+import { startBibleApp } from "../src/apps/bible/store.ts";
 import type { KjvData } from "../src/apps/bible/types.ts";
-import kjvJson from "../src/apps/bible/data/kjv.json" with { type: "json" };
 import { createHomeApp } from "../src/apps/home.ts";
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
 import { AppRegistry } from "../src/core/registry.ts";
@@ -12,7 +11,6 @@ import type {
   RefreshResult,
   StackEntry,
 } from "../src/core/types.ts";
-import { createAccountFlowStore } from "./accountFlow.ts";
 import type { Db } from "./db/index.ts";
 import { openDatabase } from "./db/index.ts";
 import { AppNotFoundError } from "./errors.ts";
@@ -23,8 +21,11 @@ import { createIdentityService, type IdentityService } from "./identity/service.
 export type AppHostOptions = {
   readonly rootAppId?: string;
   readonly accountAppId?: string;
-  readonly kjv?: KjvData;
-  /** Open database, or a file path. Default `:memory:`. */
+  /** Seed Bible's own database (tests). Production seeds from bundled KJV on first open. */
+  readonly bibleSeed?: KjvData;
+  readonly bibleDb?: string;
+  readonly accountDb?: string;
+  /** Host identity database, or a file path. Default `:memory:`. */
   readonly db?: Db | string;
   readonly allowRegistration?: boolean;
   readonly identityAppIds?: readonly string[];
@@ -86,7 +87,16 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     hashConcurrency: options.hashConcurrency,
     allowRegistration: options.allowRegistration,
   });
-  const flow = createAccountFlowStore(db);
+
+  const bible = startBibleApp({
+    rootAppId,
+    dbPath: options.bibleDb ?? defaultAppDbPath(options.db, "bible"),
+    seed: options.bibleSeed,
+  });
+  const account = startAccountApp({
+    rootAppId,
+    dbPath: options.accountDb ?? defaultAppDbPath(options.db, "account"),
+  });
 
   const registry = new AppRegistry();
   registry.register(
@@ -95,18 +105,8 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       rootAppId,
     }),
   );
-  registry.register(
-    createBibleApp({
-      rootAppId,
-      data: options.kjv ?? (kjvJson as KjvData),
-    }),
-  );
-  registry.register(
-    createAccountApp({
-      rootAppId,
-      flow,
-    }),
-  );
+  registry.register(bible);
+  registry.register(account);
   for (const extra of options.extraApps ?? []) {
     registry.register(extra);
   }
@@ -162,6 +162,8 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       return app.refresh(args.stack ?? [], toRefreshExtras(args.extras), ctx);
     },
     close() {
+      bible.close();
+      account.close();
       db.close();
     },
   };
@@ -197,6 +199,16 @@ function resolveDb(db: Db | string | undefined): Db {
     return db;
   }
   return openDatabase({ path: typeof db === "string" ? db : ":memory:" });
+}
+
+function defaultAppDbPath(hostDb: Db | string | undefined, appId: string): string {
+  if (hostDb && typeof hostDb === "object") {
+    return ":memory:";
+  }
+  if (hostDb === undefined || hostDb === ":memory:") {
+    return ":memory:";
+  }
+  return `data/apps/${appId}.db`;
 }
 
 function toRefreshExtras(extras: WireExtras): RefreshExtras {
