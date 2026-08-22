@@ -6,7 +6,6 @@ import { createHomeApp } from "../src/apps/home.ts";
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
 import { AppRegistry } from "../src/core/registry.ts";
 import type {
-  AppDescriptor,
   AppModule,
   AppServerContext,
   RefreshExtras,
@@ -92,7 +91,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const registry = new AppRegistry();
   registry.register(
     createHomeApp({
-      listEnabled: (userId) => catalogFor(registry, accountAppId, userId ?? null),
+      listEnabled: () => registry.listEnabled(),
       rootAppId,
     }),
   );
@@ -179,19 +178,6 @@ export function createAppHost(options: AppHostOptions = {}): AppRpc {
       return host.refresh(appId, stack, extras);
     },
   };
-}
-
-function catalogFor(
-  registry: AppRegistry,
-  accountAppId: string,
-  userId: string | null,
-): AppDescriptor[] {
-  return registry.listEnabled().map((app) => {
-    if (app.id !== accountAppId) {
-      return app;
-    }
-    return { id: app.id, label: userId ? "Account" : "Sign in" };
-  });
 }
 
 async function invoke(

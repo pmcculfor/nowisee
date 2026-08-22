@@ -298,7 +298,7 @@ Home is **not special here**. Like every app it receives `ctx.userId`: `null` wh
 
 The only core-side consequence is plumbing: the catalog callback currently takes no arguments and the host builds Home **once at startup**, so it must become per-request (or take the user) once `ctx` exists. Nothing about this belongs in core, and there is no host-level "requires a signed-in user" flag — that was an earlier idea, dropped with the decision above.
 
-Not needed for the first slice. Signed-out Home listing Bible, Help, and Sign in is enough to ship.
+Not needed for the first slice. Signed-out Home listing Bible, Account, and Help is enough to ship. The host does not rewrite any app's catalog label.
 
 ---
 

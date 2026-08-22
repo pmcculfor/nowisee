@@ -223,7 +223,7 @@ describe("Account app", () => {
     expect(seen[0]?.userId).toBeNull();
   });
 
-  it("Home lists Sign in when signed out and Account when signed in", async () => {
+  it("Home lists Account by its registered label when signed out", async () => {
     h = makeHost();
     const opened = await handleSessionHttp(h, {
       method: "POST",
@@ -234,7 +234,7 @@ describe("Account app", () => {
     const home = opened.body as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
       "Bible",
-      "Sign in",
+      "Account",
       expect.stringContaining("Help."),
     ]);
   });

@@ -12,7 +12,7 @@ describe("app host", () => {
     const result = await host().open("home", "/", {});
     expect(result.warm.map((n) => n.label)).toEqual([
       "Bible",
-      "Sign in",
+      "Account",
       expect.stringContaining("Help."),
     ]);
     expect(result.node.label).toBe("Bible");

@@ -485,7 +485,8 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 ### Must not
 
 - Embed other apps’ internal node ids.
-- Special-case Bible/Mail beyond registry labels/ids for URL construction.
+- Special-case Bible/Mail/Account beyond registry labels/ids for URL construction.
+- Rewrite a peer app’s catalog label. Home shows `AppDescriptor.label` as registered.
 
 ---
 
@@ -559,7 +560,7 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 ### Signed in
 
 - Tip: **Settings** (placeholder, no enter). `next` → **Sign out**. Sign-out `enter` is `action: true` to a status node; after the action, enter/back are `app` edges to Home (clears client cache).
-- Home lists this app as **Sign in** when `ctx.userId` is null and **Account** when it is set. Home does not hardcode the id; the host’s catalog callback relabels.
+- Home lists this app as **Account**, the same registered label as every other app, signed in or out. The host does not rewrite catalog labels.
 
 ---
 

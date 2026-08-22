@@ -61,6 +61,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - Core learning what "signed in" means: no `401` branch, no account app id in core, no shell-wide sign-in redirect. A signed-out user reaches the app like anyone else, and the app answers with an ordinary node
 - Splitting authentication between the host and the Account app. One identity service owns credentials, hashing, and sessions; the Account app owns only the screens over it, through an injected capability — the same shape as `NotesStore`
 - The host calling an app in order to authenticate a request. The dependency runs Account app → identity service, never the reverse
+- Host or Home rewriting one app's catalog label (e.g. Account → "Sign in"). Home lists each app's registered `label`; screen wording stays inside that app
 
 ## Locked behaviors (do not change without owner approval)
 
@@ -109,4 +110,4 @@ Frontend SPA (Vanilla TS + Vite) plus a same-origin app host under `server/` (Ho
 - **Lint / typecheck:** there is no ESLint/Prettier. `npm run build` runs `tsc -p tsconfig.app.json --noEmit` and `tsc -p tsconfig.node.json --noEmit`, then `vite build`.
 - **Build:** the client bundle should **not** include KJV JSON (that file is loaded by the server host). A "chunks are larger than 500 kB" warning, if it still appears, is not an error.
 - **KJV data:** committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
-- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Password nodes use a masked field. Tab and Escape stay unbound. Signed-out Home lists Bible, Sign in, and Help. Notes is not in the running catalog. Anyone may register.
+- **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Password nodes use a masked field. Tab and Escape stay unbound. Home lists Bible, Account, and Help. Notes is not in the running catalog. Anyone may register.
