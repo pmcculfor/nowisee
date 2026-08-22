@@ -1,83 +1,125 @@
-import type { BibleRef, TestamentId } from "./types.ts";
+import type { BibleRef, TestamentId, VerseOption } from "./types.ts";
 
-export function testamentId(testament: TestamentId): string {
-  return `bible:t:${testament}`;
+export function testamentId(version: string, testament: TestamentId): string {
+  return `bible:t:${version}:${testament}`;
 }
 
-export function bookId(book: string): string {
-  return `bible:b:${book}`;
+export function bookmarksId(): string {
+  return "bible:bookmarks";
 }
 
-export function chapterId(book: string, chapter: number): string {
-  return `bible:c:${book}:${chapter}`;
+export function searchId(): string {
+  return "bible:search";
+}
+
+export function bookmarksStubId(): string {
+  return "bible:stub:bookmarks";
+}
+
+export function searchStubId(): string {
+  return "bible:stub:search";
+}
+
+export function bookId(version: string, book: string): string {
+  return `bible:b:${version}:${book}`;
+}
+
+export function chapterId(version: string, book: string, chapter: number): string {
+  return `bible:c:${version}:${book}:${chapter}`;
 }
 
 export function verseId(ref: BibleRef): string {
-  return `bible:v:${ref.book}:${ref.chapter}:${ref.verse}`;
+  return `bible:v:${ref.version}:${ref.book}:${ref.chapter}:${ref.verse}`;
 }
 
-export function optionId(ref: BibleRef, option: "copy" | "commentary"): string {
-  return `bible:o:${ref.book}:${ref.chapter}:${ref.verse}:${option}`;
+export function optionId(ref: BibleRef, option: VerseOption): string {
+  return `bible:o:${ref.version}:${ref.book}:${ref.chapter}:${ref.verse}:${option}`;
 }
 
 export function copyStatusId(ref: BibleRef): string {
-  return `bible:s:${ref.book}:${ref.chapter}:${ref.verse}:copy`;
+  return `bible:s:${ref.version}:${ref.book}:${ref.chapter}:${ref.verse}:copy`;
 }
 
 export function commentaryId(ref: BibleRef): string {
-  return `bible:n:${ref.book}:${ref.chapter}:${ref.verse}:commentary`;
+  return `bible:n:${ref.version}:${ref.book}:${ref.chapter}:${ref.verse}:commentary`;
+}
+
+export function bookmarkStubId(ref: BibleRef): string {
+  return `bible:n:${ref.version}:${ref.book}:${ref.chapter}:${ref.verse}:bookmark`;
 }
 
 export type ParsedNode =
-  | { kind: "testament"; testament: TestamentId }
-  | { kind: "book"; book: string }
-  | { kind: "chapter"; book: string; chapter: number }
+  | { kind: "testament"; version: string; testament: TestamentId }
+  | { kind: "bookmarks" }
+  | { kind: "search" }
+  | { kind: "bookmarks-stub" }
+  | { kind: "search-stub" }
+  | { kind: "book"; version: string; book: string }
+  | { kind: "chapter"; version: string; book: string; chapter: number }
   | { kind: "verse"; ref: BibleRef }
-  | { kind: "option"; ref: BibleRef; option: "copy" | "commentary" }
+  | { kind: "option"; ref: BibleRef; option: VerseOption }
   | { kind: "copy-status"; ref: BibleRef }
-  | { kind: "commentary"; ref: BibleRef };
+  | { kind: "commentary"; ref: BibleRef }
+  | { kind: "bookmark"; ref: BibleRef };
+
+const VERSION_BOOK = "([^:]+):(.+)";
+const REF = "([^:]+):(.+):(\\d+):(\\d+)";
 
 export function parseNodeId(id: string): ParsedNode | null {
-  const t = /^bible:t:(OT|NT)$/.exec(id);
+  if (id === bookmarksId()) {
+    return { kind: "bookmarks" };
+  }
+  if (id === searchId()) {
+    return { kind: "search" };
+  }
+  if (id === bookmarksStubId()) {
+    return { kind: "bookmarks-stub" };
+  }
+  if (id === searchStubId()) {
+    return { kind: "search-stub" };
+  }
+
+  const t = /^bible:t:([^:]+):(OT|NT)$/.exec(id);
   if (t) {
-    return { kind: "testament", testament: t[1] as TestamentId };
+    return { kind: "testament", version: t[1]!, testament: t[2] as TestamentId };
   }
-  const b = /^bible:b:(.+)$/.exec(id);
+  const b = new RegExp(`^bible:b:${VERSION_BOOK}$`).exec(id);
   if (b) {
-    return { kind: "book", book: b[1]! };
+    return { kind: "book", version: b[1]!, book: b[2]! };
   }
-  const c = /^bible:c:(.+):(\d+)$/.exec(id);
+  const c = new RegExp(`^bible:c:${VERSION_BOOK}:(\\d+)$`).exec(id);
   if (c) {
-    return { kind: "chapter", book: c[1]!, chapter: Number(c[2]) };
+    return { kind: "chapter", version: c[1]!, book: c[2]!, chapter: Number(c[3]) };
   }
-  const v = /^bible:v:(.+):(\d+):(\d+)$/.exec(id);
+  const v = new RegExp(`^bible:v:${REF}$`).exec(id);
   if (v) {
-    return {
-      kind: "verse",
-      ref: { book: v[1]!, chapter: Number(v[2]), verse: Number(v[3]) },
-    };
+    return { kind: "verse", ref: refFrom(v) };
   }
-  const o = /^bible:o:(.+):(\d+):(\d+):(copy|commentary)$/.exec(id);
+  const o = new RegExp(`^bible:o:${REF}:(copy|bookmark|commentary)$`).exec(id);
   if (o) {
     return {
       kind: "option",
-      ref: { book: o[1]!, chapter: Number(o[2]), verse: Number(o[3]) },
-      option: o[4] as "copy" | "commentary",
+      ref: refFrom(o),
+      option: o[5] as VerseOption,
     };
   }
-  const s = /^bible:s:(.+):(\d+):(\d+):copy$/.exec(id);
+  const s = new RegExp(`^bible:s:${REF}:copy$`).exec(id);
   if (s) {
-    return {
-      kind: "copy-status",
-      ref: { book: s[1]!, chapter: Number(s[2]), verse: Number(s[3]) },
-    };
+    return { kind: "copy-status", ref: refFrom(s) };
   }
-  const n = /^bible:n:(.+):(\d+):(\d+):commentary$/.exec(id);
+  const n = new RegExp(`^bible:n:${REF}:(commentary|bookmark)$`).exec(id);
   if (n) {
-    return {
-      kind: "commentary",
-      ref: { book: n[1]!, chapter: Number(n[2]), verse: Number(n[3]) },
-    };
+    const ref = refFrom(n);
+    return n[5] === "bookmark" ? { kind: "bookmark", ref } : { kind: "commentary", ref };
   }
   return null;
+}
+
+function refFrom(match: RegExpExecArray): BibleRef {
+  return {
+    version: match[1]!,
+    book: match[2]!,
+    chapter: Number(match[3]),
+    verse: Number(match[4]),
+  };
 }

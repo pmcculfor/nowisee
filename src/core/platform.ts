@@ -45,7 +45,7 @@ function deferred<T>(): Deferred<T> {
 
 /**
  * Owns the action-scoped clipboard write channel.
- * storage / announce / requestRefresh are declared on PlatformContext but not provided.
+ * announce / requestRefresh are declared on PlatformContext but not provided.
  */
 export class PlatformCapabilities {
   private readonly clipboardHost: ClipboardHost | null;

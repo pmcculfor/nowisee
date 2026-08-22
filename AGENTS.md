@@ -1,6 +1,6 @@
 # Nowisee — agent guide
 
-This file is binding for anyone (human or agent) working on Nowisee. Product detail lives in [`docs/SPEC.md`](docs/SPEC.md). Interface contracts live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Module responsibilities live in [`docs/MODULES.md`](docs/MODULES.md). Review findings, accepted deltas, and deliberate deferrals live in [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md).
+This file is binding for anyone (human or agent) working on Nowisee. Product detail lives in [`docs/SPEC.md`](docs/SPEC.md). Interface contracts live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Module responsibilities live in [`docs/MODULES.md`](docs/MODULES.md). How data is stored lives in [`docs/STORAGE.md`](docs/STORAGE.md). Review findings, accepted deltas, and deliberate deferrals live in [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md).
 
 ## Product in one paragraph
 
@@ -18,11 +18,11 @@ Nowisee is an accessibility-first website for blind and keyboard/screen-reader-p
 | Layer | Role |
 |-------|------|
 | **Core** | Client shell. Router (URL ↔ location only), per-app stack, navigation-map store, client warm cache, display, keyboard binding table, registry, busy/errors. Talks to apps only via `open` / `refresh`. |
-| **Server host** | Runs `AppModule`s off-device and owns everything the browser must not: HTTP boundary and its CSRF checks, the database and migrations, the secret lockbox, and an **identity service** module that owns credentials, sessions, and cookie → user resolution. Calls apps through the same `open` / `refresh`, adding a server-only context argument. It resolves who the user is; it does **not** gate apps on being signed in — each app decides what signed-out means. Not core, not an app. See [`docs/IDENTITY.md`](docs/IDENTITY.md). |
+| **Server host** | Runs `AppModule`s off-device and owns everything the browser must not: HTTP boundary and its CSRF checks, the **host** database (identity, sessions, future lockbox), and an **identity service** that owns credentials, sessions, and cookie → user resolution. It does not open app databases or inject corpora. Calls apps through `open` / `refresh` with a server-only context (`userId`, capabilities). It resolves who the user is; it does **not** gate apps on being signed in. Not core, not an app. See [`docs/IDENTITY.md`](docs/IDENTITY.md) and [`docs/STORAGE.md`](docs/STORAGE.md). |
 | **App kit** | Optional helpers apps *import* (edge builders, list edges, input edges, optional neighborhood warm walk). Navigator never calls these automatically. |
 | **App domain** | That app’s data, queries, graph shape, side effects, URLs. |
 
-If any answer is “only Bible / mail / notes / our first apps,” it does **not** belong in core. Prefer app kit for shared boilerplate; keep domain logic in the app. Anything the page must never see — secrets, session lookup, raw database access — belongs to the server host, and reaches an app as plain data on the context argument.
+If any answer is “only Bible / mail / notes / our first apps,” it does **not** belong in core. Prefer app kit for shared boilerplate; keep domain logic in the app. Anything the page must never see — secrets, session lookup — belongs to the server host or to that app's own server store, and reaches an app as plain data (or a granted capability) on the context argument. There is no `ctx.db`.
 
 ## Genericity checklist (before anything enters core)
 
@@ -62,6 +62,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - Splitting authentication between the host and the Account app. One identity service owns credentials, hashing, and sessions; the Account app owns only the screens over it, through an injected capability — the same shape as `NotesStore`
 - The host calling an app in order to authenticate a request. The dependency runs Account app → identity service, never the reverse
 - Host or Home rewriting one app's catalog label (e.g. Account → "Sign in"). Home lists each app's registered `label`; screen wording stays inside that app
+- The host opening an app's database or injecting a corpus (KJV JSON, a `Db`, a store built from the host file). Apps open their own files. See [`docs/STORAGE.md`](docs/STORAGE.md)
 
 ## Locked behaviors (do not change without owner approval)
 
@@ -90,24 +91,24 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Identity ownership | A host-layer **identity service** owns credentials, hashing, sessions, and cookie → user resolution. The Account app owns only the screens, through `ctx.identity`, which the host grants per request to allowed apps only. See [`docs/IDENTITY.md`](docs/IDENTITY.md) §6 |
 | Signed out | `ctx.userId` is `null`; the request still reaches the app; the **app** decides what that means. No `401`, no core redirect, no host gate |
 | Sessions | One per visitor from the first `/api` call. Anonymous **session**, never an anonymous *user* id. Opaque token, only its hash stored, rotated on sign-in |
-| Auth/DB | Identity slice landed: SQLite, identity service, CSRF, Account app. Secret lockbox is not built. Clipboard remains the only platform capability the client provides |
+| Auth/DB | Identity on the host SQLite file; each app opens its own database. Secret lockbox is not built. Clipboard remains the only platform capability the client provides. See [`docs/STORAGE.md`](docs/STORAGE.md) |
 | Secret input | A `secret` flag on `kind: "input"` (not a new NodeKind). Display renders `type="password"` and honest `autocomplete` tokens. Leave path unchanged: Done → `enter`, Cancel → `back` |
 
 ## Mental model
 
 - **Core** = shell for a text-node browser (keys, stack, map, cache, registry, display, router).
 - **Apps** = authorities that answer `open` / `refresh` with navigation maps and warm nodes.
-- **Server host** = where apps run and where anything the page must not hold lives (sessions, database, secrets).
+- **Server host** = HTTP, CSRF, identity/sessions, and granted capabilities. App data lives in that app's own database.
 - When unsure, push knowledge into the app (or optional app kit); keep core smaller.
 
 ## Cursor Cloud specific instructions
 
-Frontend SPA (Vanilla TS + Vite) plus a same-origin app host under `server/` (Home + Bible + Account `open`/`refresh`). Tests use an in-memory SQLite database and need no environment variables or secrets. Dev and `npm start` create `data/nowisee.db` (gitignored) if `NOWISEE_DB` is unset. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/ci.yml`).
+Frontend SPA (Vanilla TS + Vite) plus a same-origin app host under `server/` (Home + Bible + Account `open`/`refresh`). Tests use in-memory SQLite databases and need no environment variables or secrets. Dev and `npm start` create `data/nowisee.db` (host identity) and `data/apps/*.db` (gitignored) if those paths are unset. Commands live in `package.json`; Node 22 is expected (matches `.github/workflows/ci.yml`).
 
 - **Dev server:** `npm run dev` serves at `http://localhost:5173/`. POST `/api/apps/:id/open` and `/refresh` are served in-process with CSRF, sessions, and SQLite.
 - **Production:** `npm run build && npm start` — `server/index.ts` serves `dist/` and `/api` together (`PORT`, optional `NOWISEE_ORIGIN`, `NOWISEE_DB`, `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`).
 - **Tests:** `npm test` (Vitest, node environment). `tests/navigator.test.ts` intentionally logs `Navigator: refresh/open failed Error: boom` to stderr while exercising the failure path — that stderr line is expected and does **not** mean the suite failed.
 - **Lint / typecheck:** there is no ESLint/Prettier. `npm run build` runs `tsc -p tsconfig.app.json --noEmit` and `tsc -p tsconfig.node.json --noEmit`, then `vite build`.
-- **Build:** the client bundle should **not** include KJV JSON (that file is loaded by the server host). A "chunks are larger than 500 kB" warning, if it still appears, is not an error.
-- **KJV data:** committed at `src/apps/bible/data/kjv.json`. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
+- **Build:** the client bundle should **not** include KJV JSON (that file is loaded by the Bible app on the server). A "chunks are larger than 500 kB" warning, if it still appears, is not an error.
+- **KJV data:** committed at `src/apps/bible/data/kjv.json` and seeded into Bible's SQLite on first use. `scripts/prepare-kjv.mjs` is a one-off regeneration step that reads the gitignored `public/data/kjv.raw.json`; it is **not** needed for dev/test/build.
 - **Navigating the running app:** on a text node, the arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter = newline) and activate **Done** (`enter`) or **Cancel** (`back`). Password nodes use a masked field. Tab and Escape stay unbound. Home lists Bible, Account, and Help. Notes is not in the running catalog. Anyone may register.

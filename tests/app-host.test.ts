@@ -4,7 +4,7 @@ import { handleAppHttp } from "../server/http.ts";
 import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 function host() {
-  return createAppHost({ kjv: fixtureKjv, rootAppId: "home" });
+  return createAppHost({ bibleSeed: fixtureKjv, rootAppId: "home" });
 }
 
 describe("app host", () => {
@@ -27,7 +27,7 @@ describe("app host", () => {
   it("Copy action returns clipboardText without needing a clipboard on extras", async () => {
     const result = await host().refresh(
       "bible",
-      [{ nodeId: "bible:s:Genesis:1:1:copy", label: "Copying…", location: null }],
+      [{ nodeId: "bible:s:kjv:Genesis:1:1:copy", label: "Copying…", location: null }],
       { action: true },
     );
     expect(result.node.label).toBe("Copied");

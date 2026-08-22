@@ -1,88 +1,31 @@
 /**
- * The only module that talks to SQLite.
- * Identity, Account flow, and later app tables all go through here so a
- * driver swap (better-sqlite3, D1, …) is one file.
+ * Host identity database. Apps do not use this file — they open their own
+ * SQLite via `openSqlite` in server/sqlite.ts.
  */
 
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { applyMigrations } from "./migrate.ts";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { openSqlite, type Db, type RunResult, type SqlValue } from "../sqlite.ts";
 
-export type SqlValue = null | number | string | Uint8Array | bigint;
+export type { Db, RunResult, SqlValue };
 
-export type RunResult = {
-  readonly changes: number | bigint;
-  readonly lastInsertRowid: number | bigint;
+const HOST_MIGRATIONS = {
+  dir: join(dirname(fileURLToPath(import.meta.url)), "migrations"),
+  files: ["001_identity.sql"] as const,
 };
 
-export interface Db {
-  exec(sql: string): void;
-  run(sql: string, ...params: SqlValue[]): RunResult;
-  get<T>(sql: string, ...params: SqlValue[]): T | undefined;
-  all<T>(sql: string, ...params: SqlValue[]): T[];
-  transaction<T>(fn: () => T): T;
-  close(): void;
-}
-
 export type OpenDatabaseOptions = {
-  /** File path, or ":memory:". */
   readonly path: string;
-  /** Skip numbered migrations (tests that apply their own schema). */
+  /** Skip host identity migrations (tests that apply their own schema). */
   readonly migrate?: boolean;
 };
 
-const BUSY_TIMEOUT_MS = 5000;
-
 export function openDatabase(options: OpenDatabaseOptions): Db {
-  if (options.path !== ":memory:") {
-    mkdirSync(dirname(options.path), { recursive: true });
+  if (options.migrate === false) {
+    return openSqlite({ path: options.path });
   }
-  const raw = new DatabaseSync(options.path);
-  raw.exec("PRAGMA journal_mode = WAL");
-  raw.exec("PRAGMA foreign_keys = ON");
-  raw.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
-
-  const db: Db = {
-    exec(sql) {
-      raw.exec(sql);
-    },
-    run(sql, ...params) {
-      const result = raw.prepare(sql).run(...params);
-      return { changes: result.changes, lastInsertRowid: result.lastInsertRowid };
-    },
-    get<T>(sql: string, ...params: SqlValue[]) {
-      return raw.prepare(sql).get(...params) as T | undefined;
-    },
-    all<T>(sql: string, ...params: SqlValue[]) {
-      return raw.prepare(sql).all(...params) as T[];
-    },
-    transaction<T>(fn: () => T): T {
-      raw.exec("BEGIN");
-      try {
-        const value = fn();
-        raw.exec("COMMIT");
-        return value;
-      } catch (err) {
-        try {
-          raw.exec("ROLLBACK");
-        } catch {
-          // Connection may already be aborted.
-        }
-        throw err;
-      }
-    },
-    close() {
-      try {
-        raw.close();
-      } catch {
-        // already closed
-      }
-    },
-  };
-
-  if (options.migrate !== false) {
-    applyMigrations(db);
-  }
-  return db;
+  return openSqlite({
+    path: options.path,
+    migrations: HOST_MIGRATIONS,
+  });
 }

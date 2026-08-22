@@ -81,7 +81,7 @@ describe("owner-scoped stack ids", () => {
       "CREATE TABLE vault_items (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, body TEXT NOT NULL)",
     );
     h = createNowiseeHost({
-      kjv: fixtureKjv,
+      bibleSeed: fixtureKjv,
       db: ctxDb,
       scrypt: SCRYPT_TEST,
       configuredOrigin: ORIGIN,

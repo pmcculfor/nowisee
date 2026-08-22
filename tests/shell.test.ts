@@ -14,7 +14,7 @@ describe("shell bootstrap", () => {
 
     const shell = startShell(mount, {
       config: { rootAppId: "home" },
-      rpc: createAppHost({ kjv: fixtureKjv, rootAppId: "home" }),
+      rpc: createAppHost({ bibleSeed: fixtureKjv, rootAppId: "home" }),
     });
     await shell.navigator.openLocation({ appId: "home", path: "/" });
 

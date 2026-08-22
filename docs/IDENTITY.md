@@ -1,6 +1,6 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Identity slice **landed** (August 2026). Home, Bible, and Account run on the server host. SQLite (`node:sqlite`), the identity service, CSRF, session cookies, and the Account app are implemented as specified below. The secret lockbox is **not** built. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Home, Bible, and Account run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). The secret lockbox is **not** built. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
 
 **Owner deltas applied in this slice**
 
@@ -66,8 +66,8 @@ Encryption at rest (plain picture): the database stores scrambled bytes. A **mas
 
 ## 4. Data and hosting
 
-- **Bible slice (landed):** no login, no SQLite. KJV stays a JSON file next to the server.
-- **Identity slice (landed):** one SQLite database (`node:sqlite`), `users` / `sessions` / `account_flow` tables. Runtime details in §12.
+- **Bible slice (landed):** no login on the host. KJV is seeded into Bible's own SQLite (`data/apps/bible.db`) from JSON next to the Bible app. The host does not import that file.
+- **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
 - Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy.
 
 ---
@@ -77,7 +77,7 @@ Encryption at rest (plain picture): the database stores scrambled bytes. A **mas
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
 1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
-2. **Database.** `server/db/` — `node:sqlite`, WAL, foreign_keys, busy_timeout, numbered migrations (`001_identity.sql`, `002_account_flow.sql`).
+2. **Database.** `server/db/` — host identity only (`001_identity.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Account and Bible open their own files.
 3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
@@ -109,7 +109,7 @@ The split needs one distinction: **identity** — can this request prove it belo
 
 ### The identity service is not an app
 
-It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-layer module** (`server/identity/`) that the host constructs and wires — the same way the host constructs the KJV data and hands it to Bible today.
+It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-layer module** (`server/identity/`) that the host constructs and wires — the same way the host grants `ctx.identity` to Account and does not open Account's database.
 
 Two reasons it cannot live inside the Account app:
 
@@ -118,7 +118,7 @@ Two reasons it cannot live inside the Account app:
 
 ### The Account app is still not special
 
-This is the shape `NotesStore` already established: the app owns the graph and the wording, an injected service owns the mechanism and the persistence. Notes does not own `localStorage`, Bible does not own the KJV file, Home does not own the registry, and Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
+This is the shape a domain store already established: the app owns the graph and the wording, a store the **app** opens owns persistence. Notes will own `NotesStore` (not `localStorage`, not the host `Db`). Bible owns `BibleStore` and its SQLite file. Home does not own the registry. Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
 
 The only asymmetry is a host config list naming which app ids receive `ctx.identity`. That is data, it belongs to the host, and it generalizes: the same mechanism governs the lockbox (§3) and, later, per-capability permissions for third-party apps. Building it now for one app brings a planned mechanism forward instead of carving out a special case.
 
@@ -346,7 +346,7 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
 
 **How the HTTP layer learns a token was issued.** The host constructs `ctx.identity` **per request**, bound to that request's `sessionId` and to a pending-cookie slot the HTTP layer owns. Whenever the service issues or clears a token — anonymous creation, sign-in rotation, sign-out — it records that in the slot. After the app returns, successfully or not, the HTTP layer reads the slot and emits at most one `Set-Cookie`. Building the capability per request also means an app cannot stash it for later and cannot act for a different session.
 
-- This does not break the app boundary. The plain-data rule governs payloads; `PlatformContext` already sanctions method-bearing capabilities (`clipboard.writeText`, `storage.get`). Because the call is already async, a future worker or sandbox host turns it into a message round-trip with no contract change.
+- This does not break the app boundary. The plain-data rule governs payloads; `PlatformContext` already sanctions method-bearing capabilities (`clipboard.writeText`). Because the call is already async, a future worker or sandbox host turns it into a message round-trip with no contract change.
 - The app never sees a password hash, never writes the `sessions` table, and never names a `userId` it was not handed. Credentials in, structured outcome out.
 - **Only apps the host allows receive `ctx.identity`** (today: the Account app). A third-party app must never be able to mint a session — this is the one capability that would be catastrophic to hand out by default.
 - Sign-out is the same capability, and it is what performs the row deletion §7 requires.
@@ -367,7 +367,7 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
                                                                                                                                 └── failure → "Sign-in was unsuccessful."  (enter/back → pop to the password input)
 ```
 
-Typed email is stored against `ctx.sessionId` in `account_flow` (never in a node id, label, or URL). Authenticate tries `register`, then `signIn` on `email-taken`. Failed auth, including a password that is too short to register, is one unsuccessful message — the Account app does not teach password rules on this screen. Failure `pop`s so the stack still has a single password input.
+Typed email is stored against `ctx.sessionId` in Account's `account_flow` table (never in a node id, label, or URL). Authenticate tries `register`, then `signIn` on `email-taken`. Failed auth, including a password that is too short to register, is one unsuccessful message — the Account app does not teach password rules on this screen. Failure `pop`s so the stack still has a single password input.
 
 Signed-in Account at `/`:
 
@@ -387,12 +387,12 @@ The password arrives in `extras.inputText` on that action call. The host never l
 | Choice | Value |
 |--------|-------|
 | Driver | Built-in `node:sqlite`. Unflagged since Node 22.13 and CI already pins Node 22, so this keeps the zero-runtime-dependency property |
-| Caveat | Still marked experimental in Node 22. Keep **all** database access behind one small host module so swapping to `better-sqlite3` is a one-file change, and pin the Node major in CI and in production |
+| Caveat | Still marked experimental in Node 22. Keep driver wrapping in [`server/sqlite.ts`](../server/sqlite.ts) so swapping to `better-sqlite3` is one library file, and pin the Node major in CI and in production |
 | Journal mode | WAL |
 | Pragmas | `foreign_keys = ON`, a `busy_timeout` |
-| Schema changes | A numbered migration runner — a `migrations` table plus ordered files, applied in a transaction at boot. Not scattered `CREATE TABLE IF NOT EXISTS` |
+| Schema changes | A numbered migration runner per database — a `migrations` table plus ordered files, applied in a transaction when *that* file is opened. Not scattered `CREATE TABLE IF NOT EXISTS` |
 | Backups | Required before real user data. "A file on one machine with a disk" is also a file you can lose |
-| Ownership | `users` and `sessions` belong to the **identity service** (§6). Other app tables belong to that app's server code. Core never sees the database — no core `NotesRepository`, same rule as always |
+| Ownership | `users` and `sessions` belong to the **identity service** (§6) on the **host** file. Other app tables belong to that app's own database. Core never sees a database — no core `NotesRepository`, same rule as always. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
 
 ---
 
@@ -420,4 +420,4 @@ Landed. Kept for context.
 - Generic client stub: `open` / `refresh` POST to `/api/apps/:appId/…` with plain JSON (stack, path, `inputText`, `action`). Abort cancels the fetch.
 - Apps return `clipboardText` when Copy should happen. Core writes the device clipboard. No fake clipboard on the server.
 - Client registers only generic remote stubs (`home`, `bible`). Notes is not in the running catalog.
-- Browser bootstrap does not bundle `kjv.json`. The same Bible and Home modules are unit-tested in-process (that is not a second product path).
+- Browser bootstrap does not bundle `kjv.json`. The Bible app loads and seeds it. The same Bible and Home modules are unit-tested in-process (that is not a second product path).

@@ -14,81 +14,120 @@ import type {
 } from "../../core/types.ts";
 import {
   bookPathSegment,
-  booksForTestament,
   chapterLabel,
   decodeBookSegment,
-  findBook,
   formatRef,
   testamentLabel,
   verseLabel,
-  verseText,
 } from "./canon.ts";
 import {
   bookId,
+  bookmarkStubId,
+  bookmarksId,
+  bookmarksStubId,
   chapterId,
   commentaryId,
   copyStatusId,
   optionId,
   parseNodeId,
+  searchId,
+  searchStubId,
   testamentId,
   verseId,
   type ParsedNode,
 } from "./ids.ts";
-import type { BibleRef, KjvBook, KjvData, TestamentId } from "./types.ts";
+import type { BibleStore } from "./types.ts";
+import type { BibleRef, VerseOption } from "./types.ts";
 
-const TESTAMENTS: TestamentId[] = ["OT", "NT"];
+const VERSE_OPTIONS: readonly VerseOption[] = ["copy", "bookmark", "commentary"];
+
+const OPTION_LABEL: Record<VerseOption, string> = {
+  copy: "Copy",
+  bookmark: "Bookmark",
+  commentary: "Commentary",
+};
 
 export type BibleViewDeps = {
-  readonly data: KjvData;
+  readonly store: BibleStore;
   readonly rootAppId: string;
 };
 
-export function parseBiblePath(data: KjvData, path: string): string {
-  if (path === "/" || path === "/kjv") {
-    return testamentId("OT");
+export function parseBiblePath(store: BibleStore, path: string): string {
+  const parts = path.replace(/^\/+/, "").split("/").filter(Boolean);
+  if (parts[0] === "bookmarks") {
+    return bookmarksId();
+  }
+  if (parts[0] === "search") {
+    return searchId();
   }
 
-  const parts = path.replace(/^\/+/, "").split("/").filter(Boolean);
-  // Expect kjv / Book / chapter / verse
-  if (parts[0]?.toLowerCase() !== "kjv") {
-    return testamentId("OT");
+  const defaultVersion = store.defaultVersionId();
+  if (parts.length === 0) {
+    return firstTestamentTip(store, defaultVersion);
   }
+
+  const versionPart = parts[0]!;
+  const version = store.getVersion(versionPart)?.id ?? defaultVersion;
+  if (!version || !store.getVersion(versionPart)) {
+    return firstTestamentTip(store, version);
+  }
+
   if (parts.length === 1) {
-    return testamentId("OT");
+    return firstTestamentTip(store, version);
   }
 
   const bookName = decodeBookSegment(parts[1]!);
   if (bookName === null) {
-    return testamentId("OT");
+    return firstTestamentTip(store, version);
   }
-  const book = findBook(data, bookName);
+  const book = store.getBook(version, bookName);
   if (!book) {
-    return testamentId("OT");
+    return firstTestamentTip(store, version);
   }
   if (parts.length === 2) {
-    return bookId(book.name);
+    return bookId(version, book.name);
   }
 
   const chapter = Number(parts[2]);
-  if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapters.length) {
-    return bookId(book.name);
+  if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount) {
+    return bookId(version, book.name);
   }
   if (parts.length === 3) {
-    return chapterId(book.name, chapter);
+    return chapterId(version, book.name, chapter);
   }
 
   const verse = Number(parts[3]);
-  const verseCount = book.chapters[chapter - 1]?.length ?? 0;
+  const verseCount = store.verseCount(version, book.name, chapter);
   if (!Number.isInteger(verse) || verse < 1 || verse > verseCount) {
-    return chapterId(book.name, chapter);
+    return chapterId(version, book.name, chapter);
   }
-  return verseId({ book: book.name, chapter, verse });
+  return verseId({ version, book: book.name, chapter, verse });
+}
+
+function firstTestamentTip(store: BibleStore, version: string | null): string {
+  if (!version) {
+    return emptyId();
+  }
+  const testaments = store.listTestaments(version);
+  const first = testaments[0];
+  if (!first) {
+    return emptyId();
+  }
+  return testamentId(version, first);
+}
+
+function emptyId(): string {
+  return "bible:empty";
 }
 
 export function buildBibleView(deps: BibleViewDeps, tipId: string): RefreshResult {
+  if (tipId === emptyId()) {
+    return emptyBibleView(deps);
+  }
+
   const parsed = parseNodeId(tipId);
   if (!parsed) {
-    return buildBibleView(deps, testamentId("OT"));
+    return buildBibleView(deps, firstTestamentTip(deps.store, deps.store.defaultVersionId()));
   }
 
   if (parsed.kind === "copy-status") {
@@ -102,13 +141,21 @@ export function buildBibleView(deps: BibleViewDeps, tipId: string): RefreshResul
 
   switch (parsed.kind) {
     case "testament":
-      addTestamentLevel(deps, payloads, fragments, parsed.testament);
+    case "bookmarks":
+    case "search":
+      addRootLevel(deps, payloads, fragments, parsed);
+      break;
+    case "bookmarks-stub":
+      addSimpleStub(payloads, fragments, bookmarksStubId(), bookmarksId());
+      break;
+    case "search-stub":
+      addSimpleStub(payloads, fragments, searchStubId(), searchId());
       break;
     case "book":
-      addBookLevel(deps, payloads, fragments, parsed.book);
+      addBookLevel(deps, payloads, fragments, parsed.version, parsed.book);
       break;
     case "chapter":
-      addChapterLevel(deps, payloads, fragments, parsed.book, parsed.chapter);
+      addChapterLevel(deps, payloads, fragments, parsed.version, parsed.book, parsed.chapter);
       break;
     case "verse":
       addVerseLevel(deps, payloads, fragments, parsed.ref);
@@ -117,11 +164,14 @@ export function buildBibleView(deps: BibleViewDeps, tipId: string): RefreshResul
       addOptionLevel(deps, payloads, fragments, parsed.ref);
       break;
     case "commentary":
-      addCommentaryLevel(deps, payloads, fragments, parsed.ref);
+      addVerseStubLevel(deps, payloads, fragments, parsed.ref, "commentary");
+      break;
+    case "bookmark":
+      addVerseStubLevel(deps, payloads, fragments, parsed.ref, "bookmark");
       break;
   }
 
-  const tip = payloads.get(tipId) ?? tipPayload(deps, { kind: "testament", testament: "OT" });
+  const tip = payloads.get(tipId) ?? tipPayload(deps, parsed);
   return {
     navigationMap: buildMap(...fragments),
     warm: [...payloads.values()],
@@ -130,27 +180,43 @@ export function buildBibleView(deps: BibleViewDeps, tipId: string): RefreshResul
   };
 }
 
+function emptyBibleView(deps: BibleViewDeps): RefreshResult {
+  const id = emptyId();
+  return {
+    navigationMap: buildMap(rootBackToHome(id, deps.rootAppId)),
+    warm: [{ id, label: "Bible data is not available." }],
+    node: { id, label: "Bible data is not available." },
+    location: { appId: "bible", path: "/" },
+  };
+}
+
 function locationFor(parsed: ParsedNode): AppLocation | null {
   switch (parsed.kind) {
     case "testament":
-      return { appId: "bible", path: "/kjv" };
+      return { appId: "bible", path: `/${parsed.version}` };
+    case "bookmarks":
+    case "bookmarks-stub":
+      return { appId: "bible", path: "/bookmarks" };
+    case "search":
+    case "search-stub":
+      return { appId: "bible", path: "/search" };
     case "book":
-      return { appId: "bible", path: `/kjv/${bookPathSegment(parsed.book)}` };
+      return {
+        appId: "bible",
+        path: `/${parsed.version}/${bookPathSegment(parsed.book)}`,
+      };
     case "chapter":
       return {
         appId: "bible",
-        path: `/kjv/${bookPathSegment(parsed.book)}/${parsed.chapter}`,
+        path: `/${parsed.version}/${bookPathSegment(parsed.book)}/${parsed.chapter}`,
       };
     case "verse":
-      return {
-        appId: "bible",
-        path: `/kjv/${bookPathSegment(parsed.ref.book)}/${parsed.ref.chapter}/${parsed.ref.verse}`,
-      };
     case "option":
     case "commentary":
+    case "bookmark":
       return {
         appId: "bible",
-        path: `/kjv/${bookPathSegment(parsed.ref.book)}/${parsed.ref.chapter}/${parsed.ref.verse}`,
+        path: `/${parsed.ref.version}/${bookPathSegment(parsed.ref.book)}/${parsed.ref.chapter}/${parsed.ref.verse}`,
       };
     case "copy-status":
       return null;
@@ -160,25 +226,36 @@ function locationFor(parsed: ParsedNode): AppLocation | null {
 function tipPayload(deps: BibleViewDeps, parsed: ParsedNode): NodePayload {
   switch (parsed.kind) {
     case "testament":
-      return { id: testamentId(parsed.testament), label: testamentLabel(parsed.testament) };
+      return {
+        id: testamentId(parsed.version, parsed.testament),
+        label: testamentLabel(parsed.testament),
+      };
+    case "bookmarks":
+      return { id: bookmarksId(), label: "Bookmarks" };
+    case "search":
+      return { id: searchId(), label: "Search" };
+    case "bookmarks-stub":
+      return { id: bookmarksStubId(), label: "Bookmarks are not available yet." };
+    case "search-stub":
+      return { id: searchStubId(), label: "Search is not available yet." };
     case "book":
-      return { id: bookId(parsed.book), label: parsed.book };
+      return { id: bookId(parsed.version, parsed.book), label: parsed.book };
     case "chapter":
       return {
-        id: chapterId(parsed.book, parsed.chapter),
+        id: chapterId(parsed.version, parsed.book, parsed.chapter),
         label: chapterLabel(parsed.chapter),
       };
     case "verse": {
-      const text = verseText(deps.data, parsed.ref) ?? "";
+      const verse = deps.store.getVerse(parsed.ref);
       return {
         id: verseId(parsed.ref),
-        label: verseLabel(parsed.ref.verse, text),
+        label: verseLabel(parsed.ref.verse, verse?.text ?? ""),
       };
     }
     case "option":
       return {
         id: optionId(parsed.ref, parsed.option),
-        label: parsed.option === "copy" ? "Copy" : "Commentary",
+        label: OPTION_LABEL[parsed.option],
       };
     case "copy-status":
       return { id: copyStatusId(parsed.ref), label: "Copying…" };
@@ -187,6 +264,11 @@ function tipPayload(deps: BibleViewDeps, parsed: ParsedNode): NodePayload {
         id: commentaryId(parsed.ref),
         label: `Commentary for ${formatRef(parsed.ref)} is not available yet.`,
       };
+    case "bookmark":
+      return {
+        id: bookmarkStubId(parsed.ref),
+        label: "Bookmark is not available yet.",
+      };
   }
 }
 
@@ -194,69 +276,121 @@ function addNode(payloads: Map<string, NodePayload>, node: NodePayload): void {
   payloads.set(node.id, node);
 }
 
-function addTestamentLevel(
+function rootHeadingIds(store: BibleStore, version: string): string[] {
+  const testaments = store.listTestaments(version);
+  return [...testaments.map((t) => testamentId(version, t)), bookmarksId(), searchId()];
+}
+
+function addRootLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  current: TestamentId,
+  current: Extract<ParsedNode, { kind: "testament" | "bookmarks" | "search" }>,
 ): void {
-  const ids = TESTAMENTS.map(testamentId);
-  for (const t of TESTAMENTS) {
+  const version =
+    current.kind === "testament" ? current.version : deps.store.defaultVersionId();
+  if (!version) {
+    return;
+  }
+
+  const ids = rootHeadingIds(deps.store, version);
+  addNode(payloads, { id: bookmarksId(), label: "Bookmarks" });
+  addNode(payloads, { id: searchId(), label: "Search" });
+  addNode(payloads, { id: bookmarksStubId(), label: "Bookmarks are not available yet." });
+  addNode(payloads, { id: searchStubId(), label: "Search is not available yet." });
+
+  for (const t of deps.store.listTestaments(version)) {
     addNode(payloads, {
-      id: testamentId(t),
+      id: testamentId(version, t),
       label: testamentLabel(t),
     });
   }
+
   fragments.push(siblingListEdges(ids, { wrap: true }));
-  for (const t of TESTAMENTS) {
-    const books = booksForTestament(deps.data, t);
+  fragments.push({
+    [bookmarksId()]: { enter: edgeNode(bookmarksStubId(), "push") },
+    [searchId()]: { enter: edgeNode(searchStubId(), "push") },
+  });
+
+  for (const t of deps.store.listTestaments(version)) {
+    const books = deps.store.listBooks(version, t);
     const first = books[0];
     if (first) {
       fragments.push({
-        [testamentId(t)]: { enter: edgeNode(bookId(first.name), "push") },
+        [testamentId(version, t)]: { enter: edgeNode(bookId(version, first.name), "push") },
       });
     }
-    fragments.push(rootBackToHome(testamentId(t), deps.rootAppId));
+    fragments.push(rootBackToHome(testamentId(version, t), deps.rootAppId));
   }
-  // Warm first few books of current testament
-  for (const book of booksForTestament(deps.data, current).slice(0, 8)) {
-    addNode(payloads, { id: bookId(book.name), label: book.name });
+  fragments.push(rootBackToHome(bookmarksId(), deps.rootAppId));
+  fragments.push(rootBackToHome(searchId(), deps.rootAppId));
+
+  if (current.kind === "testament") {
+    for (const book of deps.store.listBooks(version, current.testament).slice(0, 8)) {
+      addNode(payloads, { id: bookId(version, book.name), label: book.name });
+    }
   }
+}
+
+function addSimpleStub(
+  payloads: Map<string, NodePayload>,
+  fragments: MapFragment[],
+  stubId: string,
+  backId: string,
+): void {
+  addNode(payloads, tipPayloadFromStub(stubId));
+  addNode(payloads, {
+    id: backId,
+    label: backId === bookmarksId() ? "Bookmarks" : "Search",
+  });
+  fragments.push({
+    [stubId]: { back: edgePop() },
+  });
+}
+
+function tipPayloadFromStub(stubId: string): NodePayload {
+  if (stubId === bookmarksStubId()) {
+    return { id: stubId, label: "Bookmarks are not available yet." };
+  }
+  return { id: stubId, label: "Search is not available yet." };
 }
 
 function addBookLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
+  version: string,
   bookName: string,
 ): void {
-  const book = findBook(deps.data, bookName);
+  const book = deps.store.getBook(version, bookName);
   if (!book) {
-    addTestamentLevel(deps, payloads, fragments, "OT");
+    addRootLevel(deps, payloads, fragments, {
+      kind: "testament",
+      version,
+      testament: "OT",
+    });
     return;
   }
-  const siblings = booksForTestament(deps.data, book.testament);
-  const ids = siblings.map((b) => bookId(b.name));
+  const siblings = deps.store.listBooks(version, book.testament);
+  const ids = siblings.map((b) => bookId(version, b.name));
   for (const b of siblings) {
-    addNode(payloads, { id: bookId(b.name), label: b.name });
+    addNode(payloads, { id: bookId(version, b.name), label: b.name });
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   fragments.push({
-    [bookId(book.name)]: {
-      enter: edgeNode(chapterId(book.name, 1), "push"),
+    [bookId(version, book.name)]: {
+      enter: edgeNode(chapterId(version, book.name, 1), "push"),
       back: edgePop(),
     },
   });
-  // Warm chapter labels
-  for (let ch = 1; ch <= Math.min(book.chapters.length, 12); ch++) {
+  for (let ch = 1; ch <= Math.min(book.chapterCount, 12); ch++) {
     addNode(payloads, {
-      id: chapterId(book.name, ch),
+      id: chapterId(version, book.name, ch),
       label: chapterLabel(ch),
     });
   }
-  // Ensure testament parent warm
   addNode(payloads, {
-    id: testamentId(book.testament),
+    id: testamentId(version, book.testament),
     label: testamentLabel(book.testament),
   });
 }
@@ -265,31 +399,34 @@ function addChapterLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
+  version: string,
   bookName: string,
   chapter: number,
 ): void {
-  const book = findBook(deps.data, bookName);
+  const book = deps.store.getBook(version, bookName);
   if (!book) {
-    addTestamentLevel(deps, payloads, fragments, "OT");
+    addRootLevel(deps, payloads, fragments, {
+      kind: "testament",
+      version,
+      testament: "OT",
+    });
     return;
   }
-  const chapterCount = book.chapters.length;
   const ids: string[] = [];
-  for (let ch = 1; ch <= chapterCount; ch++) {
-    const id = chapterId(book.name, ch);
+  for (let ch = 1; ch <= book.chapterCount; ch++) {
+    const id = chapterId(version, book.name, ch);
     ids.push(id);
     addNode(payloads, { id, label: chapterLabel(ch) });
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   fragments.push({
-    [chapterId(book.name, chapter)]: {
-      // Replace so verse↔verse chapter joins keep a clean [book, verse] stack.
-      enter: edgeNode(verseId({ book: book.name, chapter, verse: 1 }), "replace"),
+    [chapterId(version, book.name, chapter)]: {
+      enter: edgeNode(verseId({ version, book: book.name, chapter, verse: 1 }), "replace"),
       back: edgePop(),
     },
   });
-  warmVerses(payloads, book, chapter, 8);
-  addNode(payloads, { id: bookId(book.name), label: book.name });
+  warmVerses(deps, payloads, version, book.name, chapter, 8);
+  addNode(payloads, { id: bookId(version, book.name), label: book.name });
 }
 
 function addVerseLevel(
@@ -298,73 +435,98 @@ function addVerseLevel(
   fragments: MapFragment[],
   ref: BibleRef,
 ): void {
-  const book = findBook(deps.data, ref.book);
+  const book = deps.store.getBook(ref.version, ref.book);
   if (!book) {
-    addTestamentLevel(deps, payloads, fragments, "OT");
+    addRootLevel(deps, payloads, fragments, {
+      kind: "testament",
+      version: ref.version,
+      testament: "OT",
+    });
     return;
   }
-  const verses = book.chapters[ref.chapter - 1] ?? [];
+  const verses = deps.store.listVerses(ref.version, book.name, ref.chapter);
   const ids: string[] = [];
-  for (let v = 1; v <= verses.length; v++) {
-    const r = { book: book.name, chapter: ref.chapter, verse: v };
+  for (const verse of verses) {
+    const r: BibleRef = {
+      version: ref.version,
+      book: book.name,
+      chapter: ref.chapter,
+      verse: verse.verse,
+    };
     const id = verseId(r);
     ids.push(id);
     addNode(payloads, {
       id,
-      label: verseLabel(v, verses[v - 1]!),
+      label: verseLabel(verse.verse, verse.text),
     });
   }
   fragments.push(siblingListEdges(ids, { wrap: false }));
 
-  // Last verse → first of next chapter; first verse ← last of previous chapter.
   const tip = verseId(ref);
-  const lastVerse = verses.length;
-  if (lastVerse > 0 && ref.chapter < book.chapters.length) {
-    const nextRef = { book: book.name, chapter: ref.chapter + 1, verse: 1 };
-    const nextText = book.chapters[ref.chapter]?.[0];
+  const lastVerse = verses[verses.length - 1];
+  if (lastVerse && ref.chapter < book.chapterCount) {
+    const nextRef: BibleRef = {
+      version: ref.version,
+      book: book.name,
+      chapter: ref.chapter + 1,
+      verse: 1,
+    };
+    const nextVerse = deps.store.getVerse(nextRef);
     fragments.push({
-      [verseId({ book: book.name, chapter: ref.chapter, verse: lastVerse })]: {
+      [verseId({
+        version: ref.version,
+        book: book.name,
+        chapter: ref.chapter,
+        verse: lastVerse.verse,
+      })]: {
         next: edgeNode(verseId(nextRef), "replace"),
       },
     });
-    if (nextText !== undefined) {
+    if (nextVerse) {
       addNode(payloads, {
         id: verseId(nextRef),
-        label: verseLabel(1, nextText),
+        label: verseLabel(1, nextVerse.text),
       });
     }
   }
   if (ref.chapter > 1) {
-    const prevChapterVerses = book.chapters[ref.chapter - 2] ?? [];
-    const prevLast = prevChapterVerses.length;
-    if (prevLast > 0) {
-      const prevRef = {
+    const prevCount = deps.store.verseCount(ref.version, book.name, ref.chapter - 1);
+    if (prevCount > 0) {
+      const prevRef: BibleRef = {
+        version: ref.version,
         book: book.name,
         chapter: ref.chapter - 1,
-        verse: prevLast,
+        verse: prevCount,
       };
+      const prevVerse = deps.store.getVerse(prevRef);
       fragments.push({
-        [verseId({ book: book.name, chapter: ref.chapter, verse: 1 })]: {
+        [verseId({
+          version: ref.version,
+          book: book.name,
+          chapter: ref.chapter,
+          verse: 1,
+        })]: {
           prev: edgeNode(verseId(prevRef), "replace"),
         },
       });
-      addNode(payloads, {
-        id: verseId(prevRef),
-        label: verseLabel(prevLast, prevChapterVerses[prevLast - 1]!),
-      });
+      if (prevVerse) {
+        addNode(payloads, {
+          id: verseId(prevRef),
+          label: verseLabel(prevCount, prevVerse.text),
+        });
+      }
     }
   }
 
   fragments.push({
     [tip]: {
       enter: edgeNode(optionId(ref, "copy"), "push"),
-      // Replace to this verse's chapter (works after cross-chapter joins).
-      back: edgeNode(chapterId(book.name, ref.chapter), "replace"),
+      back: edgeNode(chapterId(book.versionId, book.name, ref.chapter), "replace"),
     },
   });
   addOptionPayloads(payloads, ref);
   addNode(payloads, {
-    id: chapterId(book.name, ref.chapter),
+    id: chapterId(book.versionId, book.name, ref.chapter),
     label: chapterLabel(ref.chapter),
   });
 }
@@ -375,65 +537,68 @@ function addOptionLevel(
   fragments: MapFragment[],
   ref: BibleRef,
 ): void {
-  const copy = optionId(ref, "copy");
-  const commentary = optionId(ref, "commentary");
+  const optionIds = VERSE_OPTIONS.map((option) => optionId(ref, option));
   addOptionPayloads(payloads, ref);
   addNode(payloads, tipPayload(deps, { kind: "verse", ref }));
-  addNode(payloads, {
-    id: copyStatusId(ref),
-    label: "Copying…",
-  });
+  addNode(payloads, { id: copyStatusId(ref), label: "Copying…" });
   addNode(payloads, tipPayload(deps, { kind: "commentary", ref }));
+  addNode(payloads, tipPayload(deps, { kind: "bookmark", ref }));
 
-  fragments.push(siblingListEdges([copy, commentary], { wrap: true }));
+  fragments.push(siblingListEdges(optionIds, { wrap: true }));
   fragments.push({
-    [copy]: {
+    [optionId(ref, "copy")]: {
       enter: edgeAction(copyStatusId(ref)),
       back: edgePop(),
     },
-    [commentary]: {
+    [optionId(ref, "bookmark")]: {
+      enter: edgeNode(bookmarkStubId(ref), "push"),
+      back: edgePop(),
+    },
+    [optionId(ref, "commentary")]: {
       enter: edgeNode(commentaryId(ref), "push"),
       back: edgePop(),
     },
   });
 }
 
-function addCommentaryLevel(
+function addVerseStubLevel(
   deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
   ref: BibleRef,
+  which: "commentary" | "bookmark",
 ): void {
-  addNode(payloads, tipPayload(deps, { kind: "commentary", ref }));
+  const stubId = which === "commentary" ? commentaryId(ref) : bookmarkStubId(ref);
+  addNode(payloads, tipPayload(deps, { kind: which, ref }));
   addOptionPayloads(payloads, ref);
   fragments.push({
-    [commentaryId(ref)]: { back: edgePop() },
+    [stubId]: { back: edgePop() },
   });
 }
 
 function addOptionPayloads(payloads: Map<string, NodePayload>, ref: BibleRef): void {
-  addNode(payloads, {
-    id: optionId(ref, "copy"),
-    label: "Copy",
-  });
-  addNode(payloads, {
-    id: optionId(ref, "commentary"),
-    label: "Commentary",
-  });
+  for (const option of VERSE_OPTIONS) {
+    addNode(payloads, {
+      id: optionId(ref, option),
+      label: OPTION_LABEL[option],
+    });
+  }
 }
 
 function warmVerses(
+  deps: BibleViewDeps,
   payloads: Map<string, NodePayload>,
-  book: KjvBook,
+  version: string,
+  book: string,
   chapter: number,
   max: number,
 ): void {
-  const verses = book.chapters[chapter - 1] ?? [];
-  for (let v = 1; v <= Math.min(verses.length, max); v++) {
-    const ref = { book: book.name, chapter, verse: v };
+  const verses = deps.store.listVerses(version, book, chapter).slice(0, max);
+  for (const verse of verses) {
+    const ref: BibleRef = { version, book, chapter, verse: verse.verse };
     addNode(payloads, {
       id: verseId(ref),
-      label: verseLabel(v, verses[v - 1]!),
+      label: verseLabel(verse.verse, verse.text),
     });
   }
 }
@@ -461,8 +626,8 @@ function buildIdleCopyStatus(deps: BibleViewDeps, ref: BibleRef): RefreshResult 
  */
 export function resolveCopyStatus(deps: BibleViewDeps, ref: BibleRef): RefreshResult {
   const statusNodeId = copyStatusId(ref);
-  const text = verseText(deps.data, ref);
-  const line = text ? `${formatRef(ref)}. ${text}` : null;
+  const verse = deps.store.getVerse(ref);
+  const line = verse ? `${formatRef(ref)}. ${verse.text}` : null;
   const label = line ? "Copied" : "Copy failed: verse not found.";
 
   const payloads = new Map<string, NodePayload>();
