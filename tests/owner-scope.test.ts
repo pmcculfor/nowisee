@@ -101,7 +101,7 @@ describe("owner-scoped stack ids", () => {
         url: "/api/apps/account/refresh",
         headers: headers(cookie),
         body: {
-          stack: [{ nodeId: NODE.password, label: "", location: null }],
+          stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
           extras: { action: true, inputText: email },
         },
       });

@@ -4,6 +4,7 @@ import {
   edgeAction,
   edgeApp,
   edgeNode,
+  edgePop,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -26,11 +27,23 @@ export type AccountViewDeps = {
 };
 
 const START_LABEL = "Sign in or register";
+const EMAIL_PROMPT_LABEL = "Please enter your email.";
+const PASSWORD_PROMPT_LABEL = "Please enter your password.";
 const SETTINGS_LABEL = "Settings. This screen is not available yet.";
 const SIGN_OUT_LABEL = "Sign out";
 const AUTH_WARM_LABEL = "Signing in…";
 const SIGN_OUT_WARM_LABEL = "Signing out…";
 const SIGNED_OUT_LABEL = "You are signed out.";
+const AUTH_FAILED_LABEL = "Sign-in was unsuccessful.";
+
+const SIGNED_OUT_IDS = [
+  NODE.start,
+  NODE.emailPrompt,
+  NODE.email,
+  NODE.passwordPrompt,
+  NODE.password,
+  NODE.auth,
+] as const;
 
 export async function openAccount(
   deps: AccountViewDeps,
@@ -44,11 +57,17 @@ export async function openAccount(
     }
     return signedInView(deps, NODE.settings, ctx);
   }
-  if (path === "/password") {
+  if (path === "/password/input") {
     return signedOutView(deps, NODE.password, ctx);
   }
-  if (path === "/email") {
+  if (path === "/password") {
+    return signedOutView(deps, NODE.passwordPrompt, ctx);
+  }
+  if (path === "/email/input") {
     return signedOutView(deps, NODE.email, ctx);
+  }
+  if (path === "/email") {
+    return signedOutView(deps, NODE.emailPrompt, ctx);
   }
   return signedOutView(deps, NODE.start, ctx);
 }
@@ -73,17 +92,16 @@ export async function refreshAccount(
     if (tipId === NODE.settings) {
       return signedInView(deps, NODE.settings, ctx);
     }
-    // Signed-in user on a signed-out node — repair to settings, do not teleport mid-workflow.
     if (tipId === NODE.auth) {
-      return authStatusView(deps, "You are signed in.", ctx, true);
+      return authStatusView(deps, "You are signed in.", true);
     }
     return signedInView(deps, NODE.settings, ctx);
   }
 
   if (tipId === NODE.auth) {
-    return authStatusView(deps, AUTH_WARM_LABEL, ctx, false);
+    return authStatusView(deps, AUTH_WARM_LABEL, false);
   }
-  if (tipId === NODE.password || tipId === NODE.email || tipId === NODE.start) {
+  if (tipId && (SIGNED_OUT_IDS as readonly string[]).includes(tipId)) {
     return signedOutView(deps, tipId, ctx);
   }
   if (tipId === NODE.signOutStatus) {
@@ -102,23 +120,23 @@ async function applyAction(
   const sessionId = ctx?.sessionId;
   const identity = ctx?.identity;
 
-  if (tipId === NODE.password && sessionId) {
+  if (tipId === NODE.passwordPrompt && sessionId) {
     deps.flow.setEmail(sessionId, extras.inputText ?? "");
-    return signedOutView(deps, NODE.password, ctx);
+    return signedOutView(deps, NODE.passwordPrompt, ctx);
   }
 
   if (tipId === NODE.auth) {
     if (!identity || !sessionId) {
-      return authStatusView(deps, "Sign-in is not available.", ctx, false);
+      return authStatusView(deps, "Sign-in is not available.", false);
     }
     const email = deps.flow.getEmail(sessionId) ?? "";
     const password = extras.inputText ?? "";
     const outcome = await authenticate(identity, email, password);
     if (outcome.ok) {
       deps.flow.clear(sessionId);
-      return authStatusView(deps, `You are signed in as ${email.trim().toLowerCase()}.`, ctx, true);
+      return authStatusView(deps, `You are signed in as ${email.trim().toLowerCase()}.`, true);
     }
-    return authStatusView(deps, messageFor(outcome.reason), ctx, false);
+    return authStatusView(deps, AUTH_FAILED_LABEL, false);
   }
 
   if (tipId === NODE.signOutStatus) {
@@ -129,7 +147,6 @@ async function applyAction(
     return signedOutStatusView(deps);
   }
 
-  // Unknown action tip: repair.
   if (ctx?.userId) {
     return signedInView(deps, NODE.settings, ctx);
   }
@@ -151,30 +168,20 @@ async function authenticate(
   return registered;
 }
 
-function messageFor(reason: Extract<AuthOutcome, { ok: false }>["reason"]): string {
-  switch (reason) {
-    case "weak-password":
-      return "That password is too short. Use at least 8 characters.";
-    case "registration-closed":
-      return "Registration is closed.";
-    case "email-taken":
-    case "invalid-credentials":
-      return "That email or password did not match.";
-  }
-}
-
 function signedOutView(
   deps: AccountViewDeps,
   tipId: string,
   _ctx: AppServerContext | undefined,
 ): RefreshResult {
   const start: NodePayload = { id: NODE.start, label: START_LABEL };
+  const emailPrompt: NodePayload = { id: NODE.emailPrompt, label: EMAIL_PROMPT_LABEL };
   const email: NodePayload = {
     id: NODE.email,
     label: "",
     kind: "input",
     autocomplete: "username",
   };
+  const passwordPrompt: NodePayload = { id: NODE.passwordPrompt, label: PASSWORD_PROMPT_LABEL };
   const password: NodePayload = {
     id: NODE.password,
     label: "",
@@ -186,7 +193,9 @@ function signedOutView(
 
   const payloads = new Map<string, NodePayload>([
     [NODE.start, start],
+    [NODE.emailPrompt, emailPrompt],
     [NODE.email, email],
+    [NODE.passwordPrompt, passwordPrompt],
     [NODE.password, password],
     [NODE.auth, auth],
   ]);
@@ -195,12 +204,22 @@ function signedOutView(
   const navigationMap = buildMap(
     {
       [NODE.start]: {
+        enter: edgeNode(NODE.emailPrompt, "push"),
+      },
+      [NODE.emailPrompt]: {
         enter: edgeNode(NODE.email, "push"),
+      },
+      [NODE.passwordPrompt]: {
+        enter: edgeNode(NODE.password, "push"),
       },
     },
     rootBackToHome(NODE.start, deps.rootAppId),
+    {
+      [NODE.emailPrompt]: { back: edgePop() },
+      [NODE.passwordPrompt]: { back: edgePop() },
+    },
     inputEdges(NODE.email, {
-      commitTo: NODE.password,
+      commitTo: NODE.passwordPrompt,
       backTo: "pop",
       action: true,
     }),
@@ -211,14 +230,14 @@ function signedOutView(
     }),
     {
       [NODE.auth]: {
-        back: edgeApp({ appId: deps.rootAppId, path: "/" }),
+        back: edgePop(),
       },
     },
   );
 
   return {
     navigationMap,
-    warm: [start, email, password, auth],
+    warm: [start, emailPrompt, email, passwordPrompt, password, auth],
     node: tip,
     location: locationFor(tip.id),
   };
@@ -268,29 +287,35 @@ function signedInView(
 function authStatusView(
   deps: AccountViewDeps,
   label: string,
-  _ctx: AppServerContext | undefined,
   signedIn: boolean,
 ): RefreshResult {
   const node: NodePayload = { id: NODE.auth, label };
+  const password: NodePayload = {
+    id: NODE.password,
+    label: "",
+    kind: "input",
+    secret: true,
+    autocomplete: "current-password",
+  };
   let navigationMap: NavigationMap;
   if (signedIn) {
     navigationMap = buildMap({
       [NODE.auth]: {
-        enter: edgeApp({ appId: ACCOUNT_APP_ID, path: "/" }),
+        enter: edgeApp({ appId: deps.rootAppId, path: "/" }),
         back: edgeApp({ appId: deps.rootAppId, path: "/" }),
       },
     });
   } else {
     navigationMap = buildMap({
       [NODE.auth]: {
-        enter: edgeNode(NODE.password, "replace"),
-        back: edgeNode(NODE.password, "replace"),
+        enter: edgePop(),
+        back: edgePop(),
       },
     });
   }
   return {
     navigationMap,
-    warm: [node, { id: NODE.password, label: "", kind: "input", secret: true, autocomplete: "current-password" }],
+    warm: [node, password],
     node,
     location: null,
   };
@@ -315,10 +340,14 @@ function locationFor(tipId: string): AppLocation | null {
   switch (tipId) {
     case NODE.start:
       return { appId: ACCOUNT_APP_ID, path: "/" };
-    case NODE.email:
+    case NODE.emailPrompt:
       return { appId: ACCOUNT_APP_ID, path: "/email" };
-    case NODE.password:
+    case NODE.email:
+      return { appId: ACCOUNT_APP_ID, path: "/email/input" };
+    case NODE.passwordPrompt:
       return { appId: ACCOUNT_APP_ID, path: "/password" };
+    case NODE.password:
+      return { appId: ACCOUNT_APP_ID, path: "/password/input" };
     case NODE.settings:
       return { appId: ACCOUNT_APP_ID, path: "/" };
     case NODE.signOut:

@@ -52,6 +52,15 @@ describe("Account app", () => {
     const body = opened.body as RefreshResult;
     expect(body.node.id).toBe(NODE.start);
     expect(body.node.label).toBe("Sign in or register");
+    expect(body.navigationMap[NODE.start]?.enter).toEqual({
+      kind: "node",
+      toNodeId: NODE.emailPrompt,
+      stackBehavior: "push",
+    });
+    expect(body.warm.find((n) => n.id === NODE.emailPrompt)?.label).toBe("Please enter your email.");
+    expect(body.warm.find((n) => n.id === NODE.passwordPrompt)?.label).toBe(
+      "Please enter your password.",
+    );
     expect(body.warm.find((n) => n.id === NODE.password)?.secret).toBe(true);
     expect(body.warm.find((n) => n.id === NODE.email)?.autocomplete).toBe("username");
 
@@ -61,7 +70,7 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [{ nodeId: NODE.password, label: "", location: null }],
+        stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
         extras: { action: true, inputText: "user@example.com" },
       },
     });
@@ -72,7 +81,9 @@ describe("Account app", () => {
       body: {
         stack: [
           { nodeId: NODE.start, label: "Sign in or register", location: null },
+          { nodeId: NODE.emailPrompt, label: "Please enter your email.", location: null },
           { nodeId: NODE.email, label: "", location: null },
+          { nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null },
           { nodeId: NODE.password, label: "", location: null },
           { nodeId: NODE.auth, label: "Signing in…", location: null },
         ],
@@ -82,6 +93,10 @@ describe("Account app", () => {
     const signedBody = signedIn.body as RefreshResult;
     expect(signedBody.node.label).toBe("You are signed in as user@example.com.");
     expect(signedBody.location).toBeNull();
+    expect(signedBody.navigationMap[NODE.auth]?.enter).toEqual({
+      kind: "app",
+      to: { appId: "home", path: "/" },
+    });
 
     const nextCookie = cookieFrom(signedIn.headers?.["Set-Cookie"]) ?? cookie;
     const settings = await handleSessionHttp(h, {
@@ -110,7 +125,7 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(anon),
       body: {
-        stack: [{ nodeId: NODE.password, label: "", location: null }],
+        stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
         extras: { action: true, inputText: "pat@example.com" },
       },
     });
@@ -130,6 +145,44 @@ describe("Account app", () => {
     expect(cookieFrom(setCookie)).not.toBe(anon);
     const body = action.body as RefreshResult;
     expect(body.node.label).toContain("You are signed in as pat@example.com.");
+  });
+
+  it("a short password is unsuccessful sign-in, and back pops to the existing password node", async () => {
+    h = makeHost();
+    const start = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/account/open",
+      headers: headers(),
+      body: { path: "/" },
+    });
+    const cookie = cookieFrom(start.headers?.["Set-Cookie"]);
+    await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/account/refresh",
+      headers: headers(cookie),
+      body: {
+        stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
+        extras: { action: true, inputText: "short@example.com" },
+      },
+    });
+    const failed = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/account/refresh",
+      headers: headers(cookie),
+      body: {
+        stack: [
+          { nodeId: NODE.password, label: "", location: null },
+          { nodeId: NODE.auth, label: "Signing in…", location: null },
+        ],
+        extras: { action: true, inputText: "short" },
+      },
+    });
+    const body = failed.body as RefreshResult;
+    expect(body.node.label).toBe("Sign-in was unsuccessful.");
+    expect(body.node.label).not.toContain("too short");
+    expect(body.navigationMap[NODE.auth]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
+    expect(body.navigationMap[NODE.auth]?.enter).toEqual({ kind: "node", stackBehavior: "pop" });
+    expect(body.navigationMap[NODE.auth]?.back).not.toHaveProperty("toNodeId");
   });
 
   it("does not grant ctx.identity to a non-allowed app", async () => {

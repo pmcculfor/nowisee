@@ -357,15 +357,17 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
 
 ```text
 "Sign in or register"
-    --enter-->  email input (autocomplete=username)
-                    --enter (action, passInputText)-->  password input (secret, autocomplete=current-password)
-                                                          --enter (action, passInputText)-->  "Signing in…"  (warm)
-                                                                                                │
-                                                                                                └── refresh(action) → "You are signed in as …"
-                                                                                                                    or an error label
+    --enter-->  "Please enter your email."
+                    --enter-->  email input (autocomplete=username)
+                                    --enter (action, passInputText)-->  "Please enter your password."
+                                                                          --enter-->  password input (secret)
+                                                                                          --enter (action, passInputText)-->  "Signing in…"
+                                                                                                                                │
+                                                                                                                                └── success → "You are signed in as …"  (enter/back → Home)
+                                                                                                                                └── failure → "Sign-in was unsuccessful."  (enter/back → pop to the password input)
 ```
 
-Typed email is stored against `ctx.sessionId` in `account_flow` (never in a node id, label, or URL). Authenticate tries `register`, then `signIn` on `email-taken`.
+Typed email is stored against `ctx.sessionId` in `account_flow` (never in a node id, label, or URL). Authenticate tries `register`, then `signIn` on `email-taken`. Failed auth, including a password that is too short to register, is one unsuccessful message — the Account app does not teach password rules on this screen. Failure `pop`s so the stack still has a single password input.
 
 Signed-in Account at `/`:
 

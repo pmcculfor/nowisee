@@ -552,7 +552,7 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 
 ### Signed out
 
-- Tip: **Sign in or register**. `enter` → email input (`autocomplete=username`). Email Done (`action` + `passInputText`) → password input (`secret`, `autocomplete=current-password`). Password Done (`action` + `passInputText`) → warm **Signing in…**, then **You are signed in as …** or an error.
+- Tip: **Sign in or register**. `enter` → “Please enter your email.” → email input (`autocomplete=username`). Email Done (`action` + `passInputText`) → “Please enter your password.” → password input (`secret`, `autocomplete=current-password`). Password Done (`action` + `passInputText`) → warm **Signing in…**, then **You are signed in as …** (enter/back → Home) or **Sign-in was unsuccessful.** (enter/back → `pop` to the same password input).
 - Combined register then sign-in on `email-taken`. Email is stored against `sessionId` in `account_flow`, never in a node id, label, or URL.
 - Root `back` → Home.
 
