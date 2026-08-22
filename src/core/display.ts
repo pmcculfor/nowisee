@@ -15,7 +15,12 @@
  * and Done (`enter`) buttons. Those buttons fire on click only — never on focus.
  */
 
-import type { NavIntent } from "./types.ts";
+import type { InputAutocomplete, NavIntent } from "./types.ts";
+
+export type ShowInputOptions = {
+  readonly secret?: boolean;
+  readonly autocomplete?: InputAutocomplete;
+};
 
 export type DisplayMode = "text" | "input";
 
@@ -29,7 +34,7 @@ export class Display {
   private readonly host: DisplayHost | undefined;
   private mode: DisplayMode = "text";
   private textEl: HTMLElement | null = null;
-  private inputEl: HTMLTextAreaElement | null = null;
+  private inputEl: HTMLTextAreaElement | HTMLInputElement | null = null;
 
   constructor(root: HTMLElement, host?: DisplayHost) {
     this.root = root;
@@ -59,18 +64,27 @@ export class Display {
     el.focus();
   }
 
-  showInput(initialText: string): void {
+  showInput(initialText: string, options: ShowInputOptions = {}): void {
     this.root.replaceChildren();
     this.textEl = null;
 
-    const input = document.createElement("textarea");
+    const secret = options.secret === true;
+    const autocomplete = options.autocomplete ?? (secret ? "current-password" : "off");
+    const input = secret ? document.createElement("input") : document.createElement("textarea");
     input.dataset.surface = "input";
     input.value = initialText;
-    input.setAttribute("aria-label", "Input");
+    input.setAttribute("aria-label", ariaLabelFor(secret, autocomplete));
     input.setAttribute("spellcheck", "false");
-    input.setAttribute("rows", "8");
-    input.setAttribute("enterkeyhint", "enter");
-    input.setAttribute("autocomplete", "off");
+    input.setAttribute("autocomplete", autocomplete);
+    input.setAttribute("autocapitalize", "off");
+    input.setAttribute("autocorrect", "off");
+
+    if (input instanceof HTMLInputElement) {
+      input.type = "password";
+    } else {
+      input.setAttribute("rows", "8");
+      input.setAttribute("enterkeyhint", "enter");
+    }
 
     const actions = document.createElement("div");
     actions.dataset.inputActions = "";
@@ -131,6 +145,16 @@ export class Display {
     }
     this.host.onIntent(intent);
   }
+}
+
+function ariaLabelFor(secret: boolean, autocomplete: InputAutocomplete): string {
+  if (secret || autocomplete === "current-password" || autocomplete === "new-password") {
+    return "Password";
+  }
+  if (autocomplete === "username") {
+    return "Email";
+  }
+  return "Input";
 }
 
 function makeActionButton(

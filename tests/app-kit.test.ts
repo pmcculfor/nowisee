@@ -10,6 +10,7 @@ import {
   inputEdges,
   rootBackToHome,
   siblingListEdges,
+  signedOut,
 } from "../src/app-kit/index.ts";
 import type { NavEdge, NodePayload } from "../src/core/types.ts";
 
@@ -105,6 +106,24 @@ describe("rootBackToHome", () => {
         back: edgeApp({ appId: "home", path: "/" }),
       },
     });
+  });
+});
+
+describe("signedOut", () => {
+  it("returns a complete result with enter to Account and back to Home", () => {
+    const result = signedOut({
+      accountAppId: "account",
+      rootAppId: "home",
+      text: "Sign in to use Notes.",
+    });
+    expect(result.node.label).toBe("Sign in to use Notes.");
+    expect(result.navigationMap[result.node.id]?.enter).toEqual(
+      edgeApp({ appId: "account", path: "/" }),
+    );
+    expect(result.navigationMap[result.node.id]?.back).toEqual(
+      edgeApp({ appId: "home", path: "/" }),
+    );
+    expect(result.location).toBeNull();
   });
 });
 

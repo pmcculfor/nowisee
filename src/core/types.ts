@@ -19,6 +19,9 @@ export type StackBehavior = "push" | "replace" | "pop";
 
 export type NodeKind = "text" | "input";
 
+/** HTML autocomplete tokens Display may set on an input node. */
+export type InputAutocomplete = "off" | "username" | "current-password" | "new-password";
+
 /** Plain data — anything that survives being sent as a message. */
 export type JsonValue =
   | null
@@ -28,11 +31,19 @@ export type JsonValue =
   | readonly JsonValue[]
   | { readonly [key: string]: JsonValue };
 
-/** Opaque to core beyond id, label, kind. Apps may stash private fields in data. */
+/** Opaque to core beyond id, label, kind, and input flags. Apps may stash private fields in data. */
 export interface NodePayload {
   id: string;
   label: string;
   kind?: NodeKind; // default "text"
+  /**
+   * When kind is "input": mask typed characters (`<input type="password">`).
+   * Not a separate NodeKind — unknown kinds would otherwise collide with
+   * the unresolved forward-compat question.
+   */
+  secret?: boolean;
+  /** When kind is "input": HTML autocomplete token. Default "off". */
+  autocomplete?: InputAutocomplete;
   /** App-private optional data; core ignores it but requires it to be plain data. */
   data?: JsonValue;
 }
@@ -158,6 +169,39 @@ export interface RefreshResult {
   clipboardText?: string;
 }
 
+/**
+ * Structured outcome from the host identity capability.
+ * The Account app owns the words the user hears; this type never carries prose.
+ */
+export type AuthOutcome =
+  | { ok: true; userId: string }
+  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" | "registration-closed" };
+
+/**
+ * Host-granted capability to establish and end a Nowisee session.
+ * Only apps the host allows receive this (today: Account). Never present in the browser.
+ */
+export interface IdentityCapability {
+  register(email: string, password: string): Promise<AuthOutcome>;
+  signIn(email: string, password: string): Promise<AuthOutcome>;
+  signOut(): Promise<void>;
+}
+
+/**
+ * Server-only argument to `open` / `refresh`. Never serialized to the browser.
+ * Optional in the type: in-process tests pass nothing; apps that do not care never look.
+ * `userId` comes only from the identity service resolving the session cookie.
+ */
+export interface AppServerContext {
+  readonly userId: string | null;
+  /** This browser, signed in or not. Server-side only — never in a node id, label, or URL. */
+  readonly sessionId: string;
+  /** Host config, so no app hardcodes a peer app's id when it offers a "sign in" edge. */
+  readonly accountAppId: string;
+  /** Present only for apps the host allows. Feature-detect. */
+  readonly identity?: IdentityCapability;
+}
+
 export interface AppModule {
   id: string;
   label: string;
@@ -165,15 +209,22 @@ export interface AppModule {
    * Resolve an app-local path and return an initial refresh
    * (stack is reset by core as part of open).
    * `path` is `AppLocation.path` — the portion this app owns.
+   * `ctx` is server-only and omitted in the browser.
    */
-  open(path: string, extras?: RefreshExtras): Promise<RefreshResult> | RefreshResult;
+  open(
+    path: string,
+    extras?: RefreshExtras,
+    ctx?: AppServerContext,
+  ): Promise<RefreshResult> | RefreshResult;
   /**
    * Revalidate current stack tip; return map + warm + tip + location.
    * Perform side effects only when `extras.action` is true.
+   * `ctx` is server-only and omitted in the browser.
    */
   refresh(
     stack: readonly StackEntry[],
     extras?: RefreshExtras,
+    ctx?: AppServerContext,
   ): Promise<RefreshResult> | RefreshResult;
 }
 

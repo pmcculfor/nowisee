@@ -160,4 +160,21 @@ describe("Display", () => {
     display.showText(long);
     expect(root.textContent).toBe(long);
   });
+
+  it("secret input renders type=password with honest autocomplete", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+
+    display.showInput("", { secret: true, autocomplete: "current-password" });
+
+    expect(root.querySelector("textarea")).toBeNull();
+    const input = root.querySelector<HTMLInputElement>("input[data-surface='input']");
+    expect(input).not.toBeNull();
+    expect(input!.type).toBe("password");
+    expect(input!.getAttribute("autocomplete")).toBe("current-password");
+    expect(input!.getAttribute("aria-label")).toBe("Password");
+    input!.value = "secret-value";
+    expect(display.getInputText()).toBe("secret-value");
+  });
 });

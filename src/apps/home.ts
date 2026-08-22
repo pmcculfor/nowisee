@@ -6,8 +6,10 @@ import {
 import type {
   AppDescriptor,
   AppModule,
+  AppServerContext,
   NavigationMap,
   NodePayload,
+  RefreshExtras,
   RefreshResult,
   StackEntry,
 } from "../core/types.ts";
@@ -18,7 +20,7 @@ const HELP_NODE_ID = "home:help";
 
 export type HomeAppDeps = {
   /** Plain descriptors only — never pass the registry object. */
-  readonly listEnabled: () => readonly AppDescriptor[];
+  readonly listEnabled: (userId?: string | null) => readonly AppDescriptor[];
   readonly rootAppId: string;
 };
 
@@ -30,18 +32,18 @@ export function createHomeApp(deps: HomeAppDeps): AppModule {
   return {
     id: HOME_APP_ID,
     label: "Home",
-    open(path: string): RefreshResult {
-      return viewForPath(deps, path);
+    open(path: string, _extras?: RefreshExtras, ctx?: AppServerContext): RefreshResult {
+      return viewForPath(deps, path, ctx?.userId ?? null);
     },
-    refresh(stack: readonly StackEntry[]): RefreshResult {
+    refresh(stack: readonly StackEntry[], _extras?: RefreshExtras, ctx?: AppServerContext): RefreshResult {
       const tipId = stack[stack.length - 1]?.nodeId;
-      return viewForTip(deps, tipId);
+      return viewForTip(deps, tipId, ctx?.userId ?? null);
     },
   };
 }
 
-function peerApps(deps: HomeAppDeps): AppDescriptor[] {
-  return deps.listEnabled().filter((app) => app.id !== deps.rootAppId);
+function peerApps(deps: HomeAppDeps, userId: string | null): AppDescriptor[] {
+  return deps.listEnabled(userId).filter((app) => app.id !== deps.rootAppId);
 }
 
 function appNodeId(appId: string): string {
@@ -60,7 +62,10 @@ function helpLabel(): string {
   ].join(" ");
 }
 
-function catalog(deps: HomeAppDeps): {
+function catalog(
+  deps: HomeAppDeps,
+  userId: string | null,
+): {
   ids: string[];
   payloads: Map<string, NodePayload>;
   appIdByNode: Map<string, string>;
@@ -69,7 +74,7 @@ function catalog(deps: HomeAppDeps): {
   const appIdByNode = new Map<string, string>();
   const ids: string[] = [];
 
-  const peers = peerApps(deps);
+  const peers = peerApps(deps, userId);
   if (peers.length === 0) {
     ids.push(ROOT_NODE_ID);
     payloads.set(ROOT_NODE_ID, {
@@ -114,8 +119,8 @@ function buildNavigationMap(
   return buildMap(siblingListEdges(ids, { wrap: true }), ...enterFragments);
 }
 
-function viewForPath(deps: HomeAppDeps, path: string): RefreshResult {
-  const cat = catalog(deps);
+function viewForPath(deps: HomeAppDeps, path: string, userId: string | null): RefreshResult {
+  const cat = catalog(deps, userId);
 
   if (path === "/help") {
     return resultForCatalog(cat, HELP_NODE_ID);
@@ -132,8 +137,12 @@ function viewForPath(deps: HomeAppDeps, path: string): RefreshResult {
   return resultForCatalog(cat, cat.ids[0]!);
 }
 
-function viewForTip(deps: HomeAppDeps, tipId: string | undefined): RefreshResult {
-  const cat = catalog(deps);
+function viewForTip(
+  deps: HomeAppDeps,
+  tipId: string | undefined,
+  userId: string | null,
+): RefreshResult {
+  const cat = catalog(deps, userId);
   if (tipId && cat.payloads.has(tipId)) {
     return resultForCatalog(cat, tipId);
   }

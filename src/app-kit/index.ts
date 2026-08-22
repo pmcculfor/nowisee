@@ -18,6 +18,8 @@ export { inputEdges, type InputEdgesOptions } from "./input.ts";
 
 export { rootBackToHome } from "./home.ts";
 
+export { signedOut, type SignedOutOptions } from "./signedOut.ts";
+
 export {
   collectNeighborhood,
   type CollectNeighborhoodOptions,

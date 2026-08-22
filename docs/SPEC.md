@@ -151,7 +151,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.8 Input nodes
 
-**Decision:** Input is a node type (multiline `<textarea>` plus Cancel and Done). Leave only via navigation-map edges: **Done** fires `enter` (typically commit with `passInputText`); **Cancel** fires `back` (typically abandon). Plain arrows stay unbound so the caret keeps them. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode. The two buttons are the only extra chrome, and only while the tip is an input.
+**Decision:** Input is a node type (multiline `<textarea>` plus Cancel and Done, or `<input type="password">` when `secret` is set). Leave only via navigation-map edges: **Done** fires `enter` (typically commit with `passInputText`); **Cancel** fires `back` (typically abandon). Plain arrows stay unbound so the caret keeps them. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode. The two buttons are the only extra chrome, and only while the tip is an input. `secret` is a flag on the existing input kind, not a new `NodeKind`.
 
 **Why:** One consistent exit vocabulary that matches how people already leave a form (move to a named button and activate it), instead of a Nowisee-only chord or guessing every screen-reader blur path. Apps still author `enter` / `back`; core only supplies the controls.
 
@@ -178,7 +178,7 @@ Copy is `clipboardText` on the result; core writes the clipboard. Durable storag
 ### 4.11 Client vs server cache
 
 - **Client warm:** core NodeCache as above.
-- **Server/durable cache:** behind the app (or its API). Not core. HTTP cookies are set by servers when backends exist; shared login will arrive as a platform capability.
+- **Server/durable cache:** behind the app (or its API). Not core. HTTP cookies are set by the host (`__Host-nowisee_session`). Identity is a server-host concern, not a client platform capability. See [`IDENTITY.md`](IDENTITY.md).
 
 ### 4.12 Sibling list ends
 
