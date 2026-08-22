@@ -11,7 +11,8 @@ Nowisee is an accessibility-first website for blind and keyboard/screen-reader-p
 - **Robust over sloppy.** Incomplete is fine. Fragile, one-off, or product-specific core code is not.
 - **Design before code.** Enumerate behaviors and edge cases first. Tests verify the design; they do not invent it.
 - **DRY.** One owner for each concern. Never two ways to compute the same thing.
-- **Long-term product.** Assume years of maintenance, many apps, and other authors.
+- **Long-term product.** Assume years of maintenance, many apps, and other authors. That is architecture, not a promise to keep old clients or old rows working.
+- **In development, no compatibility tax.** Nowisee is in development. Do not add code whose only job is keeping old clients, old `open` / `refresh` shapes, old URLs, or existing stored data working. Users, notes, settings, bookmarks, and sessions need not be preserved across schema or product changes. Export, dual-write, and client version negotiation wait until the product is no longer in development.
 
 ## Packaging layers (before anything enters core)
 
@@ -63,6 +64,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 - The host calling an app in order to authenticate a request. The dependency runs Account app → identity service, never the reverse
 - Host or Home rewriting one app's catalog label (e.g. Account → "Sign in"). Home lists each app's registered `label`; screen wording stays inside that app
 - The host opening an app's database or injecting a corpus (KJV JSON, a `Db`, a store built from the host file). Apps open their own files. See [`docs/STORAGE.md`](docs/STORAGE.md)
+- Backwards-compat shims, dual-write, client version negotiation, or schema/migration code whose only purpose is preserving existing users, notes, settings, bookmarks, or other stored data
 
 ## Locked behaviors (do not change without owner approval)
 
@@ -93,6 +95,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Sessions | One per visitor from the first `/api` call. Anonymous **session**, never an anonymous *user* id. Opaque token, only its hash stored, rotated on sign-in |
 | Auth/DB | Identity on the host SQLite file; each app opens its own database. Secret lockbox is not built. Clipboard remains the only platform capability the client provides. See [`docs/STORAGE.md`](docs/STORAGE.md) |
 | Secret input | A `secret` flag on `kind: "input"` (not a new NodeKind). Display renders `type="password"` and honest `autocomplete` tokens. Leave path unchanged: Done → `enter`, Cancel → `back` |
+| In development | No backwards compatibility. Existing stored data (users, notes, settings, bookmarks, sessions) need not be preserved across changes. Do not add shims for old clients, old contracts, or old rows. |
 
 ## Mental model
 
