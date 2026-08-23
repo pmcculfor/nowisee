@@ -3,6 +3,7 @@ import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 import { SCRYPT_TEST } from "../server/identity/hash.ts";
 import { NODE } from "../src/apps/account/ids.ts";
+import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
@@ -57,9 +58,11 @@ describe("Account app", () => {
       toNodeId: NODE.emailPrompt,
       stackBehavior: "push",
     });
-    expect(body.warm.find((n) => n.id === NODE.emailPrompt)?.label).toBe("Please enter your email.");
+    expect(body.warm.find((n) => n.id === NODE.emailPrompt)?.label).toBe(
+      "Please enter your email on the next screen.",
+    );
     expect(body.warm.find((n) => n.id === NODE.passwordPrompt)?.label).toBe(
-      "Please enter your password.",
+      "Please enter your password on the next screen.",
     );
     expect(body.warm.find((n) => n.id === NODE.password)?.secret).toBe(true);
     expect(body.warm.find((n) => n.id === NODE.email)?.autocomplete).toBe("username");
@@ -70,7 +73,13 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
+        stack: [
+          {
+            nodeId: NODE.passwordPrompt,
+            label: "Please enter your password on the next screen.",
+            location: null,
+          },
+        ],
         extras: { action: true, inputText: "user@example.com" },
       },
     });
@@ -81,9 +90,17 @@ describe("Account app", () => {
       body: {
         stack: [
           { nodeId: NODE.start, label: "Sign in or register", location: null },
-          { nodeId: NODE.emailPrompt, label: "Please enter your email.", location: null },
+          {
+            nodeId: NODE.emailPrompt,
+            label: "Please enter your email on the next screen.",
+            location: null,
+          },
           { nodeId: NODE.email, label: "", location: null },
-          { nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null },
+          {
+            nodeId: NODE.passwordPrompt,
+            label: "Please enter your password on the next screen.",
+            location: null,
+          },
           { nodeId: NODE.password, label: "", location: null },
           { nodeId: NODE.auth, label: "Signing in…", location: null },
         ],
@@ -125,7 +142,13 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(anon),
       body: {
-        stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
+        stack: [
+          {
+            nodeId: NODE.passwordPrompt,
+            label: "Please enter your password on the next screen.",
+            location: null,
+          },
+        ],
         extras: { action: true, inputText: "pat@example.com" },
       },
     });
@@ -161,7 +184,13 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [{ nodeId: NODE.passwordPrompt, label: "Please enter your password.", location: null }],
+        stack: [
+          {
+            nodeId: NODE.passwordPrompt,
+            label: "Please enter your password on the next screen.",
+            location: null,
+          },
+        ],
         extras: { action: true, inputText: "short@example.com" },
       },
     });
@@ -233,10 +262,10 @@ describe("Account app", () => {
     });
     const home = opened.body as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
+      HELP_APP_LABEL,
       "Bible",
       "Notes",
       "Account",
-      expect.stringContaining("Help."),
     ]);
   });
 

@@ -460,64 +460,9 @@ function addVerseLevel(
       label: verseLabel(verse.verse, verse.text),
     });
   }
-  fragments.push(siblingListEdges(ids, { wrap: false }));
+  fragments.push(siblingListEdges(ids, { wrap: true }));
 
   const tip = verseId(ref);
-  const lastVerse = verses[verses.length - 1];
-  if (lastVerse && ref.chapter < book.chapterCount) {
-    const nextRef: BibleRef = {
-      version: ref.version,
-      book: book.name,
-      chapter: ref.chapter + 1,
-      verse: 1,
-    };
-    const nextVerse = deps.store.getVerse(nextRef);
-    fragments.push({
-      [verseId({
-        version: ref.version,
-        book: book.name,
-        chapter: ref.chapter,
-        verse: lastVerse.verse,
-      })]: {
-        next: edgeNode(verseId(nextRef), "replace"),
-      },
-    });
-    if (nextVerse) {
-      addNode(payloads, {
-        id: verseId(nextRef),
-        label: verseLabel(1, nextVerse.text),
-      });
-    }
-  }
-  if (ref.chapter > 1) {
-    const prevCount = deps.store.verseCount(ref.version, book.name, ref.chapter - 1);
-    if (prevCount > 0) {
-      const prevRef: BibleRef = {
-        version: ref.version,
-        book: book.name,
-        chapter: ref.chapter - 1,
-        verse: prevCount,
-      };
-      const prevVerse = deps.store.getVerse(prevRef);
-      fragments.push({
-        [verseId({
-          version: ref.version,
-          book: book.name,
-          chapter: ref.chapter,
-          verse: 1,
-        })]: {
-          prev: edgeNode(verseId(prevRef), "replace"),
-        },
-      });
-      if (prevVerse) {
-        addNode(payloads, {
-          id: verseId(prevRef),
-          label: verseLabel(prevCount, prevVerse.text),
-        });
-      }
-    }
-  }
-
   fragments.push({
     [tip]: {
       enter: edgeNode(optionId(ref, "copy"), "push"),

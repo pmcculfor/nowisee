@@ -154,24 +154,27 @@ describe("Bible app", () => {
     });
   });
 
-  it("last verse next joins the first verse of the next chapter", async () => {
+  it("verses wrap within the chapter; last verse next does not leave the chapter", async () => {
     const instance = bible();
-    const result = await instance.open("/kjv/Matthew/4/1");
-    const lastOf4 = verseId(ref("Matthew", 4, 1));
-    const firstOf5 = verseId(ref("Matthew", 5, 1));
-    expect(result.node.label).toBe("1. Placeholder Matthew 4:1");
-    expect(result.navigationMap[lastOf4]?.next).toEqual({
+    const genesis = await instance.open("/kjv/Genesis/1/3");
+    const first = verseId(ref("Genesis", 1, 1));
+    const last = verseId(ref("Genesis", 1, 3));
+    expect(genesis.navigationMap[last]?.next).toEqual({
       kind: "node",
-      toNodeId: firstOf5,
+      toNodeId: first,
+      stackBehavior: "replace",
+    });
+    expect(genesis.navigationMap[first]?.prev).toEqual({
+      kind: "node",
+      toNodeId: last,
       stackBehavior: "replace",
     });
 
-    const ch5 = await instance.open("/kjv/Matthew/5/1");
-    expect(ch5.navigationMap[firstOf5]?.prev).toEqual({
-      kind: "node",
-      toNodeId: lastOf4,
-      stackBehavior: "replace",
-    });
+    const matthew4 = await instance.open("/kjv/Matthew/4/1");
+    const lastOf4 = verseId(ref("Matthew", 4, 1));
+    const firstOf5 = verseId(ref("Matthew", 5, 1));
+    expect(matthew4.navigationMap[lastOf4]?.next).toBeUndefined();
+    expect(matthew4.navigationMap[lastOf4]?.next?.toNodeId).not.toBe(firstOf5);
   });
 
   it("verse enter pushes Copy; option next has no action flag", async () => {

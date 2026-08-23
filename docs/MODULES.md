@@ -480,13 +480,32 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Each app label is a node; `enter` is `kind: "app"` to `{ appId, path: "/" }`.
 - `prev` / `next` among app labels with `replace` (wrap optional—Home SHOULD wrap for a short list).
 - `back` at home root: missing edge or no-op (already home).
-- Optional Help node (text explaining the current bindings) as sibling or child.
+- Catalog order is registration order minus Home. Help is registered first among peers so it is the first Home item.
 
 ### Must not
 
 - Embed other apps’ internal node ids.
-- Special-case Bible/Mail/Account beyond registry labels/ids for URL construction.
+- Special-case Bible/Mail/Account/Help beyond registry labels/ids for URL construction.
 - Rewrite a peer app’s catalog label. Home shows `AppDescriptor.label` as registered.
+- Keep a private Help node. Help is an app.
+
+---
+
+## 12b. App: Help (`id: "help"`)
+
+Ordinary `AppModule`. No database. Catalog label is **Help. Tap the right side of the screen or press the right arrow to enter.** so a first-time visitor hears how to open it from Home.
+
+### Responsibilities
+
+- Tip: welcome (Now I See; one item per page; tap edges or arrow keys). `enter` → a back-practice node (`back` pops to welcome). `enter` from there → four sibling list items that wrap `next` / `prev`.
+- Only the **fourth** list item has `enter` → typing prompt → input node. The first three list items have no `enter` edge. Done (`enter`, `passInputText`, no `action`) → a closing node that quotes what they typed and sends them Home. Cancel (`back`) returns to the prompt.
+- Closing node `enter` and `back` are `app` edges to Home.
+- Welcome `back` is an `app` edge to Home.
+
+### Must not
+
+- Live on Home as a special node.
+- Bind keystrokes; intents only.
 
 ---
 
@@ -496,9 +515,9 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 - Own Bible data via `BibleStore` (SQLite, version + book + chapter + verse). Seed KJV from JSON on first open of an empty Bible file.
 - Graph: version root headings (Old Testament, New Testament, Bookmarks stub, Search stub) → book → chapter → verse → option nodes (Copy, Bookmark stub, Commentary stub).
-- Book lists and chapter lists wrap at the ends; verse `next` / `prev` join adjacent chapters (last verse → first of next chapter, and the reverse).
+- Book lists, chapter lists, and verse lists wrap at the ends. Verse `next` / `prev` stay in the chapter (last verse → first verse of the same chapter, and the reverse). They do not join the next or previous chapter.
 - Chapter labels are `N (chapter)` (number first); verse labels are `N. text` only. Copy still writes `Book C:V. text`.
-- Chapter → verse uses `replace` (not `push`) so cross-chapter verse joins keep a clean stack; verse `back` replaces to that verse’s chapter.
+- Chapter → verse uses `replace` (not `push`); verse `back` replaces to that verse’s chapter so a deep-linked verse still has a chapter to return to.
 - `open(path)` parses canonical verse/book paths; bootstrap stack tip = resolved node (stack may be a single leaf after open reset—the app still exposes internal pops via map once the user pushes deeper in-session).
 - After open, user builds in-app stack via `push` / `replace` edges; `back` = `pop` or chapter `replace` within bible; root `back` = `app` edge to the root app.
 - Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) returns `clipboardText` (the line `Book C:V. text`) and “Copied”, or an error label with no `clipboardText`. Core writes the clipboard. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
@@ -507,7 +526,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ### Domain-only
 
-- Chapter/verse joins, KJV indexing—never core.
+- KJV indexing—never core.
 
 ---
 
@@ -558,7 +577,7 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 
 ### Signed out
 
-- Tip: **Sign in or register**. `enter` → “Please enter your email.” → email input (`autocomplete=username`). Email Done (`action` + `passInputText`) → “Please enter your password.” → password input (`secret`, `autocomplete=current-password`). Password Done (`action` + `passInputText`) → warm **Signing in…**, then **You are signed in as …** (enter/back → Home) or **Sign-in was unsuccessful.** (enter/back → `pop` to the same password input).
+- Tip: **Sign in or register**. `enter` → “Please enter your email on the next screen.” → email input (`autocomplete=username`). Email Done (`action` + `passInputText`) → “Please enter your password on the next screen.” → password input (`secret`, `autocomplete=current-password`). Password Done (`action` + `passInputText`) → warm **Signing in…**, then **You are signed in as …** (enter/back → Home) or **Sign-in was unsuccessful.** (enter/back → `pop` to the same password input).
 - Combined register then sign-in on `email-taken`. Email is stored against `sessionId` in `account_flow`, never in a node id, label, or URL.
 - Root `back` → Home.
 
@@ -576,7 +595,7 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 ### Responsibilities
 
 - Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
-- Construct registry; register remote stubs for Home, Bible, Notes, and Account (`createRemoteApp`).
+- Construct registry; register remote stubs for Home, Help, Bible, Notes, and Account (`createRemoteApp`).
 - Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.

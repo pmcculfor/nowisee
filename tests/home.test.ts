@@ -19,15 +19,10 @@ describe("Home app", () => {
 
     const result = home.open("/") as RefreshResult;
     expect(result.node.label).toBe("Bible");
-    expect(result.warm.map((n) => n.label)).toEqual([
-      "Bible",
-      "Mail",
-      expect.stringContaining("Help."),
-    ]);
+    expect(result.warm.map((n) => n.label)).toEqual(["Bible", "Mail"]);
 
     const bibleId = result.node.id;
     const mail = result.warm.find((n) => n.label === "Mail")!;
-    const help = result.warm.find((n) => n.label.startsWith("Help."))!;
 
     expect(result.navigationMap[bibleId]?.next).toEqual({
       kind: "node",
@@ -35,7 +30,7 @@ describe("Home app", () => {
       stackBehavior: "replace",
     });
     // wrap: last → first
-    expect(result.navigationMap[help.id]?.next).toEqual({
+    expect(result.navigationMap[mail.id]?.next).toEqual({
       kind: "node",
       toNodeId: bibleId,
       stackBehavior: "replace",
@@ -52,8 +47,7 @@ describe("Home app", () => {
 
     // Already home — no back edges
     expect(result.navigationMap[bibleId]?.back).toBeUndefined();
-    expect(result.navigationMap[help.id]?.back).toBeUndefined();
-    expect(result.navigationMap[help.id]?.enter).toBeUndefined();
+    expect(result.navigationMap[mail.id]?.back).toBeUndefined();
   });
 
   it("does not embed foreign app node ids — only home:* ids and app locations", () => {
@@ -120,7 +114,7 @@ describe("Home app", () => {
     expect(repaired.node.label).toBe("Bible");
   });
 
-  it("empty peer list shows Home root with help sibling; still no back", () => {
+  it("empty peer list shows Home root; still no back", () => {
     const home = createHomeApp({
       rootAppId: "home",
       listEnabled: descriptors([{ id: "home", label: "Home" }]),
@@ -129,7 +123,7 @@ describe("Home app", () => {
     expect(result.node.label).toBe("Home");
     expect(result.navigationMap[result.node.id]?.enter).toBeUndefined();
     expect(result.navigationMap[result.node.id]?.back).toBeUndefined();
-    expect(result.warm.some((n) => n.label.startsWith("Help."))).toBe(true);
+    expect(result.warm.map((n) => n.label)).toEqual(["Home"]);
   });
 
   it("RefreshResult survives structuredClone", () => {

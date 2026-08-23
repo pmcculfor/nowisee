@@ -1,3 +1,4 @@
+import { HELP_APP_ID, HELP_APP_LABEL } from "../apps/help/ids.ts";
 import { createRemoteApp } from "../apps/remote.ts";
 import { createFetchRpc, type AppRpc } from "../apps/rpc.ts";
 import { Display } from "../core/display.ts";
@@ -31,7 +32,7 @@ export type StartShellOptions = {
 
 /**
  * Bootstrap the shell. Core never names a product app — `rootAppId` comes from config.
- * Home, Bible, Notes, and Account are remote stubs.
+ * Home, Help, Bible, Notes, and Account are remote stubs.
  */
 export function startShell(
   mount: HTMLElement,
@@ -45,6 +46,7 @@ export function startShell(
   const rpc = options.rpc ?? createFetchRpc();
   const registry = new AppRegistry();
   registry.register(createRemoteApp({ id: "home", label: "Home", rpc }));
+  registry.register(createRemoteApp({ id: HELP_APP_ID, label: HELP_APP_LABEL, rpc }));
   registry.register(createRemoteApp({ id: "bible", label: "Bible", rpc }));
   registry.register(createRemoteApp({ id: "notes", label: "Notes", rpc }));
   registry.register(createRemoteApp({ id: "account", label: "Account", rpc }));

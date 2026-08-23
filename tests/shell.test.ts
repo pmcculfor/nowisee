@@ -1,13 +1,14 @@
 /** @vitest-environment happy-dom */
 
 import { describe, expect, it } from "vitest";
+import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createHomeApp } from "../src/apps/home.ts";
 import { startShell } from "../src/shell/bootstrap.ts";
 import { createAppHost } from "../server/host.ts";
 import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 describe("shell bootstrap", () => {
-  it("opens Home at #/ with rootAppId home and lists Bible", async () => {
+  it("opens Home at #/ with rootAppId home and lists Help first", async () => {
     window.location.hash = "#/";
     const mount = document.createElement("div");
     document.body.appendChild(mount);
@@ -20,11 +21,12 @@ describe("shell bootstrap", () => {
 
     expect(shell.registry.listEnabled()).toEqual([
       { id: "home", label: "Home" },
+      { id: "help", label: HELP_APP_LABEL },
       { id: "bible", label: "Bible" },
       { id: "notes", label: "Notes" },
       { id: "account", label: "Account" },
     ]);
-    expect(mount.textContent).toContain("Bible");
+    expect(mount.textContent).toContain("Help.");
     expect(shell.navigator.getCurrentAppId()).toBe("home");
     expect(mount.querySelectorAll("button[data-nav-pad]")).toHaveLength(4);
     expect(mount.querySelector('[data-shell="surface"]')).not.toBeNull();

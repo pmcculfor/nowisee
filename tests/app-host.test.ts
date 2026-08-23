@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createAppHost } from "../server/host.ts";
 import { handleAppHttp } from "../server/http.ts";
 import { fixtureKjv } from "./helpers/kjvFixture.ts";
@@ -8,15 +9,15 @@ function host() {
 }
 
 describe("app host", () => {
-  it("opens Home listing Bible, Notes, and Account", async () => {
+  it("opens Home with Help first, then Bible, Notes, and Account", async () => {
     const result = await host().open("home", "/", {});
     expect(result.warm.map((n) => n.label)).toEqual([
+      HELP_APP_LABEL,
       "Bible",
       "Notes",
       "Account",
-      expect.stringContaining("Help."),
     ]);
-    expect(result.node.label).toBe("Bible");
+    expect(result.node.label).toBe(HELP_APP_LABEL);
   });
 
   it("opens Notes signed-out as a sign-in node", async () => {
@@ -50,7 +51,7 @@ describe("app HTTP", () => {
     });
     expect(out.status).toBe(200);
     const body = out.body as { node: { label: string } };
-    expect(body.node.label).toBe("Bible");
+    expect(body.node.label).toBe(HELP_APP_LABEL);
   });
 
   it("unknown app is 404", async () => {

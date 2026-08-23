@@ -27,8 +27,8 @@ export type AccountViewDeps = {
 };
 
 const START_LABEL = "Sign in or register";
-const EMAIL_PROMPT_LABEL = "Please enter your email.";
-const PASSWORD_PROMPT_LABEL = "Please enter your password.";
+const EMAIL_PROMPT_LABEL = "Please enter your email on the next screen.";
+const PASSWORD_PROMPT_LABEL = "Please enter your password on the next screen.";
 const SETTINGS_LABEL = "Settings. This screen is not available yet.";
 const SIGN_OUT_LABEL = "Sign out";
 const AUTH_WARM_LABEL = "Signing in…";

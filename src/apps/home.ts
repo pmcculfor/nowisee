@@ -16,7 +16,6 @@ import type {
 
 const HOME_APP_ID = "home";
 const ROOT_NODE_ID = "home:root";
-const HELP_NODE_ID = "home:help";
 
 export type HomeAppDeps = {
   /** Plain descriptors only — never pass the registry object. */
@@ -50,18 +49,6 @@ function appNodeId(appId: string): string {
   return `home:app:${appId}`;
 }
 
-function helpLabel(): string {
-  return [
-    "Help.",
-    "The arrow keys navigate.",
-    "Up and Down move between items.",
-    "Right opens.",
-    "Left goes back.",
-    "On a typing screen, type in the box. Enter makes a new line. Move to Done to save, or to Cancel to go back.",
-    "On a phone with VoiceOver, touch the top, bottom, left, or right edge of the screen to navigate. On a typing screen, swipe to Done or Cancel.",
-  ].join(" ");
-}
-
 function catalog(
   deps: HomeAppDeps,
   userId: string | null,
@@ -90,12 +77,6 @@ function catalog(
     appIdByNode.set(id, app.id);
   }
 
-  ids.push(HELP_NODE_ID);
-  payloads.set(HELP_NODE_ID, {
-    id: HELP_NODE_ID,
-    label: helpLabel(),
-  });
-
   return { ids, payloads, appIdByNode };
 }
 
@@ -121,10 +102,6 @@ function buildNavigationMap(
 
 function viewForPath(deps: HomeAppDeps, path: string, userId: string | null): RefreshResult {
   const cat = catalog(deps, userId);
-
-  if (path === "/help") {
-    return resultForCatalog(cat, HELP_NODE_ID);
-  }
 
   const appMatch = /^\/app\/([^/]+)\/?$/.exec(path);
   if (appMatch) {
@@ -169,9 +146,6 @@ function locationFor(
   tipId: string,
   appIdByNode: ReadonlyMap<string, string>,
 ): { appId: string; path: string } {
-  if (tipId === HELP_NODE_ID) {
-    return { appId: HOME_APP_ID, path: "/help" };
-  }
   if (tipId === ROOT_NODE_ID) {
     return { appId: HOME_APP_ID, path: "/" };
   }

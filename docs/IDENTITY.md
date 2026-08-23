@@ -298,7 +298,7 @@ Home is **not special here**. Like every app it receives `ctx.userId`: `null` wh
 
 The only core-side consequence is plumbing: the catalog callback currently takes no arguments and the host builds Home **once at startup**, so it must become per-request (or take the user) once `ctx` exists. Nothing about this belongs in core, and there is no host-level "requires a signed-in user" flag — that was an earlier idea, dropped with the decision above.
 
-Not needed for the first slice. Signed-out Home listing Bible, Notes, Account, and Help is enough to ship. The host does not rewrite any app's catalog label.
+Not needed for the first slice. Signed-out Home listing Help, Bible, Notes, and Account is enough to ship. The host does not rewrite any app's catalog label.
 
 ---
 
@@ -357,9 +357,9 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
 
 ```text
 "Sign in or register"
-    --enter-->  "Please enter your email."
+    --enter-->  "Please enter your email on the next screen."
                     --enter-->  email input (autocomplete=username)
-                                    --enter (action, passInputText)-->  "Please enter your password."
+                                    --enter (action, passInputText)-->  "Please enter your password on the next screen."
                                                                           --enter-->  password input (secret)
                                                                                           --enter (action, passInputText)-->  "Signing in…"
                                                                                                                                 │

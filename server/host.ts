@@ -1,6 +1,7 @@
 import { startAccountApp } from "../src/apps/account/store.ts";
 import { startBibleApp } from "../src/apps/bible/store.ts";
 import type { KjvData } from "../src/apps/bible/types.ts";
+import { createHelpApp } from "../src/apps/help/index.ts";
 import { createHomeApp } from "../src/apps/home.ts";
 import { startNotesApp } from "../src/apps/notes/store.ts";
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
@@ -76,7 +77,7 @@ export type NowiseeHost = {
 
 /**
  * In-process open/refresh for apps that run on the server.
- * Home, Bible, Notes, and Account.
+ * Home, Help, Bible, Notes, and Account.
  */
 export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const rootAppId = options.rootAppId ?? "home";
@@ -111,6 +112,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       rootAppId,
     }),
   );
+  registry.register(createHelpApp({ rootAppId }));
   registry.register(bible);
   registry.register(notes);
   registry.register(account);
