@@ -1,6 +1,7 @@
 import { startAccountApp } from "../src/apps/account/store.ts";
 import { startBibleApp } from "../src/apps/bible/store.ts";
 import type { KjvData } from "../src/apps/bible/types.ts";
+import { startGmailApp } from "../src/apps/gmail/store.ts";
 import { createHelpApp } from "../src/apps/help/index.ts";
 import { createHomeApp } from "../src/apps/home.ts";
 import { startNotesApp } from "../src/apps/notes/store.ts";
@@ -33,6 +34,7 @@ export type AppHostOptions = {
   readonly bibleDb?: string;
   readonly accountDb?: string;
   readonly notesDb?: string;
+  readonly gmailDb?: string;
   /** Host identity database, or a file path. Default `:memory:`. */
   readonly db?: Db | string;
   readonly allowRegistration?: boolean;
@@ -91,7 +93,7 @@ export type NowiseeHost = {
 
 /**
  * In-process open/refresh for apps that run on the server.
- * Home, Help, Bible, Notes, and Account.
+ * Home, Help, Bible, Notes, Gmail, and Account.
  */
 export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const rootAppId = options.rootAppId ?? "home";
@@ -143,6 +145,11 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     rootAppId,
     dbPath: options.notesDb ?? defaultAppDbPath(options.db, "notes"),
   });
+  const gmail = startGmailApp({
+    rootAppId,
+    dbPath: options.gmailDb ?? defaultAppDbPath(options.db, "gmail"),
+    fetch: options.fetch,
+  });
   const account = startAccountApp({
     rootAppId,
     dbPath: options.accountDb ?? defaultAppDbPath(options.db, "account"),
@@ -158,6 +165,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   registry.register(createHelpApp({ rootAppId }));
   registry.register(bible);
   registry.register(notes);
+  registry.register(gmail);
   registry.register(account);
   for (const extra of options.extraApps ?? []) {
     registry.register(extra);
@@ -223,6 +231,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     close() {
       bible.close();
       notes.close();
+      gmail.close();
       account.close();
       db.close();
     },

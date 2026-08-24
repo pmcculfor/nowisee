@@ -11,6 +11,7 @@ import {
   rootBackToHome,
   siblingListEdges,
   signedOut,
+  splitText,
 } from "../src/app-kit/index.ts";
 import type { NavEdge, NodePayload } from "../src/core/types.ts";
 
@@ -196,5 +197,25 @@ describe("collectNeighborhood", () => {
       },
     });
     expect(warm.length).toBe(2);
+  });
+});
+
+describe("splitText", () => {
+  it("returns one empty string for blank input", () => {
+    expect(splitText("")).toEqual([""]);
+    expect(splitText("   \n\n  ")).toEqual([""]);
+  });
+
+  it("splits on blank lines", () => {
+    expect(splitText("One.\n\nTwo.\n\nThree.")).toEqual(["One.", "Two.", "Three."]);
+  });
+
+  it("hard-caps a giant paragraph", () => {
+    const word = "word ";
+    const text = word.repeat(400).trim();
+    const chunks = splitText(text, 80);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((c) => c.length <= 80)).toBe(true);
+    expect(chunks.join(" ").replace(/\s+/g, " ")).toBe(text.replace(/\s+/g, " "));
   });
 });

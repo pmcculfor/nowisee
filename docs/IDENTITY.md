@@ -19,7 +19,7 @@
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**Landed:** Home, Bible, Notes, and Account run on the server. Lockbox and the generic OAuth broker are host capabilities (`ctx.lockbox` / `ctx.oauth`); no Gmail or Facebook app consumes them yet.
+**Landed:** Home, Bible, Notes, Gmail, and Account run on the server. Lockbox and the generic OAuth broker are host capabilities (`ctx.lockbox` / `ctx.oauth`). Gmail is the first consumer (`oauthAppIds` / `lockboxAppIds` include `"gmail"` on the running host). Facebook is not built.
 
 ---
 
@@ -85,7 +85,7 @@ Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `conf
 
 `getAccessToken` refreshes under a mutex per `(userId, appId, slot)`. `invalid_grant` deletes the lockbox slot and throws `needs-reconnect`. `disconnect` best-effort revokes then deletes the slot.
 
-Gmail and Facebook apps are still not built; they consume this surface later.
+Gmail consumes this surface (`ctx.oauth`). Facebook is still not built.
 
 ---
 
@@ -108,7 +108,7 @@ Login, cookies, Account, and SQLite were **one slice**. All five steps have land
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
 
-The lockbox and OAuth broker (§3) have landed. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md). No Gmail or Facebook app is in this slice.
+The lockbox and OAuth broker (§3) have landed. Gmail consumes them. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md).
 
 ---
 

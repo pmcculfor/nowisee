@@ -25,3 +25,5 @@ export {
   type CollectNeighborhoodOptions,
   type NeighborhoodNeighbor,
 } from "./neighborhood.ts";
+
+export { splitText } from "./splitText.ts";

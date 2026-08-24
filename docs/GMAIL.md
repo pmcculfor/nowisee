@@ -1,6 +1,16 @@
-# Nowisee — Gmail app plan
+# Nowisee — Gmail app
 
-**Status:** Plan only (August 2026). Not implemented. The host lockbox and generic OAuth broker **exist** ([`IDENTITY.md`](IDENTITY.md) §3). Product locks: [`SPEC.md`](SPEC.md). Identity: [`IDENTITY.md`](IDENTITY.md). Preparedness: [`PREPAREDNESS.md`](PREPAREDNESS.md).
+**Status:** v1 **landed** (August 2026). Inbox subjects, body chunks, compose/send, connect/disconnect. No reply/forward. Uses the host lockbox and generic OAuth broker ([`IDENTITY.md`](IDENTITY.md) §3). Product locks: [`SPEC.md`](SPEC.md).
+
+**v1 graph:** signed-out → Connect Gmail (`kind: "external"`) → inbox subjects (open lands on the first). Up from the first subject is Compose; Up from Compose is Disconnect. Enter a subject to read body chunks (`back` pops). Compose is To → Subject → Body → Sent in place. No teleport to inbox. No Reply/Forward.
+
+Code: [`src/apps/gmail/`](../src/apps/gmail/). Tokens: `ctx.oauth` only (never `gmail.db`, never a `RefreshResult`). Env: `NOWISEE_LOCKBOX_KEY`, `NOWISEE_OAUTH_GMAIL_CLIENT_ID`, `NOWISEE_OAUTH_GMAIL_CLIENT_SECRET`, `NOWISEE_ORIGIN` (OAuth redirect `{origin}/oauth/callback`).
+
+The rest of this file is the feasibility research that led to that slice.
+
+---
+
+# Feasibility notes (research)
 
 **Verdict:** Talking to Gmail from Nowisee will work. The product already assumed this: apps run on the server, the browser never calls Google, tokens live in the host lockbox, and signed-out (or unconnected) is an ordinary node — see [`IDENTITY.md`](IDENTITY.md) §2–3 and [`PREPAREDNESS.md`](PREPAREDNESS.md) “Real mail”. Nothing in core needs a Gmail special case.
 

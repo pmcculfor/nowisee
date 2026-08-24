@@ -27,8 +27,9 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/) |
 | Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/) |
+| Gmail | `data/apps/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/) |
 
-Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account, Bible, and Notes memory files so tests do not write `data/`.
+Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account, Bible, Notes, and Gmail memory files so tests do not write `data/`.
 
 `ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`). Never a database.
 
@@ -64,6 +65,12 @@ Notes talks to a [`NotesStore`](../src/apps/notes/store.ts). Production opens `d
 
 Every method takes `ownerId` — `ctx.userId` from the cookie, never `sessionId`. `userId` null → a sign-in node; no row is written. List order is `updated_at` descending (most recently edited first). List tips are the first line of the body.
 
+## Gmail
+
+Gmail talks to a [`GmailStore`](../src/apps/gmail/store.ts) (inbox metadata cache + compose drafts) and Gmail REST via [`gmailClient.ts`](../src/apps/gmail/gmailClient.ts). Production opens `data/apps/gmail.db`. Tokens never go in that file — `ctx.oauth` only. [`startGmailApp`](../src/apps/gmail/store.ts) opens the file (Node-only). The graph module does not import SQLite.
+
+Every store method takes `ownerId`. Message ids on the stack are untrusted; fetches always use this user's access token → `users/me`.
+
 ## Secrets lockbox — landed
 
 [`IDENTITY.md`](IDENTITY.md) §3. Host database (`lockbox` + `oauth_states`), host master key (`NOWISEE_LOCKBOX_KEY`), `ctx.lockbox` / `ctx.oauth` for allowed apps only. Not a place for note bodies or files. OAuth client id/secret stay in host env, not in the lockbox.
@@ -74,7 +81,7 @@ Bytes do not travel through `open` / `refresh` (JSON, 1 MiB cap). When attach ex
 
 ## Transfer
 
-1. App ↔ its store (BibleStore, AccountFlowStore, NotesStore).
+1. App ↔ its store (BibleStore, AccountFlowStore, NotesStore, GmailStore).
 2. Host engine swap: [`server/db/index.ts`](../server/db/index.ts) for the host file (identity, lockbox, OAuth state).
 3. Account export / deletion: still deferred ([`IDENTITY.md`](IDENTITY.md) §13).
 4. No app-to-app `SELECT`.

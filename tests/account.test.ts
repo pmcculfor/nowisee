@@ -265,6 +265,7 @@ describe("Account app", () => {
       HELP_APP_LABEL,
       "Bible",
       "Notes",
+      "Gmail",
       "Account",
     ]);
   });
