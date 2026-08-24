@@ -41,6 +41,9 @@ export type GmailViewDeps = {
 const SIGNED_OUT_TEXT = "Sign in to use Gmail.";
 const CONNECT_LABEL = "Connect Gmail";
 const COMPOSE_LABEL = "Compose";
+const COMPOSE_TO_PROMPT_LABEL = "Enter the recipient's email on the next screen.";
+const COMPOSE_SUBJECT_PROMPT_LABEL = "Enter the subject on the next screen.";
+const COMPOSE_BODY_PROMPT_LABEL = "Enter the body on the next screen.";
 const DISCONNECT_LABEL = "Disconnect Gmail";
 const DISCONNECTED_LABEL = "Gmail disconnected.";
 const UNAVAILABLE_LABEL = "Gmail is not configured.";
@@ -107,14 +110,14 @@ async function applyAction(
     return disconnectedView(deps);
   }
 
-  if (tipId === NODE.composeSubject) {
+  if (tipId === NODE.composeSubjectPrompt) {
     await deps.store.saveDraft(ownerId, { to: extras.inputText ?? "", sendResult: null });
-    return connectedView(deps, ownerId, NODE.composeSubject, {}, ctx, oauth);
+    return connectedView(deps, ownerId, NODE.composeSubjectPrompt, {}, ctx, oauth);
   }
 
-  if (tipId === NODE.composeBody) {
+  if (tipId === NODE.composeBodyPrompt) {
     await deps.store.saveDraft(ownerId, { subject: extras.inputText ?? "", sendResult: null });
-    return connectedView(deps, ownerId, NODE.composeBody, {}, ctx, oauth);
+    return connectedView(deps, ownerId, NODE.composeBodyPrompt, {}, ctx, oauth);
   }
 
   if (tipId === NODE.composeSent) {
@@ -312,11 +315,23 @@ function viewFromState(
     label: "Disconnecting…",
   });
   payloads.set(NODE.compose, { id: NODE.compose, label: COMPOSE_LABEL });
+  payloads.set(NODE.composeToPrompt, {
+    id: NODE.composeToPrompt,
+    label: COMPOSE_TO_PROMPT_LABEL,
+  });
   payloads.set(NODE.composeTo, { id: NODE.composeTo, label: draft.to, kind: "input" });
+  payloads.set(NODE.composeSubjectPrompt, {
+    id: NODE.composeSubjectPrompt,
+    label: COMPOSE_SUBJECT_PROMPT_LABEL,
+  });
   payloads.set(NODE.composeSubject, {
     id: NODE.composeSubject,
     label: draft.subject,
     kind: "input",
+  });
+  payloads.set(NODE.composeBodyPrompt, {
+    id: NODE.composeBodyPrompt,
+    label: COMPOSE_BODY_PROMPT_LABEL,
   });
   payloads.set(NODE.composeBody, { id: NODE.composeBody, label: draft.body, kind: "input" });
   payloads.set(NODE.composeSent, {
@@ -371,24 +386,36 @@ function buildNavigationMap(
     },
     {
       [NODE.compose]: {
+        enter: edgeNode(NODE.composeToPrompt, "replace"),
+      },
+      [NODE.composeToPrompt]: {
         enter: edgeNode(NODE.composeTo, "replace"),
+        back: edgeNode(NODE.compose, "replace"),
+      },
+      [NODE.composeSubjectPrompt]: {
+        enter: edgeNode(NODE.composeSubject, "replace"),
+        back: edgeNode(NODE.composeTo, "replace"),
+      },
+      [NODE.composeBodyPrompt]: {
+        enter: edgeNode(NODE.composeBody, "replace"),
+        back: edgeNode(NODE.composeSubject, "replace"),
       },
     },
     inputEdges(NODE.composeTo, {
-      commitTo: NODE.composeSubject,
-      backTo: NODE.compose,
+      commitTo: NODE.composeSubjectPrompt,
+      backTo: NODE.composeToPrompt,
       action: true,
       commitStackBehavior: "replace",
     }),
     inputEdges(NODE.composeSubject, {
-      commitTo: NODE.composeBody,
-      backTo: NODE.composeTo,
+      commitTo: NODE.composeBodyPrompt,
+      backTo: NODE.composeSubjectPrompt,
       action: true,
       commitStackBehavior: "replace",
     }),
     inputEdges(NODE.composeBody, {
       commitTo: NODE.composeSent,
-      backTo: NODE.composeSubject,
+      backTo: NODE.composeBodyPrompt,
       action: true,
       commitStackBehavior: "replace",
     }),
@@ -444,12 +471,21 @@ function tipIdForPath(path: string): string | null {
     return NODE.compose;
   }
   if (path === "/compose/to") {
+    return NODE.composeToPrompt;
+  }
+  if (path === "/compose/to/input") {
     return NODE.composeTo;
   }
   if (path === "/compose/subject") {
+    return NODE.composeSubjectPrompt;
+  }
+  if (path === "/compose/subject/input") {
     return NODE.composeSubject;
   }
   if (path === "/compose/body") {
+    return NODE.composeBodyPrompt;
+  }
+  if (path === "/compose/body/input") {
     return NODE.composeBody;
   }
   if (path === "/compose/sent") {
@@ -476,14 +512,23 @@ function locationFor(tipId: string): AppLocation | null {
   if (tipId === NODE.compose) {
     return { appId: GMAIL_APP_ID, path: "/compose" };
   }
-  if (tipId === NODE.composeTo) {
+  if (tipId === NODE.composeToPrompt) {
     return { appId: GMAIL_APP_ID, path: "/compose/to" };
   }
-  if (tipId === NODE.composeSubject) {
+  if (tipId === NODE.composeTo) {
+    return { appId: GMAIL_APP_ID, path: "/compose/to/input" };
+  }
+  if (tipId === NODE.composeSubjectPrompt) {
     return { appId: GMAIL_APP_ID, path: "/compose/subject" };
   }
-  if (tipId === NODE.composeBody) {
+  if (tipId === NODE.composeSubject) {
+    return { appId: GMAIL_APP_ID, path: "/compose/subject/input" };
+  }
+  if (tipId === NODE.composeBodyPrompt) {
     return { appId: GMAIL_APP_ID, path: "/compose/body" };
+  }
+  if (tipId === NODE.composeBody) {
+    return { appId: GMAIL_APP_ID, path: "/compose/body/input" };
   }
   if (tipId === NODE.composeSent) {
     return null;

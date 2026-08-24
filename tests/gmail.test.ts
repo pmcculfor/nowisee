@@ -181,6 +181,40 @@ describe("Gmail app graph", () => {
     expect(body.navigationMap[chunkNodeId("m1", 0)]?.enter).toBeUndefined();
   });
 
+  it("compose shows an instruction node before each input", async () => {
+    const oauth = mockOauth();
+    const gmail = app();
+    const ctx = signedIn(oauth);
+    const compose = await gmail.open("/compose", {}, ctx);
+    expect(compose.navigationMap[NODE.compose]?.enter).toMatchObject({
+      toNodeId: NODE.composeToPrompt,
+    });
+
+    const toPrompt = await gmail.open("/compose/to", {}, ctx);
+    expect(toPrompt.node.label).toBe("Enter the recipient's email on the next screen.");
+    expect(toPrompt.navigationMap[NODE.composeToPrompt]?.enter).toMatchObject({
+      toNodeId: NODE.composeTo,
+    });
+    expect(toPrompt.navigationMap[NODE.composeTo]?.enter).toMatchObject({
+      toNodeId: NODE.composeSubjectPrompt,
+    });
+
+    const subjectPrompt = await gmail.open("/compose/subject", {}, ctx);
+    expect(subjectPrompt.node.label).toBe("Enter the subject on the next screen.");
+    expect(subjectPrompt.navigationMap[NODE.composeSubjectPrompt]?.enter).toMatchObject({
+      toNodeId: NODE.composeSubject,
+    });
+    expect(subjectPrompt.navigationMap[NODE.composeSubject]?.enter).toMatchObject({
+      toNodeId: NODE.composeBodyPrompt,
+    });
+
+    const bodyPrompt = await gmail.open("/compose/body", {}, ctx);
+    expect(bodyPrompt.node.label).toBe("Enter the body on the next screen.");
+    expect(bodyPrompt.navigationMap[NODE.composeBodyPrompt]?.enter).toMatchObject({
+      toNodeId: NODE.composeBody,
+    });
+  });
+
   it("compose To→Subject→Body send stays on Sent and does not teleport", async () => {
     const sent: Array<{ to: string; subject: string; body: string }> = [];
     const oauth = mockOauth();
@@ -188,12 +222,12 @@ describe("Gmail app graph", () => {
     const ctx = signedIn(oauth);
 
     await gmail.refresh(
-      [{ nodeId: NODE.composeSubject, label: "", location: null }],
+      [{ nodeId: NODE.composeSubjectPrompt, label: "", location: null }],
       { action: true, inputText: "ada@example.com" },
       ctx,
     );
     await gmail.refresh(
-      [{ nodeId: NODE.composeBody, label: "", location: null }],
+      [{ nodeId: NODE.composeBodyPrompt, label: "", location: null }],
       { action: true, inputText: "Hi" },
       ctx,
     );

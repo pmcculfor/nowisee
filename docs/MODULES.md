@@ -546,7 +546,7 @@ Tip: **Connect Gmail.** `enter` is `kind: "external"` to Google’s authorize UR
 
 - Open `/`: first inbox subject, or **Compose** if empty. List: Disconnect, Compose, then up to 20 INBOX subjects (no wrap). Root `back` → Home.
 - Enter a subject **pushes** body chunk 1 (plain text, split by [`splitText`](../src/app-kit/splitText.ts)). Chunks are siblings. `back` pops. No reply/forward.
-- Compose: To → Subject → Body inputs (`action` + `passInputText` on each Done). Send stays on **Sent** / error in place — **no stack teleport**. Cancel walks back without sending.
+- Compose: instruction node then input for To, Subject, and Body (`action` + `passInputText` on each Done). Send stays on **Sent** / error in place — **no stack teleport**. Cancel walks back without sending.
 - Disconnect: `action: true` → `ctx.oauth.disconnect` + clear cache → **Gmail disconnected.**
 - `invalid_grant` / unauthorized → Connect node. Side effects only when `extras.action` is true.
 - Owner: this `userId` → `getAccessToken("personal")` → `users/me`. Message ids on the stack are untrusted.
