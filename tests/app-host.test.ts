@@ -15,6 +15,7 @@ describe("app host", () => {
       HELP_APP_LABEL,
       "Bible",
       "Notes",
+      "Gmail",
       "Account",
     ]);
     expect(result.node.label).toBe(HELP_APP_LABEL);

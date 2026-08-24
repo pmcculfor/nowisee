@@ -24,6 +24,7 @@ describe("shell bootstrap", () => {
       { id: "help", label: HELP_APP_LABEL },
       { id: "bible", label: "Bible" },
       { id: "notes", label: "Notes" },
+      { id: "gmail", label: "Gmail" },
       { id: "account", label: "Account" },
     ]);
     expect(mount.textContent).toContain("Help.");

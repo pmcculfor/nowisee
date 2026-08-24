@@ -34,6 +34,7 @@ describe("packaging boundary", () => {
     expect(bootstrap).not.toContain("apps/bible");
     expect(bootstrap).not.toContain("apps/notes");
     expect(bootstrap).not.toContain("apps/home");
+    expect(bootstrap).not.toContain("apps/gmail");
     expect(bootstrap).not.toContain("apps/account");
   });
 

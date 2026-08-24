@@ -21,5 +21,14 @@
     "types": []
   },
   "include": ["src"],
-  "exclude": ["src/apps/bible/store.ts", "src/apps/account/store.ts", "src/apps/notes/store.ts"]
+  "exclude": [
+    "src/apps/bible/store.ts",
+    "src/apps/account/store.ts",
+    "src/apps/notes/store.ts",
+    "src/apps/gmail/store.ts",
+    "src/apps/gmail/oauth.ts",
+    "src/apps/gmail/gmailClient.ts",
+    "src/apps/gmail/mime.ts",
+    "src/apps/gmail/index.ts"
+  ]
 }

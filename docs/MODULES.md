@@ -530,20 +530,30 @@ Ordinary `AppModule`. No database. Catalog label is **Help. Tap the right side o
 
 ---
 
-## 14. App: Demo mail (`id: "mail"`)
+## 14. App: Gmail (`id: "gmail"`)
 
-### Responsibilities
+Ordinary server `AppModule`. Gmail REST + MIME live in the app. Tokens via `ctx.oauth` (host lockbox). Cache and compose drafts in `data/apps/gmail.db`. See [`GMAIL.md`](GMAIL.md) and [`STORAGE.md`](STORAGE.md).
 
-- In-memory sample messages; no network.
-- Inbox list, message body, compose instruction → input → send/status nodes.
-- Compose: input node; `enter` edge carries `passInputText` **and** `action: true` to the send/status node; `back` edge returns without sending.
-- Send tip: warm shows “Sending…”, the action refresh performs the send and returns “Sent” / error in place; edges back to inbox or pops—**no stack teleport**.
-- Re-entering the sent status node later carries no action flag, so nothing is re-sent.
-- Root `back` → `app` edge to the root app.
+### Signed out
 
-### Non-goals
+`ctx.userId` is null. Tip: **Sign in to use Gmail.** `enter` → Account. `back` → Home.
 
-- OAuth, real SMTP/IMAP, server cache (until a real mail app exists).
+### Signed in, not connected
+
+Tip: **Connect Gmail.** `enter` is `kind: "external"` to Google’s authorize URL (`ctx.oauth.start`). `back` → Home. After Google redirects to `GET /oauth/callback`, the host stores the refresh token and 302s to `/#/gmail`.
+
+### Connected
+
+- Open `/`: first inbox subject, or **Compose** if empty. List: Disconnect, Compose, then up to 20 INBOX subjects (no wrap). Root `back` → Home.
+- Enter a subject **pushes** body chunk 1 (plain text, split by [`splitText`](../src/app-kit/splitText.ts)). Chunks are siblings. `back` pops. No reply/forward.
+- Compose: To → Subject → Body inputs (`action` + `passInputText` on each Done). Send stays on **Sent** / error in place — **no stack teleport**. Cancel walks back without sending.
+- Disconnect: `action: true` → `ctx.oauth.disconnect` + clear cache → **Gmail disconnected.**
+- `invalid_grant` / unauthorized → Connect node. Side effects only when `extras.action` is true.
+- Owner: this `userId` → `getAccessToken("personal")` → `users/me`. Message ids on the stack are untrusted.
+
+### Non-goals (v1)
+
+Reply/forward, `requestRefresh`, Pub/Sub, search, labels, attachments, HTML formatting, multiple Google accounts.
 
 ---
 
@@ -634,6 +644,6 @@ Ordinary `AppModule`. Credentials and sessions are **not** here — they live in
 4. App kit edge helpers  
 5. Home app  
 6. Bible app + data  
-7. Mail demo + input nodes + action edges  
+7. Gmail app + input nodes + action edges  
 8. Tests per ARCHITECTURE testing contracts  
 9. Accessibility pass (settles the deferred items in §17)  

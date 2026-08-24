@@ -8,7 +8,7 @@ Implementation choices. Product locks: [`SPEC.md`](SPEC.md). Contracts: [`ARCHIT
 |--------|----------|-----|
 | Client | **Vanilla TypeScript + Vite** | One text/input surface; no UI framework |
 | App host | **TypeScript on Node**, small `/api` router (no Express) | Same language and `RefreshResult` types as the apps |
-| Where apps run | Home + Help + Bible + Notes + Account `open`/`refresh` on the server | Proof of the intended split; KJV stays off the client bundle; Bible seeds its own SQLite |
+| Where apps run | Home + Help + Bible + Notes + Gmail + Account `open`/`refresh` on the server | Proof of the intended split; KJV stays off the client bundle; Bible seeds its own SQLite |
 | Client apps | Generic `createRemoteApp` stubs | Not a second Bible |
 | Database | SQLite via `node:sqlite` (`server/sqlite.ts`) | Host identity in `data/nowisee.db`; Account, Bible, and Notes each open `data/apps/*.db`. `:memory:` in tests |
 | URL style | Hash routes behind `AppLocation` | Unchanged |
@@ -19,9 +19,9 @@ Implementation choices. Product locks: [`SPEC.md`](SPEC.md). Contracts: [`ARCHIT
 
 ```text
 src/core/       shell (navigator, display, …)
-src/apps/       home, help, bible, notes, account modules (imported by the server host)
+src/apps/       home, help, bible, notes, gmail, account modules (imported by the server host)
 src/apps/remote.ts  client RPC stub
-src/shell/      registers remote Home + Help + Bible + Notes + Account
+src/shell/      registers remote Home + Help + Bible + Notes + Gmail + Account
 server/         HTTP, host identity SQLite, identity service, createNowiseeHost
 server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
 server/index.ts production entry (SPA + /api)
@@ -47,4 +47,4 @@ server/index.ts production entry (SPA + /api)
 | `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
 | `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY` | Optional PEM paths; both set enables HTTPS |
 
-Production and Vite currently leave `lockboxAppIds` / `oauthAppIds` empty, so existing deploys do not need `NOWISEE_LOCKBOX_KEY`. See [`IDENTITY.md`](IDENTITY.md) §3.
+Production `npm start` and Vite grant Gmail `lockboxAppIds` / `oauthAppIds`, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Tests leave those grant lists empty. See [`IDENTITY.md`](IDENTITY.md) §3.
