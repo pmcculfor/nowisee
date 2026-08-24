@@ -1,17 +1,14 @@
 import type {
   AppModule,
+  AppServerContext,
   RefreshExtras,
   RefreshResult,
   StackEntry,
 } from "../../core/types.ts";
-import { parseNodeId } from "./ids.ts";
 import type { BibleStore } from "./types.ts";
-import {
-  buildBibleView,
-  parseBiblePath,
-  resolveCopyStatus,
-  type BibleViewDeps,
-} from "./view.ts";
+import { openBibleView, refreshBibleView, type BibleViewDeps } from "./view/index.ts";
+
+export const BIBLE_APP_ID = "bible";
 
 export type BibleAppDeps = {
   readonly rootAppId: string;
@@ -29,25 +26,25 @@ export function createBibleApp(deps: BibleAppDeps): BibleApp {
   const viewDeps: BibleViewDeps = {
     store: deps.store,
     rootAppId: deps.rootAppId,
+    appId: BIBLE_APP_ID,
   };
 
   return {
-    id: "bible",
+    id: BIBLE_APP_ID,
     label: "Bible",
-    open(path: string): RefreshResult {
-      const tipId = parseBiblePath(deps.store, path);
-      return buildBibleView(viewDeps, tipId);
+    open(path: string, extras: RefreshExtras = {}, ctx?: AppServerContext): RefreshResult {
+      return openBibleView(viewDeps, path, extras, ctx);
     },
     refresh(
       stack: readonly StackEntry[],
       extras: RefreshExtras = {},
-    ): Promise<RefreshResult> | RefreshResult {
-      const tipId = stack[stack.length - 1]?.nodeId ?? parseBiblePath(deps.store, "/");
-      const parsed = parseNodeId(tipId);
-      if (parsed?.kind === "copy-status" && extras.action) {
-        return resolveCopyStatus(viewDeps, parsed.ref);
+      ctx?: AppServerContext,
+    ): RefreshResult {
+      const tipId = stack[stack.length - 1]?.nodeId;
+      if (!tipId) {
+        return openBibleView(viewDeps, "/", extras, ctx);
       }
-      return buildBibleView(viewDeps, tipId);
+      return refreshBibleView(viewDeps, tipId, extras, ctx);
     },
     close() {
       deps.store.close();
@@ -55,4 +52,11 @@ export function createBibleApp(deps: BibleAppDeps): BibleApp {
   };
 }
 
-export type { BibleBook, BibleRef, BibleStore, BibleVerse, BibleVersion, KjvBook, KjvData } from "./types.ts";
+export type {
+  BibleBook,
+  BibleRef,
+  BibleSeed,
+  BibleStore,
+  BibleVerse,
+  BibleVersion,
+} from "./types.ts";

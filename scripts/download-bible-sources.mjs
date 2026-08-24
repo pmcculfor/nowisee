@@ -5,6 +5,7 @@
  * Raw files go in src/apps/bible/data/raw/ (gitignored).
  */
 import { createWriteStream } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -45,6 +46,11 @@ async function download(url, dest) {
   console.log(" wrote", dest);
 }
 
+function unzip(zip, dest) {
+  console.log("unzip", zip, "->", dest);
+  execFileSync("tar", ["-xf", zip, "-C", dest]);
+}
+
 async function getJson(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${url}`);
@@ -67,7 +73,11 @@ async function downloadBibles() {
   await mkdir(dir, { recursive: true });
   for (const b of BIBLES) {
     await download(b.url, join(dir, `${b.id}_usfm.zip`));
-    await download(b.extra, join(dir, `${b.id}_vpl.zip`));
+    const vplZip = join(dir, `${b.id}_vpl.zip`);
+    await download(b.extra, vplZip);
+    const vplDir = join(dir, `${b.id}_vpl`);
+    await mkdir(vplDir, { recursive: true });
+    unzip(vplZip, vplDir);
   }
 }
 

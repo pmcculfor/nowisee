@@ -1,6 +1,6 @@
 import { startAccountApp } from "../src/apps/account/store.ts";
 import { startBibleApp } from "../src/apps/bible/store.ts";
-import type { KjvData } from "../src/apps/bible/types.ts";
+import type { BibleSeed } from "../src/apps/bible/types.ts";
 import { startGmailApp } from "../src/apps/gmail/store.ts";
 import { createHelpApp } from "../src/apps/help/index.ts";
 import { createHomeApp } from "../src/apps/home.ts";
@@ -29,8 +29,8 @@ import { envOAuthSecrets, type OAuthSecrets } from "./oauth/secrets.ts";
 export type AppHostOptions = {
   readonly rootAppId?: string;
   readonly accountAppId?: string;
-  /** Seed Bible's own database (tests). Production seeds from bundled KJV on first open. */
-  readonly bibleSeed?: KjvData;
+  /** Seed Bible's own database (tests). Production imports from raw/ on first open. */
+  readonly bibleSeed?: BibleSeed;
   readonly bibleDb?: string;
   readonly accountDb?: string;
   readonly notesDb?: string;

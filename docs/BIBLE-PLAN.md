@@ -26,7 +26,7 @@ Do **not** add WEB, ESV, or any extra commentary. ESV is copyrighted (Crossway).
 
 ## Corpus (already on disk)
 
-Raw files are gitignored under `src/apps/bible/data/raw/`. Re-fetch: `node scripts/download-bible-sources.mjs`. Paths and licenses: [`SOURCES.md`](../src/apps/bible/data/SOURCES.md).
+Raw **import** files are committed under `src/apps/bible/data/raw/` (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`). Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups: `node scripts/download-bible-sources.mjs`. Paths and licenses: [`SOURCES.md`](../src/apps/bible/data/SOURCES.md).
 
 **Bibles:** eBible VPL — one line `BOOK CHAPTER:VERSE text`, 31,102 verses each. KJV supplied words are `[was]`, `[it was]`; **keep the words**, strip brackets only. Do not extend [`scripts/prepare-kjv.mjs`](../scripts/prepare-kjv.mjs) `{...}` stripping (that is why current `kjv.json` drops words). USFM zips are tagged originals, not the import format.
 
@@ -39,7 +39,7 @@ Raw files are gitignored under `src/apps/bible/data/raw/`. Re-fetch: `node scrip
 1. Parse VPL + HelloAO JSON + `tskxref.txt` into SQLite via idempotent `ensureCatalog(db)`.
 2. Map books via USFM / `CanonBook` aliases, not filename guesses.
 3. Tests: tiny hand-written fixtures (a few verses, one ranged commentary covering 1–8). Never load full corpora in unit tests.
-4. Do not commit `raw/` (already gitignored). Prepared JSON/SQL may live next to the app if needed; do not extend brace-stripping `kjv.json`.
+4. Import sources under `raw/` that the importer reads may be committed so production can seed without a download step. Do not commit zips, USFM, or SWORD backups. Do not extend brace-stripping `kjv.json`.
 
 ---
 

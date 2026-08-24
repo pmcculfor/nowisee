@@ -1,11 +1,12 @@
-import type { BibleRef, TestamentId } from "./types.ts";
+import { getCanonBook, resolveBookToken, testamentLabel as catalogTestamentLabel } from "./catalog.ts";
+import type { BibleRef, CanonRef } from "./types.ts";
 
-export function testamentLabel(id: TestamentId): string {
-  return id === "OT" ? "Old Testament" : "New Testament";
+export function testamentLabel(id: string): string {
+  return catalogTestamentLabel(id);
 }
 
-export function formatRef(ref: BibleRef): string {
-  return `${ref.book} ${ref.chapter}:${ref.verse}`;
+export function formatRef(bookLabel: string, ref: CanonRef | BibleRef): string {
+  return `${bookLabel} ${ref.chapter}:${ref.verse}`;
 }
 
 /** Number first so VoiceOver announces it before the role word. */
@@ -13,13 +14,18 @@ export function chapterLabel(chapter: number): string {
   return `${chapter} (chapter)`;
 }
 
-/** Verse number + text only; copy still uses formatRef for book/chapter. */
-export function verseLabel(verse: number, text: string): string {
+/** Chapter-sequence verse: number + text only. */
+export function verseNumberLabel(verse: number, text: string): string {
   return `${verse}. ${text}`;
 }
 
-export function bookPathSegment(name: string): string {
-  return encodeURIComponent(name);
+export function verseRefLabel(bookLabel: string, ref: CanonRef, text: string): string {
+  return `${formatRef(bookLabel, ref)}. ${text}`;
+}
+
+export function bookPathSegment(bookId: string): string {
+  const book = getCanonBook(bookId);
+  return encodeURIComponent(book?.label ?? bookId);
 }
 
 export function decodeBookSegment(segment: string): string | null {
@@ -28,4 +34,12 @@ export function decodeBookSegment(segment: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function bookIdFromPathSegment(segment: string): string | null {
+  const decoded = decodeBookSegment(segment);
+  if (decoded === null) {
+    return null;
+  }
+  return resolveBookToken(decoded)?.id ?? null;
 }

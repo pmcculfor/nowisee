@@ -45,21 +45,19 @@ Apps own columns, indexes, and when they read or write. Migrations are numbered 
 
 ## Bible
 
-Bible talks to a [`BibleStore`](../src/apps/bible/store.ts), not to JSON arrays in the view. Production opens `data/apps/bible.db` and seeds KJV from [`src/apps/bible/data/kjv.json`](../src/apps/bible/data/kjv.json) if the versions table is empty. The host does not import that file. The client bundle still must not contain it.
+Bible talks to a [`BibleStore`](../src/apps/bible/store.ts), not to JSON arrays in the view. Production opens `data/apps/bible.db` and runs [`ensureCatalog`](../src/apps/bible/import.ts) against the committed import files under [`src/apps/bible/data/raw/`](../src/apps/bible/data/raw/) (VPL texts, HelloAO JSON, TSK table). Tests pass a tiny `bibleSeed` and never load those files. The host does not import corpus files. The client bundle still must not contain them.
 
-Lookup is **version + book + chapter + verse**. KJV is the first `versions` row (`id = kjv`). Later translations are more rows in the same tables. The screens talk to a `BibleStore` interface; [`startBibleApp`](../src/apps/bible/store.ts) opens the file (Node-only). The graph module does not import SQLite.
+Lookup is **version + canon book id + chapter + verse**. Reading URLs still include version (`/asv/Matthew/5/8`). Bookmark keys are canon refs without version. Later translations are more `VersionRecord`s plus rows, not new code paths.
 
-Paths are `/{version}/…` (e.g. `/kjv/Matthew/5/3`). Node ids include the version.
+Do not seed from e-Sword `.bblx`/`.cmtx` (removed; encrypted). Do not extend `prepare-kjv.mjs` brace-stripping. Corpus import: verse-aligned public-domain files listed in [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). See [`ENGINEERING.md`](ENGINEERING.md) and [`BIBLE-PLAN.md`](BIBLE-PLAN.md).
 
-Do not seed from e-Sword `.bblx`/`.cmtx` (removed; encrypted). Do not extend `prepare-kjv.mjs` brace-stripping. Corpus import: verse-aligned public-domain files listed in [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). See [`ENGINEERING.md`](ENGINEERING.md).
+Tables:
 
-Tables reserved for later, unused now:
-
+- `canon_books`, `books` (per version), `verses`, `verse_words`
+- `reader_prefs` — signed-in active version; no session owner
 - `bookmarks` — **user id only** (not session). Signed-out → sign-in node, no row
-- `commentaries` / range-keyed `commentary_sections` (not per-verse + version)
-- `search_queries` (session-scoped query text is fine; hits are verse refs)
-
-Graph stubs (not implemented): at the testament list, **Bookmarks**, **Search**, and **Version**; on a verse menu, Copy, Bookmark, Versions, Commentary.
+- `commentaries` / range-keyed `commentary_sections` + `commentary_coverage` + `commentary_xrefs`
+- `search_queries` (session-scoped query text; hits are re-run)
 
 ## Notes
 

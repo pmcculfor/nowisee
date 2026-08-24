@@ -1,6 +1,6 @@
 # Bible corpus sources
 
-Downloaded 2026-08-24 into [`raw/`](raw/) (gitignored; re-fetch with `node scripts/download-bible-sources.mjs`).
+Downloaded 2026-08-24 into [`raw/`](raw/). **Import sources are committed** (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`) so a production clone can seed `data/apps/bible.db`. Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups with `node scripts/download-bible-sources.mjs`.
 
 Do **not** import e-Sword `.bblx`/`.cmtx` blobs (encrypted). Do **not** extend `scripts/prepare-kjv.mjs` brace-stripping. Prefer verse-aligned files below.
 
