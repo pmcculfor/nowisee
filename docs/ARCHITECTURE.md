@@ -186,6 +186,8 @@ export interface AppServerContext {
   readonly sessionId: string;
   readonly accountAppId: string;
   readonly identity?: IdentityCapability;
+  readonly lockbox?: LockboxCapability;
+  readonly oauth?: OAuthCapability;
 }
 
 export type AuthOutcome =

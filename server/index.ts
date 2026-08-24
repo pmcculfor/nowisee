@@ -4,11 +4,14 @@
  *   npm run build && npm start
  *
  * Environment:
- *   PORT              listen port (default 3000)
- *   NOWISEE_DB        host identity SQLite file (default data/nowisee.db)
- *   NOWISEE_ORIGIN    public origin for CSRF, e.g. https://example.com
- *   NOWISEE_TLS_CERT  optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
- *   NOWISEE_TLS_KEY   optional PEM path
+ *   PORT                         listen port (default 3000)
+ *   NOWISEE_DB                   host identity SQLite file (default data/nowisee.db)
+ *   NOWISEE_ORIGIN               public origin for CSRF, e.g. https://example.com
+ *   NOWISEE_LOCKBOX_KEY          32-byte AES key, base64 (required if lockbox/OAuth apps are granted)
+ *   NOWISEE_LOCKBOX_KEY_ID       optional key id (default v1)
+ *   NOWISEE_OAUTH_<APP>_CLIENT_ID / _CLIENT_SECRET  OAuth app credentials (not lockbox)
+ *   NOWISEE_TLS_CERT             optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
+ *   NOWISEE_TLS_KEY              optional PEM path
  */
 
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -19,6 +22,7 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 import { createNowiseeHost } from "./host.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
+import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
 const DIST = resolve(process.cwd(), "dist");
@@ -47,11 +51,40 @@ const host = createNowiseeHost({
 
 async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url ?? "/";
+  if (isOAuthUrl(url)) {
+    await handleOAuth(req, res);
+    return;
+  }
   if (isAppApiUrl(url)) {
     await handleApi(req, res);
     return;
   }
   await serveStatic(url, res);
+}
+
+async function handleOAuth(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const raw = req.method === "POST" ? await readLimitedBody(req) : "";
+    const out = await handleOAuthHttp(host, {
+      method: req.method ?? "GET",
+      url: req.url ?? "/",
+      headers: req.headers,
+      body: raw,
+    });
+    const body = typeof out.body === "string" ? out.body : "";
+    res.statusCode = out.status;
+    for (const [key, value] of Object.entries(out.headers ?? {})) {
+      res.setHeader(key, value);
+    }
+    res.setHeader("Content-Length", Buffer.byteLength(body));
+    res.end(body);
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      writeRaw(res, 413, "");
+      return;
+    }
+    writeRaw(res, 500, "");
+  }
 }
 
 async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -107,6 +140,13 @@ async function serveStatic(url: string, res: ServerResponse): Promise<void> {
   } catch {
     writeError(res, 404, "Not found");
   }
+}
+
+function writeRaw(res: ServerResponse, status: number, message: string): void {
+  res.statusCode = status;
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Length", Buffer.byteLength(message));
+  res.end(message);
 }
 
 function writeError(res: ServerResponse, status: number, message: string): void {

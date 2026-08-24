@@ -1,6 +1,6 @@
 # Nowisee — data storage
 
-**Status:** App-owned databases landed (August 2026). Identity stays on the host. The secret lockbox is **not** built. Product locks: [`SPEC.md`](SPEC.md). Identity: [`IDENTITY.md`](IDENTITY.md).
+**Status:** App-owned databases landed (August 2026). Identity stays on the host. The secret lockbox and generic OAuth broker **landed** (August 2026). Product locks: [`SPEC.md`](SPEC.md). Identity: [`IDENTITY.md`](IDENTITY.md).
 
 Core never sees a database. There is no `ctx.db`. There is no client `platform.storage`.
 
@@ -9,7 +9,7 @@ Core never sees a database. There is no `ctx.db`. There is no client `platform.s
 | Kind | Example | Lives in | Owner | Scoped by |
 |------|---------|----------|-------|-----------|
 | **Identity** | email, password hash, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
-| **Secrets** | OAuth tokens (later) | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
+| **Secrets** | OAuth tokens | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
 | **App data** | verses, account flow, notes | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
 | **Large user files** | attachments (later) | Files next to that app's data, not the host db | That app (HTTP upload may pass through the host) | Owner on the metadata row |
 
@@ -17,20 +17,20 @@ Not this layer: the client warm cache (tab-lifetime) and anything in a `RefreshR
 
 ## Who opens which file
 
-The host opens **only** the identity database ([`server/db/`](../server/db/)). It registers apps; it does not pass them a `Db` or a corpus.
+The host opens **only** the host database ([`server/db/`](../server/db/)) — identity, lockbox, and OAuth state. It registers apps; it does not pass them a `Db` or a corpus.
 
 Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a library (`openSqlite`) — WAL, foreign keys, busy timeout, numbered migrations for *that* path. Third-party apps do not have to use it.
 
 | Database | Default path | Migrations |
 |----------|----------------|------------|
-| Host identity | `data/nowisee.db` | [`server/db/migrations/001_identity.sql`](../server/db/migrations/001_identity.sql) |
+| Host (identity, lockbox, OAuth state) | `data/nowisee.db` | [`001_identity.sql`](../server/db/migrations/001_identity.sql), [`002_lockbox.sql`](../server/db/migrations/002_lockbox.sql) |
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/) |
 | Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/) |
 
 Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account, Bible, and Notes memory files so tests do not write `data/`.
 
-`ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, later `lockbox`). Never a database.
+`ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`). Never a database.
 
 ## App-owned schemas
 
@@ -64,9 +64,9 @@ Notes talks to a [`NotesStore`](../src/apps/notes/store.ts). Production opens `d
 
 Every method takes `ownerId` — `ctx.userId` from the cookie, never `sessionId`. `userId` null → a sign-in node; no row is written. List order is `updated_at` descending (most recently edited first). List tips are the first line of the body.
 
-## Secrets lockbox (specified, not built)
+## Secrets lockbox — landed
 
-[`IDENTITY.md`](IDENTITY.md) §3. Host database, host master key, `ctx.lockbox` for allowed apps only. Not a place for note bodies or files.
+[`IDENTITY.md`](IDENTITY.md) §3. Host database (`lockbox` + `oauth_states`), host master key (`NOWISEE_LOCKBOX_KEY`), `ctx.lockbox` / `ctx.oauth` for allowed apps only. Not a place for note bodies or files. OAuth client id/secret stay in host env, not in the lockbox.
 
 ## Attachments (path only)
 
@@ -75,7 +75,7 @@ Bytes do not travel through `open` / `refresh` (JSON, 1 MiB cap). When attach ex
 ## Transfer
 
 1. App ↔ its store (BibleStore, AccountFlowStore, NotesStore).
-2. Host engine swap: [`server/db/index.ts`](../server/db/index.ts) for identity only.
+2. Host engine swap: [`server/db/index.ts`](../server/db/index.ts) for the host file (identity, lockbox, OAuth state).
 3. Account export / deletion: still deferred ([`IDENTITY.md`](IDENTITY.md) §13).
 4. No app-to-app `SELECT`.
 

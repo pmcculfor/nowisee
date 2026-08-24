@@ -19,6 +19,11 @@ import { AppNotFoundError } from "./errors.ts";
 import { buildAppContext, type CookieSlot } from "./identity/context.ts";
 import type { ScryptParams } from "./identity/hash.ts";
 import { createIdentityService, type IdentityService } from "./identity/service.ts";
+import { lockboxKeyringFromEnv, type LockboxKeyring } from "./lockbox/crypto.ts";
+import { createLockboxService, type LockboxService } from "./lockbox/service.ts";
+import { createOAuthBroker, type OAuthBroker } from "./oauth/broker.ts";
+import type { OAuthProviderConfig } from "./oauth/providers.ts";
+import { envOAuthSecrets, type OAuthSecrets } from "./oauth/secrets.ts";
 
 export type AppHostOptions = {
   readonly rootAppId?: string;
@@ -32,6 +37,12 @@ export type AppHostOptions = {
   readonly db?: Db | string;
   readonly allowRegistration?: boolean;
   readonly identityAppIds?: readonly string[];
+  readonly lockboxAppIds?: readonly string[];
+  readonly oauthAppIds?: readonly string[];
+  readonly lockboxKeys?: LockboxKeyring;
+  readonly oauthProviders?: readonly OAuthProviderConfig[];
+  readonly oauthSecrets?: OAuthSecrets;
+  readonly fetch?: typeof fetch;
   readonly scrypt?: ScryptParams;
   readonly hashConcurrency?: number;
   readonly extraApps?: readonly AppModule[];
@@ -42,8 +53,11 @@ export type NowiseeHost = {
   readonly rootAppId: string;
   readonly accountAppId: string;
   readonly identityAppIds: ReadonlySet<string>;
+  readonly lockboxAppIds: ReadonlySet<string>;
+  readonly oauthAppIds: ReadonlySet<string>;
   readonly configuredOrigin: string | undefined;
   readonly identity: IdentityService;
+  readonly oauth?: OAuthBroker;
   readonly db: Db;
   open(
     appId: string,
@@ -83,7 +97,36 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const rootAppId = options.rootAppId ?? "home";
   const accountAppId = options.accountAppId ?? "account";
   const identityAppIds = new Set(options.identityAppIds ?? [accountAppId]);
+  const lockboxAppIds = new Set(options.lockboxAppIds ?? []);
+  const oauthAppIds = new Set(options.oauthAppIds ?? []);
   const db = resolveDb(options.db);
+  const keyring = options.lockboxKeys ?? lockboxKeyringFromEnv();
+  if ((lockboxAppIds.size > 0 || oauthAppIds.size > 0) && !keyring) {
+    throw new Error(
+      "NOWISEE_LOCKBOX_KEY is required when lockboxAppIds or oauthAppIds is non-empty",
+    );
+  }
+  const lockbox: LockboxService | undefined = keyring
+    ? createLockboxService({ db, keyring })
+    : undefined;
+  let oauth: OAuthBroker | undefined;
+  if (oauthAppIds.size > 0) {
+    if (!options.configuredOrigin) {
+      throw new Error("configuredOrigin is required when oauthAppIds is non-empty");
+    }
+    if (!lockbox || !keyring) {
+      throw new Error("Lockbox keyring is required for OAuth");
+    }
+    oauth = createOAuthBroker({
+      db,
+      lockbox,
+      keyring,
+      providers: options.oauthProviders ?? [],
+      secrets: options.oauthSecrets ?? envOAuthSecrets(),
+      configuredOrigin: options.configuredOrigin,
+      fetch: options.fetch,
+    });
+  }
   const identity = createIdentityService({
     db,
     scrypt: options.scrypt,
@@ -142,8 +185,11 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     rootAppId,
     accountAppId,
     identityAppIds,
+    lockboxAppIds,
+    oauthAppIds,
     configuredOrigin: options.configuredOrigin,
     identity,
+    oauth,
     db,
     open,
     refresh,
@@ -164,6 +210,10 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
         identityAppIds,
         identity,
         slot: args.slot,
+        lockboxAppIds,
+        lockbox,
+        oauthAppIds,
+        oauth,
       });
       if (kind === "open") {
         return app.open(args.path ?? "/", toRefreshExtras(args.extras), ctx);

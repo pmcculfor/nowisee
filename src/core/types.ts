@@ -182,6 +182,30 @@ export interface IdentityCapability {
 }
 
 /**
+ * Host-granted encrypted blob store. Bound to (userId, appId); the app cannot
+ * name another user or app. Never present in the browser. Blobs must not be
+ * copied onto RefreshResult.
+ */
+export interface LockboxCapability {
+  get(slot: string): Promise<Uint8Array | null>;
+  put(slot: string, plaintext: Uint8Array): Promise<void>;
+  delete(slot: string): Promise<void>;
+}
+
+export type OAuthConnectionStatus = "missing" | "ready" | "needs-reconnect";
+
+/**
+ * Host-granted OAuth 2 authorization-code helper. Bound to (userId, appId).
+ * Access tokens stay in process memory — never in labels, node ids, paths, or clipboardText.
+ */
+export interface OAuthCapability {
+  start(opts: { slot: string; returnPath?: string }): Promise<{ authorizeUrl: string }>;
+  status(slot: string): Promise<OAuthConnectionStatus>;
+  getAccessToken(slot: string): Promise<string>;
+  disconnect(slot: string): Promise<void>;
+}
+
+/**
  * Server-only argument to `open` / `refresh`. Never serialized to the browser.
  * Optional in the type: in-process tests pass nothing; apps that do not care never look.
  * `userId` comes only from the identity service resolving the session cookie.
@@ -194,6 +218,10 @@ export interface AppServerContext {
   readonly accountAppId: string;
   /** Present only for apps the host allows. Feature-detect. */
   readonly identity?: IdentityCapability;
+  /** Present only for apps the host allows. Feature-detect. */
+  readonly lockbox?: LockboxCapability;
+  /** Present only for apps the host allows. Feature-detect. */
+  readonly oauth?: OAuthCapability;
 }
 
 export interface AppModule {

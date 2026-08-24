@@ -1,4 +1,14 @@
-import type { AppModule, AppServerContext, IdentityCapability } from "../../src/core/types.ts";
+import type {
+  AppModule,
+  AppServerContext,
+  IdentityCapability,
+  LockboxCapability,
+  OAuthCapability,
+} from "../../src/core/types.ts";
+import { bindLockbox } from "../lockbox/capability.ts";
+import type { LockboxService } from "../lockbox/service.ts";
+import { bindOAuth } from "../oauth/capability.ts";
+import type { OAuthBroker } from "../oauth/broker.ts";
 import type { AuthServiceResult, IdentityService, IssuedToken } from "./service.ts";
 
 export type CookieSlot = {
@@ -42,12 +52,18 @@ export function buildAppContext(args: {
   readonly identityAppIds: ReadonlySet<string>;
   readonly identity: IdentityService;
   readonly slot: CookieSlot;
+  readonly lockboxAppIds?: ReadonlySet<string>;
+  readonly lockbox?: LockboxService;
+  readonly oauthAppIds?: ReadonlySet<string>;
+  readonly oauth?: OAuthBroker;
 }): AppServerContext {
   const ctx: {
     userId: string | null;
     sessionId: string;
     accountAppId: string;
     identity?: IdentityCapability;
+    lockbox?: LockboxCapability;
+    oauth?: OAuthCapability;
   } = {
     userId: args.userId,
     sessionId: args.sessionId,
@@ -55,6 +71,16 @@ export function buildAppContext(args: {
   };
   if (args.identityAppIds.has(args.app.id)) {
     ctx.identity = bindIdentity(args.identity, args.sessionId, args.slot);
+  }
+  if (args.lockbox && args.lockboxAppIds?.has(args.app.id)) {
+    ctx.lockbox = bindLockbox(args.lockbox, args.userId, args.app.id);
+  }
+  if (args.oauth && args.oauthAppIds?.has(args.app.id)) {
+    ctx.oauth = bindOAuth(args.oauth, {
+      userId: args.userId,
+      sessionId: args.sessionId,
+      appId: args.app.id,
+    });
   }
   return ctx;
 }

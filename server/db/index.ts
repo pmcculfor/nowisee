@@ -11,7 +11,7 @@ export type { Db, RunResult, SqlValue };
 
 const HOST_MIGRATIONS = {
   dir: join(dirname(fileURLToPath(import.meta.url)), "migrations"),
-  files: ["001_identity.sql"] as const,
+  files: ["001_identity.sql", "002_lockbox.sql"] as const,
 };
 
 export type OpenDatabaseOptions = {
