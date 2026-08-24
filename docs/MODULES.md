@@ -522,7 +522,7 @@ Ordinary `AppModule`. No database. Catalog label is **Help. Tap the right side o
 - After open, user builds in-app stack via `push` / `replace` edges; `back` = `pop` or chapter `replace` within bible; root `back` = `app` edge to the root app.
 - Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) returns `clipboardText` (the line `Book C:V. text`) and “Copied”, or an error label with no `clipboardText`. Core writes the clipboard. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
 - Warm + map: use app kit neighborhood helper or hand-built edges for nearby books/chapters/verses as appropriate.
-- Search and bookmarks: headings and verse-menu options exist as stubs ("not available yet"). Schema already has `bookmarks`, `search_queries` / `search_hits` (session-scoped), and commentary tables. Do not implement those features in this module's current slice.
+- Search and bookmarks: headings and verse-menu options exist as stubs ("not available yet") until the catalog slice lands. Bookmarks are **user-owned** (`ctx.userId`); signed-out users get a sign-in node (same pattern as Notes), never session-id rows. Search does not require sign-in.
 
 ### Domain-only
 

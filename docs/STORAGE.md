@@ -51,13 +51,15 @@ Lookup is **version + book + chapter + verse**. KJV is the first `versions` row 
 
 Paths are `/{version}/…` (e.g. `/kjv/Matthew/5/3`). Node ids include the version.
 
+Do not seed from e-Sword `.bblx`/`.cmtx` (removed; encrypted). Do not extend `prepare-kjv.mjs` brace-stripping. Corpus import: verse-aligned public-domain files listed in [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). See [`ENGINEERING.md`](ENGINEERING.md).
+
 Tables reserved for later, unused now:
 
-- `bookmarks` — `owner_kind` (`user` or `session`) + `owner_id` + verse ref
-- `commentaries` / `commentary_notes`
-- `search_queries` (keyed by `session_id`) / `search_hits`
+- `bookmarks` — **user id only** (not session). Signed-out → sign-in node, no row
+- `commentaries` / range-keyed `commentary_sections` (not per-verse + version)
+- `search_queries` (session-scoped query text is fine; hits are verse refs)
 
-Graph stubs (not implemented): at the testament list, **Bookmarks** and **Search** after New Testament; on a verse menu, **Bookmark** between Copy and Commentary. Entering a stub says it is not available yet.
+Graph stubs (not implemented): at the testament list, **Bookmarks**, **Search**, and **Version**; on a verse menu, Copy, Bookmark, Versions, Commentary.
 
 ## Notes
 

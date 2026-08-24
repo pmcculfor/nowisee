@@ -4,4 +4,8 @@ dist/
 .DS_Store
 coverage/
 public/data/kjv.raw.json
-data/
+# Host and app SQLite files at repo root. Not src/apps/bible/data.
+/data/
+src/apps/bible/data/*.bblx
+src/apps/bible/data/*.cmtx
+src/apps/bible/data/raw/

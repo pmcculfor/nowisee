@@ -48,3 +48,22 @@ server/index.ts production entry (SPA + /api)
 | `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY` | Optional PEM paths; both set enables HTTPS |
 
 Production `npm start` and Vite grant Gmail `lockboxAppIds` / `oauthAppIds`, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Tests leave those grant lists empty. See [`IDENTITY.md`](IDENTITY.md) §3.
+
+## How to extend (binding)
+
+Follow [`../AGENTS.md`](../AGENTS.md) **Long-horizon design**. In practice:
+
+- Add a peer (Bible version, commentary, root heading, verse action) as **data**: a catalog object and rows. Graph code walks the catalog. It does not name the peer.
+- Prefer one verse renderer plus a **sequence object** (chapter siblings vs bookmark siblings vs search hits) over three copy-pasted graphs.
+- Leave seams for obvious next features; do not implement them. Example: store commentary cross-references as rows and flatten them into the section label; do not make those refs navigable until that slice is scheduled.
+- **Input accessible name vs value (deferred).** Today an input node's `label` is the field value, and Display's `aria-label` for a generic input is `"Input"`. A later, generic `NodePayload` field (e.g. `inputName`) could supply the accessible name without putting the prompt in the value. Do not add it until a slice needs it. Search can ship with the current `"Input"` name.
+
+## Bible corpus files
+
+e-Sword `.bblx` / `.cmtx` modules (removed; do not re-add) are SQLite with a useful *shape* (one Bible row per verse; commentary `VerseCommentary` has `ChapterBegin`/`VerseBegin`/`ChapterEnd`/`VerseEnd`). The `Scripture` / `Comments` columns are proprietary **SQLitePlus `BLOB_TEXT`**: ciphertext, length always a multiple of 16. There is no public decryptor; do not reverse-engineer the codec. Use that range shape as a schema hint only.
+
+The current `scripts/prepare-kjv.mjs` path that strips `{...}` from a nested JSON dump **deletes words**. Do not extend that pipeline.
+
+Import KJV, ASV, BBE, YLT, Matthew Henry, JFB, and TSK from **public-domain verse-aligned** sources (one record per verse or per commentary range). Catalog: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). Do not add translations or commentaries that are not on that list. Test fixtures stay tiny and hand-written.
+
+**Downloaded sources (2026-08):** catalog and paths in [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). Re-fetch with `node scripts/download-bible-sources.mjs`. Primary Bible text is eBible `_vpl.txt`. Primary Henry/JFB is HelloAO chapter JSON. Primary TSK is `tskxref.txt` (phrase + refs per verse). Implementation plan for the executing agent: [`BIBLE-PLAN.md`](BIBLE-PLAN.md).

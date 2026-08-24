@@ -311,7 +311,7 @@ export interface ShellConfig {
 ### Display
 
 - Text node: show `label` in one focusable `role="application"` surface (`tabindex="-1"`, `aria-label` = the label). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS). The accessible name is required: NVDA will not read the text content of an unnamed application.
-- Input node: show a multiline `<textarea>` seeded from the label, plus Cancel (`back`) and Done (`enter`) after it in DOM order. When `secret` is set, show `<input type="password">` instead, with honest `autocomplete` (`username`, `current-password`, `new-password`). Activate on click only. Hide NavPads while this surface is up.
+- Input node: show a multiline `<textarea>` seeded from the label, plus Cancel (`back`) and Done (`enter`) after it in DOM order. When `secret` is set, show `<input type="password">` instead, with honest `autocomplete` (`username`, `current-password`, `new-password`). Activate on click only. Hide NavPads while this surface is up. **Deferred:** `label` is the value; the accessible name for a normal input is currently the generic `"Input"`. A later generic payload field could name the field without changing the value. See [`ENGINEERING.md`](ENGINEERING.md).
 
 ### Keyboard
 

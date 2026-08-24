@@ -16,7 +16,7 @@
 - **Before a named milestone** — waiting until *after* that milestone (iPhone, real mail, Facebook, synced Notes) is what creates rework.
 - **Ready now / keep the discipline** — the path already exists; do not undo it.
 
-Until the product is no longer in development, there is **no compatibility tax**: do not add code to keep old clients or existing stored data working. The binding rule lives in [`../AGENTS.md`](../AGENTS.md) (quality bar, anti-patterns, lock table).
+Until the product is no longer in development, there is **no compatibility tax**: do not add code to keep old clients or existing stored data working. The binding rule lives in [`../AGENTS.md`](../AGENTS.md) (quality bar, **long-horizon design**, anti-patterns, lock table).
 
 ---
 

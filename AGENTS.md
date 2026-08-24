@@ -1,6 +1,6 @@
 # Nowisee — agent guide
 
-This file is binding for anyone (human or agent) working on Nowisee. Product detail lives in [`docs/SPEC.md`](docs/SPEC.md). Interface contracts live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Module responsibilities live in [`docs/MODULES.md`](docs/MODULES.md). How data is stored lives in [`docs/STORAGE.md`](docs/STORAGE.md). Review findings, accepted deltas, and deliberate deferrals live in [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md).
+This file is binding for anyone (human or agent) working on Nowisee. Product detail lives in [`docs/SPEC.md`](docs/SPEC.md). Interface contracts live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Module responsibilities live in [`docs/MODULES.md`](docs/MODULES.md). How data is stored lives in [`docs/STORAGE.md`](docs/STORAGE.md). Review findings, accepted deltas, and deliberate deferrals live in [`docs/DESIGN-REVIEW.md`](docs/DESIGN-REVIEW.md). The current Bible expansion slice (versions, search, bookmarks, commentaries) is [`docs/BIBLE-PLAN.md`](docs/BIBLE-PLAN.md); corpus files are catalogued in [`src/apps/bible/data/SOURCES.md`](src/apps/bible/data/SOURCES.md).
 
 ## Product in one paragraph
 
@@ -13,6 +13,17 @@ Nowisee is an accessibility-first website for blind and keyboard/screen-reader-p
 - **DRY.** One owner for each concern. Never two ways to compute the same thing.
 - **Long-term product.** Assume years of maintenance, many apps, and other authors. That is architecture, not a promise to keep old clients or old rows working.
 - **In development, no compatibility tax.** Nowisee is in development. Do not add code whose only job is keeping old clients, old `open` / `refresh` shapes, old URLs, or existing stored data working. Users, notes, settings, bookmarks, and sessions need not be preserved across schema or product changes. Export, dual-write, and client version negotiation wait until the product is no longer in development.
+
+## Long-horizon design (binding)
+
+This is how Nowisee work should be done — in core, in apps, and in data pipelines. Shipping a thin slice is fine; painting the product into a corner is not.
+
+- **Objects and catalogs over special-case branches.** Put variance in typed records (rows, lists of descriptors, sequence objects). Builders interpret those records. Do not grow `if (id === "kjv")` / `if (appId === "gmail")` trees that must be edited for every new peer. A new version, commentary, root heading, or verse action should be another catalog entry plus data, not a new code path named after that product.
+- **Do not block the future.** When a later feature is obvious (licensed translations, commentary verse links, extra testaments, search scope), leave a seam: a `license` field, a structured xref table you flatten to text for now, testament as a string, a tokenizer function. Do not implement the later feature. Do not encode today's subset as if it were the whole universe.
+- **Robust over clever parsing.** Prefer data that is already in the unit we navigate (verse rows, commentary ranges). Do not strip markup with regexes that can delete words. If a source format is encrypted or lossy, say so and use a better source; do not "make do" with a pipeline that silently corrupts text.
+- **Same quality inside apps as in core.** Genericity is required of core. Apps should still be data-driven and boring to extend. Hard-coding "the three commentaries" as switch cases in the Bible graph is the same class of mistake as putting Bible logic in Navigator.
+
+See also [`docs/ENGINEERING.md`](docs/ENGINEERING.md) (how to extend) and [`docs/PREPAREDNESS.md`](docs/PREPAREDNESS.md) (what to wait on).
 
 ## Packaging layers (before anything enters core)
 
