@@ -1,6 +1,6 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Identity slice **landed** (August 2026). Home, Bible, Notes, and Account run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). The secret lockbox is **not** built. iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). Home, Bible, Notes, and Account run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
 
 **Owner deltas applied in this slice**
 
@@ -19,7 +19,7 @@
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**Landed:** Home, Bible, Notes, and Account run on the server. Still not built: secret lockbox.
+**Landed:** Home, Bible, Notes, and Account run on the server. Lockbox and the generic OAuth broker are host capabilities (`ctx.lockbox` / `ctx.oauth`); no Gmail or Facebook app consumes them yet.
 
 ---
 
@@ -40,19 +40,20 @@ Neither store belongs to the Account app. Who owns what is §6.
 
 ---
 
-## 3. App secrets (when we build them — not in the identity slice)
+## 3. App secrets (lockbox) — landed
 
-A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager).
+A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`server/lockbox/`](../server/lockbox/). The host grants `ctx.lockbox` only to app ids in `lockboxAppIds` (default empty — Notes, Home, Bible, Help, and Account do not receive it unless listed).
 
 - An app says: “save this blob under slot `personal`” / “give me slot `personal`.”
 - The service keys it by **this user + this app id + this slot**. One app may have many slots (two Gmail accounts). Our Gmail app and a third-party Gmail app have **different app ids** and cannot read each other’s slots.
 - Only that app’s **server** code can read the blob. The browser never receives it.
+- Slot names match `[a-z0-9][a-z0-9:_-]{0,63}`. Blobs larger than **8 KiB** are rejected. This is not a file store.
 
 Refresh tokens **are** meant to be stored — on the **server**, encrypted, never in the page. OAuth 2 warns against keeping them in browser JavaScript, not against a backend remembering them so the user is not sent through Google every hour.
 
-Encryption at rest (plain picture): the database stores scrambled bytes. A **master key** lives on the server (environment / host secret manager), **not** in the git repo and **not** in the database file. The service uses that key to scramble on save and unscramble in memory when the app asks. Steal the database file without the key → useless. Steal the key **and** the database → they can read tokens; that is why the key is a host secret. Bible does not need this yet.
+Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If `lockboxAppIds` or `oauthAppIds` is non-empty and there is no keyring, the host throws at startup. Production currently leaves both lists empty, so existing deploys do not need the key.
 
-### Normative when built
+### Normative
 
 | Rule | Why |
 |------|-----|
@@ -62,12 +63,37 @@ Encryption at rest (plain picture): the database stores scrambled bytes. A **mas
 | `appId` is the **host’s** notion of which app is calling | Never a value taken from the request body |
 | Blobs never appear in a `RefreshResult` | The lockbox is server-to-server; the page must not receive plaintext or ciphertext |
 
+### OAuth broker — landed
+
+Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). The host grants `ctx.oauth` only to app ids in `oauthAppIds` (default empty). App client id/secret come from host env (`NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET`), never the lockbox. Per-user tokens live in lockbox slot `(userId, appId, slot)`.
+
+`oauth.start()` runs while rendering the Connect node (Navigator follows `kind: "external"` without a refresh). PKCE S256; one live state per `(sessionId, appId, slot)`; 10-minute TTL; about 20 live states per session.
+
+| Surface | Job |
+|---------|-----|
+| `GET /oauth/callback` | IdP redirect. Dispatch by `state`, not by app id in the path. Cookie + hashed state is CSRF for this GET — do **not** run the JSON Origin check. |
+| `POST /oauth/:appId/events` | Reserved for cookie-less provider webhooks (Facebook deauthorize). No Facebook handler ships yet. |
+
+Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when `oauthAppIds` is non-empty. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less callback does **not** mint a session.
+
+| Outcome | Location |
+|---------|----------|
+| Missing or unknown `state` | `{origin}/#/` (Home) |
+| IdP `error` (or missing `code` after a valid state) | `{origin}/#/{appId}` |
+| Session / `userId` mismatch | Home; no lockbox write |
+| Success | `{origin}/#{returnPath}` where `returnPath` is `/{appId}` or `/{appId}/...` |
+
+`getAccessToken` refreshes under a mutex per `(userId, appId, slot)`. `invalid_grant` deletes the lockbox slot and throws `needs-reconnect`. `disconnect` best-effort revokes then deletes the slot.
+
+Gmail and Facebook apps are still not built; they consume this surface later.
+
 ---
 
 ## 4. Data and hosting
 
 - **Bible slice (landed):** no login on the host. KJV is seeded into Bible's own SQLite (`data/apps/bible.db`) from JSON next to the Bible app. The host does not import that file.
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
+- **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`002_lockbox.sql`](../server/db/migrations/002_lockbox.sql)).
 - Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy.
 
 ---
@@ -77,12 +103,12 @@ Encryption at rest (plain picture): the database stores scrambled bytes. A **mas
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
 1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
-2. **Database.** `server/db/` — host identity only (`001_identity.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Account, Bible, and Notes open their own files.
+2. **Database.** `server/db/` — host identity (`001_identity.sql`) plus lockbox / OAuth state (`002_lockbox.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Account, Bible, and Notes open their own files.
 3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
 
-The lockbox (§3) waits for the first confidential OAuth client. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md).
+The lockbox and OAuth broker (§3) have landed. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md). No Gmail or Facebook app is in this slice.
 
 ---
 
@@ -229,7 +255,7 @@ The change is a `secret` flag on the input node that makes Display render `type=
 
 Today `server/host.ts` calls `app.open(path, toRefreshExtras(extras))`, and `RefreshExtras` is filled in by the **client**. There is no channel for "the server knows who this is," so this decision must be made before any user-owned data exists.
 
-**Agreed:** the host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and later the lockbox handle. `ctx` never crosses to the browser.
+**Agreed:** the host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`). `ctx` never crosses to the browser.
 
 | Rule | Note |
 |------|------|
@@ -239,6 +265,8 @@ Today `server/host.ts` calls `app.open(path, toRefreshExtras(extras))`, and `Ref
 | `ctx.sessionId` is always present, signed in or not | This browser, not this account. Server-side only — never in a node id, label, or URL. See §11.2 |
 | `ctx.accountAppId` | Host config, so no app hardcodes a peer app's id when it offers a "sign in" edge |
 | `ctx.identity` | Only for apps the host allows (§6). Everything else never sees it |
+| `ctx.lockbox` | Only for apps in `lockboxAppIds` (§3). Bound to `(userId, appId)` |
+| `ctx.oauth` | Only for apps in `oauthAppIds` (§3). Bound to `(userId, sessionId, appId)` |
 
 `ctx` may carry host **capabilities** (methods), not only data — see §11.3. That does not weaken the app boundary: the plain-data rule in [`ARCHITECTURE.md`](ARCHITECTURE.md) governs *payloads* (`stack`, `RefreshResult`, `NodePayload`, `NavigationMap`), and `PlatformContext` already establishes that capabilities are method-bearing.
 
@@ -392,7 +420,7 @@ The password arrives in `extras.inputText` on that action call. The host never l
 | Pragmas | `foreign_keys = ON`, a `busy_timeout` |
 | Schema changes | A numbered migration runner per database — a `migrations` table plus ordered files, applied in a transaction when *that* file is opened. Not scattered `CREATE TABLE IF NOT EXISTS` |
 | Backups | Required before real user data. "A file on one machine with a disk" is also a file you can lose |
-| Ownership | `users` and `sessions` belong to the **identity service** (§6) on the **host** file. Other app tables belong to that app's own database. Core never sees a database — no core `NotesRepository`, same rule as always. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
+| Ownership | `users` and `sessions` belong to the **identity service** (§6) on the **host** file. `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core `NotesRepository`, same rule as always. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
 
 ---
 

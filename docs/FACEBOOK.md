@@ -60,7 +60,7 @@ There is no purchase. Register a developer app at [developers.facebook.com](http
 | 2. Create app | Create App, then choose type. Consumer for personal Facebook Login (option B). Business for Pages / PPCA (C or D). | Type is hard to unwind. Do not pick Gaming or a Messenger bot. A Business app is the usual Pages path in the current use-cases dashboard. |
 | 3. Add a use case | For B: Authenticate and request data from users with Facebook Login, then add `user_posts`. For C: Facebook Login for Business plus Pages permissions. For D: Page Public Content Access feature. | Do not request extra permissions “just in case.” Unused or unjustified scopes are a common review rejection. |
 | 4. Copy credentials | Settings → Basic: App ID, App Secret. Store both in the host secrets capability under the Facebook app id. Read the secret per request; do not cache it forever. | Resetting the secret invalidates app-access tokens immediately. User tokens from the old secret also break; users must reconnect. |
-| 5. Site + OAuth URLs | Set App Domains and Site URL to the Nowisee origin. Facebook Login → Valid OAuth Redirect URIs: exact callback, for example `https://example.com/api/oauth/facebook/callback`. Enable Web OAuth Login. Enforce HTTPS in production. | Redirect URI is an exact string match (scheme, host, path, trailing slash). `localhost` is allowed in Development mode. Production must be HTTPS. A mismatch is a silent-looking Facebook error page. |
+| 5. Site + OAuth URLs | Set App Domains and Site URL to the Nowisee origin. Facebook Login → Valid OAuth Redirect URIs: exact callback **`https://example.com/oauth/callback`** (one host path for every OAuth app; dispatch by `state`). Enable Web OAuth Login. Enforce HTTPS in production. | Redirect URI is an exact string match (scheme, host, path, trailing slash). `localhost` is allowed in Development mode. Production must be HTTPS. A mismatch is a silent-looking Facebook error page. |
 | 6. Legal URLs (required for Live) | Privacy Policy URL, User Data Deletion instructions or callback, Terms if you have them, Deauthorize callback URL. | Live mode will not stick without a privacy policy. The deletion callback is a public POST Meta can hit with no Nowisee cookie. |
 | 7. Development vs Live | Development: only Roles (admin / developer / tester) can authorize. Add tester Facebook accounts. Live: anyone, but only Advanced Access permissions. | You can dogfood B/C against your own profile/Page without review. You cannot onboard real Nowisee users until Live plus Advanced Access for each permission. |
 | 8. App Review + verification | Screencast of the real Nowisee flow, use-case text that matches Meta’s allowed usage, data-handling questions. Business verification for Advanced Access on most C/D permissions. | Reviewers walk the screencast with a test account. A text-only UI is unusual; make the screencast extremely literal. Allowed usage for `user_posts` does not mention accessibility clients — rejection is plausible. PPCA is closer to D. `pages_manage_engagement` is for Page moderation — C. |
@@ -88,7 +88,7 @@ Signed in to Nowisee but no lockbox slot: “Connect Facebook.” Enter is an ex
 | Start | Facebook app | Build `https://www.facebook.com/{version}/dialog/oauth` with `client_id` (App ID), `redirect_uri` (registered callback), `scope` (exact permissions for the chosen option), `response_type=code`, and `state`. |
 | `state` | Host + app | Bind `state` to the Nowisee session (`ctx.sessionId`), not a naked random in the URL. Store it server-side with expiry. Facebook will echo it back. This is CSRF protection for OAuth. |
 | User at Facebook | Browser | `kind: "external"` navigates away. User signs into Facebook if needed, grants or skips scopes. Facebook may show 2FA, checkpoint, or CAPTCHA — those are Facebook pages; Nowisee cannot flatten them. |
-| Callback GET | Host HTTP | `GET /api/oauth/facebook/callback?code=&state=`. SameSite=Lax session cookie is sent on this top-level GET, so we still know the Nowisee user. Validate `state`; reject missing or unknown state. |
+| Callback GET | Host HTTP | `GET /oauth/callback?code=&state=`. SameSite=Lax session cookie is sent on this top-level GET, so we still know the Nowisee user. Validate `state`; reject missing or unknown state. Dispatch by `state`, not by app id in the path. |
 | Exchange code | Server | Call `graph.facebook.com/{version}/oauth/access_token` with `client_id`, `client_secret` (from host secrets), `redirect_uri` (must match exactly), and `code`. Result: short-lived user token, about 1–2 hours. |
 | Long-lived token | Server | Exchange with `fb_exchange_token` and the app secret. About 60 days. Store only in the lockbox keyed `(userId, facebook-app-id, slot)`. Never in `RefreshResult`. Optionally store `facebook_user_id` and expiry in the Facebook app’s own SQLite for deletion callbacks — not the token itself. |
 | Inspect | Server | `debug_token` to confirm app id, user id, scopes actually granted (the user can skip optional scopes), and expiry. If `user_posts` was denied, do not pretend the feed works. |
@@ -110,9 +110,8 @@ Facebook Login is the first confidential OAuth client. It forces a small host su
 
 | Route | Caller | Job |
 |---|---|---|
-| `GET /api/oauth/facebook/callback` | Facebook redirect (the user) | Finish the code grant, write lockbox, redirect into the SPA. |
-| POST deauthorize callback | Facebook servers | User removed the app on facebook.com. Parse `signed_request` with App Secret, drop lockbox slot and mapping row. |
-| POST data-deletion callback | Facebook servers (GDPR-style) | Must return a confirmation URL and code. Delete Facebook-derived rows for that `facebook_user_id`. No session cookie. |
+| `GET /oauth/callback` | Facebook redirect (the user) | Finish the code grant, write lockbox, redirect into the SPA. One path for every OAuth app; dispatch by `state`. |
+| `POST /oauth/:appId/events` | Facebook servers | Reserved for deauthorize / data-deletion. Parse `signed_request` with App Secret, drop lockbox slot and mapping row. No Facebook handler ships yet. |
 
 Options for that surface:
 
@@ -122,7 +121,7 @@ Options for that surface:
 | Facebook-only routes in the host | Ships the first app faster. | Second OAuth app copies the same CSRF/cookie/redirect bugs. Host starts knowing Facebook. |
 | App-owned HTTP mounted by the host | Facebook graph stays in the Facebook folder. | New app contract beyond `open`/`refresh`. Easy to leak secrets if the mount is too wide. |
 
-**Recommendation:** generic callback plus deauthorize/deletion dispatch keyed by app id, with the Facebook app supplying “exchange this code” and “this `signed_request` user id.” The host still owns cookies, CSRF state, and lockbox keys. The Facebook app still owns Graph API URLs.
+**Recommendation (broker landed):** `GET /oauth/callback` plus `POST /oauth/:appId/events` for deauthorize/deletion, with the Facebook app supplying “exchange this code” and “this `signed_request` user id” via provider hooks. The host still owns cookies, CSRF state, and lockbox keys. The Facebook app still owns Graph API URLs. Do not add `/oauth/facebook/callback`.
 
 ---
 
@@ -199,7 +198,7 @@ Do not write the feed graph until option and review strategy are chosen.
 |---|---|---|
 | 0. Product lock | Written choice: B, C, D, or E. Permissions list frozen. | This plan. |
 | 1. Meta app + secrets | Developer app, redirect URIs, privacy policy URL, App ID/Secret in host secrets. Testers on the Roles tab. | Public HTTPS origin for anything beyond localhost testers. |
-| 2. Lockbox + OAuth bounce | Lockbox capability if not actually built yet ([`IDENTITY.md`](IDENTITY.md) still says it is specified, not built). Generic or Facebook callback. State CSRF. Long-lived token. Reconnect node. | Slice 1. Signed-in Nowisee user. |
+| 2. Lockbox + OAuth bounce | **Landed** on the host ([`IDENTITY.md`](IDENTITY.md) §3). Remaining: grant the Facebook app id on `lockboxAppIds` / `oauthAppIds`, register the provider, long-lived token via `finalizeTokens`, reconnect node. | Slice 1. Signed-in Nowisee user. |
 | 3. Deauthorize + data deletion | Public POSTs, mapping table, lockbox delete. Required before Live. | Slice 2. |
 | 4. Read path | Graph client on the server, pagination cursors, text flattening for photos/links, signed-out and not-connected nodes, tests with recorded Graph fixtures (no live Facebook in CI). | Slice 2. Graph Explorer for fixture capture. |
 | 5. Write path (C only) | Comment and react as Page on action edges. Stay on the node; refresh may update text in place. | Slice 4 plus `pages_manage_engagement` in Development. |
@@ -215,13 +214,13 @@ These block implementation more than navigation details do.
 
 2. **Will you complete Meta business verification?** Advanced Access for Pages/PPCA usually needs a verified business, not only a personal Facebook account. Is Nowisee a legal entity with documents, or a personal project? That chooses C/D vs testers-only forever.
 
-3. **Is lockbox already implemented, or only assumed?** [`IDENTITY.md`](IDENTITY.md) still says the secret lockbox is specified and not built. This plan assumed a secrets capability covers App Secret storage. Per-user tokens still need the lockbox (or you would be putting OAuth tokens in `facebook.db`, which [`STORAGE.md`](STORAGE.md) forbids). Confirm what is actually on the host today.
+3. **Lockbox is landed.** [`IDENTITY.md`](IDENTITY.md) §3. App Secret stays in host env (`NOWISEE_OAUTH_FACEBOOK_CLIENT_SECRET`). Per-user tokens go in the lockbox. Remaining work is granting this app id and registering the Facebook provider — not building the vault.
 
 4. **Public origin and privacy policy?** Live Facebook Login needs a stable HTTPS origin and a privacy policy URL that describes Facebook data use, retention, and deletion. Do those exist yet, or is this localhost-only until a later deploy slice?
 
 5. **Comment/react: in-app or external?** For C, in-app as the Page is real. For D, the only ToS-legal “comment” is an external permalink or clipboard copy. For B, in-app comment/react as the person should be treated as impossible. Which of those are you willing to ship under the name Facebook?
 
-6. **Generic OAuth host vs Facebook-only routes?** Gmail was already named as a future confidential OAuth client. If that is still on the roadmap, a generic host bounce is cheaper than two copies. If Facebook is a one-off experiment, Facebook-only routes are smaller.
+6. **Generic OAuth host vs Facebook-only routes?** **Generic callback landed** (`GET /oauth/callback`; events at `POST /oauth/:appId/events`). Do not add Facebook-only OAuth routes.
 
 7. **App Review justification for B.** If you pick B, do you want to argue accessibility as the use case knowing Meta’s written allowed usage is albums/parental monitoring? That is a product/legal call, not an engineering one. Do not spend a week on the graph until you are willing to lose that review.
 

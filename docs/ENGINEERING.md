@@ -34,3 +34,17 @@ server/index.ts production entry (SPA + /api)
 `npm run preview` — same API plugin on the preview server.
 
 `npm run build && npm start` — `server/index.ts` serves `dist/` and `/api` together. Vite `base` is `/`.
+
+## Environment
+
+| Variable | Role |
+|----------|------|
+| `PORT` | Listen port (default `3000`) |
+| `NOWISEE_DB` | Host SQLite file (default `data/nowisee.db`) |
+| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI |
+| `NOWISEE_LOCKBOX_KEY` | 32-byte AES key, base64. Required if `lockboxAppIds` or `oauthAppIds` is non-empty |
+| `NOWISEE_LOCKBOX_KEY_ID` | Optional key id (default `v1`) |
+| `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
+| `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY` | Optional PEM paths; both set enables HTTPS |
+
+Production and Vite currently leave `lockboxAppIds` / `oauthAppIds` empty, so existing deploys do not need `NOWISEE_LOCKBOX_KEY`. See [`IDENTITY.md`](IDENTITY.md) §3.

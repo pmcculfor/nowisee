@@ -1,12 +1,12 @@
 # Nowisee — Gmail app plan
 
-**Status:** Plan only (August 2026). Not implemented. Assumes the host secrets / lockbox capability already exists. Product locks: [`SPEC.md`](SPEC.md). Identity: [`IDENTITY.md`](IDENTITY.md). Preparedness: [`PREPAREDNESS.md`](PREPAREDNESS.md).
+**Status:** Plan only (August 2026). Not implemented. The host lockbox and generic OAuth broker **exist** ([`IDENTITY.md`](IDENTITY.md) §3). Product locks: [`SPEC.md`](SPEC.md). Identity: [`IDENTITY.md`](IDENTITY.md). Preparedness: [`PREPAREDNESS.md`](PREPAREDNESS.md).
 
 **Verdict:** Talking to Gmail from Nowisee will work. The product already assumed this: apps run on the server, the browser never calls Google, tokens live in the host lockbox, and signed-out (or unconnected) is an ordinary node — see [`IDENTITY.md`](IDENTITY.md) §2–3 and [`PREPAREDNESS.md`](PREPAREDNESS.md) “Real mail”. Nothing in core needs a Gmail special case.
 
 What is *not* free or automatic is **Google’s OAuth program**: reading mail requires **restricted** scopes, which caps you at 100 test users until you complete verification (and a security assessment if you store mail on the server — which we must, because tokens and message bodies never belong in the page).
 
-This plan assumes the host **secrets / lockbox** capability already exists. Distinguish two secret kinds anyway; they are different slots:
+This plan consumes the host **lockbox** and **OAuth broker** ([`IDENTITY.md`](IDENTITY.md) §3). Distinguish two secret kinds; they are different slots:
 
 | Secret | What it is | Who it belongs to |
 |--------|------------|-------------------|
@@ -31,7 +31,7 @@ There is no Gmail API key that can read someone’s inbox. User mail is **OAuth 
 5. **Audience → Testing**, add up to **100 test Google accounts**. Only those accounts can connect. They will see a “Google hasn’t verified this app” screen; they click Advanced → Go to Nowisee.
 6. Credentials → **Create credentials → OAuth client ID → Web application** (not Desktop, not API key, not service account).
    - Authorized JavaScript origins: `http://localhost:5173` (dev), later `https://your-origin`.
-   - Authorized redirect URIs: a **real HTTP path**, not a hash. Example: `http://localhost:5173/oauth/gmail/callback` and later `https://your-origin/oauth/gmail/callback`.
+   - Authorized redirect URIs: a **real HTTP path**, not a hash. The host callback is **`GET /oauth/callback`** for every app (dispatch by `state`). Example: `http://localhost:5173/oauth/callback` and later `https://your-origin/oauth/callback`.
 7. Copy client ID + secret into the host secrets store (or env, see options below). Never commit them. Never send them to the client bundle.
 
 **Service accounts cannot open consumer Gmail.** Domain-wide delegation is Workspace-admin only. Ignore that path.
@@ -61,7 +61,7 @@ sequenceDiagram
   else Signed in, no Google grant
     GmailApp-->>Shell: "Connect Gmail" (enter is kind external)
     User->>Google: Consent screen
-    Google->>Host: GET /oauth/gmail/callback?code&state
+    Google->>Host: GET /oauth/callback?code&state
     Host->>Google: Exchange code (client secret)
     Host->>Lockbox: Save refresh token for this userId
     Host-->>User: Redirect to #/gmail
@@ -77,13 +77,13 @@ Navigator already leaves the product on `kind: "external"` ([`src/core/navigator
 
 ### OAuth callback is the one new host HTTP surface
 
-Google redirects with **GET + query string**. Today the host only accepts **POST `/api/apps/:id/open|refresh`** with JSON + Origin + CSRF ([`server/http.ts`](../server/http.ts)). That path cannot receive Google’s redirect.
+Google redirects with **GET + query string**. `/api` stays POST + JSON + Origin. The OAuth callback is a **separate** GET: `GET /oauth/callback`. CSRF for this GET is the OAuth `state` nonce (bound to `sessionId` + `userId` in `oauth_states`, 10-minute TTL), not the JSON Origin check. Do **not** run `checkCsrf` on this GET.
 
-The session cookie is `SameSite=Lax`, so it **is** sent on this top-level GET. That is what lets the host know which Nowisee user just returned. CSRF for this one GET is the OAuth `state` nonce (bind it to `sessionId` or `userId` in the Gmail app DB, 10-minute TTL), not the JSON Origin check.
+The session cookie is `SameSite=Lax`, so it **is** sent on this top-level GET. That is what lets the host know which Nowisee user just returned.
 
 After exchanging the code, the host stores the refresh token in the lockbox and **302-redirects** to the SPA hash (e.g. `/#/gmail`). Then `open` runs as usual and the inbox is the tip.
 
-**Option A (recommended): generic host OAuth broker.** Host owns `GET /oauth/:appId/callback`. Gmail (and later any OAuth app) is granted `ctx.oauth` / uses host secrets for that app’s client id/secret. The host does not parse Gmail messages. This matches “host owns HTTP; apps own domain.”
+**Option A (landed): generic host OAuth broker.** Host owns `GET /oauth/callback` (one path for every app; dispatch by `state`). Gmail (and later any OAuth app) is granted `ctx.oauth` / uses host env for that app’s client id/secret. The host does not parse Gmail messages. This matches “host owns HTTP; apps own domain.” Do not add `/oauth/gmail/callback`.
 
 **Option B: Gmail-specific route in the host.** Faster to ship, worse: the host grows a product name. Avoid unless you explicitly want a one-off.
 
@@ -247,8 +247,8 @@ MIME: prefer `text/plain` in `multipart/alternative`. If only HTML, a **conserva
 
 ## 9. Suggested build order
 
-1. **Google Cloud project** in Testing; one test user; client id/secret in host secrets.
-2. **OAuth broker + lockbox wiring** (callback GET, state, code exchange, store refresh token). Prove “Connect Gmail” round-trips without listing mail.
+1. **Google Cloud project** in Testing; one test user; client id/secret in host env (`NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`).
+2. **OAuth broker + lockbox** — **landed.** Remaining work is to grant the Gmail app id on `oauthAppIds` / `lockboxAppIds` and register providers. Prove “Connect Gmail” round-trips without listing mail.
 3. **Gmail client** (fetch, token refresh, list metadata, get body, send) with a fake HTTP in tests.
 4. **App graph:** signed-out → connect → inbox subjects → body chunks → compose/reply/send status. Register on host + client stub.
 5. **App-kit `splitText`** + MIME plain-text extract.

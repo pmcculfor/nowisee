@@ -19,7 +19,7 @@ Nowisee is an accessibility-first website for blind and keyboard/screen-reader-p
 | Layer | Role |
 |-------|------|
 | **Core** | Client shell. Router (URL ↔ location only), per-app stack, navigation-map store, client warm cache, display, keyboard binding table, registry, busy/errors. Talks to apps only via `open` / `refresh`. |
-| **Server host** | Runs `AppModule`s off-device and owns everything the browser must not: HTTP boundary and its CSRF checks, the **host** database (identity, sessions, future lockbox), and an **identity service** that owns credentials, sessions, and cookie → user resolution. It does not open app databases or inject corpora. Calls apps through `open` / `refresh` with a server-only context (`userId`, capabilities). It resolves who the user is; it does **not** gate apps on being signed in. Not core, not an app. See [`docs/IDENTITY.md`](docs/IDENTITY.md) and [`docs/STORAGE.md`](docs/STORAGE.md). |
+| **Server host** | Runs `AppModule`s off-device and owns everything the browser must not: HTTP boundary and its CSRF checks, the **host** database (identity, sessions, lockbox, OAuth state), and an **identity service** that owns credentials, sessions, and cookie → user resolution. It does not open app databases or inject corpora. Calls apps through `open` / `refresh` with a server-only context (`userId`, capabilities). It resolves who the user is; it does **not** gate apps on being signed in. Not core, not an app. See [`docs/IDENTITY.md`](docs/IDENTITY.md) and [`docs/STORAGE.md`](docs/STORAGE.md). |
 | **App kit** | Optional helpers apps *import* (edge builders, list edges, input edges, optional neighborhood warm walk). Navigator never calls these automatically. |
 | **App domain** | That app’s data, queries, graph shape, side effects, URLs. |
 
@@ -93,7 +93,7 @@ If any answer is “only Bible / mail / notes / our first apps,” it does **not
 | Identity ownership | A host-layer **identity service** owns credentials, hashing, sessions, and cookie → user resolution. The Account app owns only the screens, through `ctx.identity`, which the host grants per request to allowed apps only. See [`docs/IDENTITY.md`](docs/IDENTITY.md) §6 |
 | Signed out | `ctx.userId` is `null`; the request still reaches the app; the **app** decides what that means. No `401`, no core redirect, no host gate |
 | Sessions | One per visitor from the first `/api` call. Anonymous **session**, never an anonymous *user* id. Opaque token, only its hash stored, rotated on sign-in |
-| Auth/DB | Identity on the host SQLite file; each app opens its own database. Secret lockbox is not built. Clipboard remains the only platform capability the client provides. See [`docs/STORAGE.md`](docs/STORAGE.md) |
+| Auth/DB | Identity on the host SQLite file; each app opens its own database. Secret lockbox and generic OAuth broker landed (`ctx.lockbox` / `ctx.oauth`, grant lists default empty). Clipboard remains the only platform capability the client provides. See [`docs/STORAGE.md`](docs/STORAGE.md) |
 | Secret input | A `secret` flag on `kind: "input"` (not a new NodeKind). Display renders `type="password"` and honest `autocomplete` tokens. Leave path unchanged: Done → `enter`, Cancel → `back` |
 | In development | No backwards compatibility. Existing stored data (users, notes, settings, bookmarks, sessions) need not be preserved across changes. Do not add shims for old clients, old contracts, or old rows. |
 

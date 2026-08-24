@@ -3,6 +3,7 @@ import type { Connect, Plugin } from "vite";
 import { createNowiseeHost, type NowiseeHost } from "./host.ts";
 import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
+import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
 export type NowiseeApiPluginOptions = {
@@ -35,6 +36,25 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
     next: Connect.NextFunction,
   ): Promise<void> {
     const url = req.url ?? "/";
+    if (isOAuthUrl(url)) {
+      try {
+        const raw = req.method === "POST" ? await readLimitedBody(req) : "";
+        const out = await handleOAuthHttp(getHost(), {
+          method: req.method ?? "GET",
+          url,
+          headers: req.headers,
+          body: raw,
+        });
+        writeRaw(res, out.status, typeof out.body === "string" ? out.body : "", out.headers);
+      } catch (err) {
+        if (err instanceof BodyTooLargeError) {
+          writeRaw(res, 413, "", { "Cache-Control": "no-store" });
+          return;
+        }
+        writeRaw(res, 500, "", { "Cache-Control": "no-store" });
+      }
+      return;
+    }
     if (!isAppApiUrl(url)) {
       next();
       return;
@@ -71,6 +91,20 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
       server.middlewares.use(middleware);
     },
   };
+}
+
+function writeRaw(
+  res: ServerResponse,
+  status: number,
+  body: string,
+  extraHeaders?: Readonly<Record<string, string>>,
+): void {
+  res.statusCode = status;
+  for (const [key, value] of Object.entries(extraHeaders ?? { "Cache-Control": "no-store" })) {
+    res.setHeader(key, value);
+  }
+  res.setHeader("Content-Length", Buffer.byteLength(body));
+  res.end(body);
 }
 
 function writeJson(
