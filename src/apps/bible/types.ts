@@ -1,56 +1,101 @@
-export type TestamentId = "OT" | "NT";
+import type { CommentaryRecord, VersionLicense, VersionRecord } from "./catalog.ts";
 
 export type BibleVersion = {
   readonly id: string;
   readonly label: string;
+  readonly license: VersionLicense;
 };
 
 export type BibleBook = {
   readonly versionId: string;
+  readonly bookId: string;
   readonly name: string;
-  readonly abbrev: string;
-  readonly testament: TestamentId;
+  readonly testament: string;
+  readonly sort: number;
   readonly chapterCount: number;
 };
 
 export type BibleRef = {
   readonly version: string;
-  readonly book: string;
-  readonly chapter: number; // 1-based
-  readonly verse: number; // 1-based
+  readonly bookId: string;
+  readonly chapter: number;
+  readonly verse: number;
 };
 
 export type BibleVerse = BibleRef & {
   readonly text: string;
 };
 
-/** Seed / import shape (bundled KJV JSON). */
-export type KjvBook = {
-  readonly name: string;
-  readonly abbrev: string;
-  readonly testament: TestamentId;
-  /** chapters[chapterIndex][verseIndex] — 0-based; user-facing numbers are +1 */
-  readonly chapters: readonly (readonly string[])[];
+export type CanonRef = {
+  readonly bookId: string;
+  readonly chapter: number;
+  readonly verse: number;
 };
 
-export type KjvData = {
-  readonly translation: string;
-  readonly books: readonly KjvBook[];
+export type BookmarkRecord = CanonRef & {
+  readonly createdAt: number;
 };
 
-export type VerseOption = "copy" | "bookmark" | "commentary";
+export type CommentarySection = {
+  readonly id: number;
+  readonly commentaryId: string;
+  readonly startOrd: number;
+  readonly endOrd: number;
+  readonly body: string;
+  readonly xrefs: readonly string[];
+};
 
-export const TESTAMENT_ORDER: readonly TestamentId[] = ["OT", "NT"];
+export type SearchHit = CanonRef;
+
+export type BibleSeedVerse = {
+  readonly versionId: string;
+  readonly bookId: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly text: string;
+};
+
+export type BibleSeedSection = {
+  readonly commentaryId: string;
+  readonly bookId: string;
+  readonly startChapter: number;
+  readonly startVerse: number;
+  readonly endChapter: number;
+  readonly endVerse: number;
+  readonly body: string;
+  readonly xrefs?: readonly string[];
+};
+
+/** Tiny in-test corpus. Never a full translation. */
+export type BibleSeed = {
+  readonly verses: readonly BibleSeedVerse[];
+  readonly sections?: readonly BibleSeedSection[];
+};
 
 export interface BibleStore {
-  defaultVersionId(): string | null;
+  defaultVersionId(): string;
   getVersion(id: string): BibleVersion | undefined;
   listVersions(): readonly BibleVersion[];
-  listTestaments(versionId: string): readonly TestamentId[];
-  listBooks(versionId: string, testament: TestamentId): readonly BibleBook[];
-  getBook(versionId: string, nameOrAbbrev: string): BibleBook | undefined;
-  verseCount(versionId: string, book: string, chapter: number): number;
+  getActiveVersionId(userId: string): string | null;
+  setActiveVersionId(userId: string, versionId: string): void;
+  listTestaments(versionId: string): readonly string[];
+  listBooks(versionId: string, testament: string): readonly BibleBook[];
+  getBook(versionId: string, bookIdOrAlias: string): BibleBook | undefined;
+  verseCount(versionId: string, bookId: string, chapter: number): number;
+  lastVerse(versionId: string, bookId: string, chapter: number): number;
   getVerse(ref: BibleRef): BibleVerse | undefined;
-  listVerses(versionId: string, book: string, chapter: number): readonly BibleVerse[];
+  listVerses(versionId: string, bookId: string, chapter: number): readonly BibleVerse[];
+  chapterVerseMax(bookId: string, chapter: number): number;
+  isBookmarked(userId: string, ref: CanonRef): boolean;
+  listBookmarks(userId: string): readonly BookmarkRecord[];
+  toggleBookmark(userId: string, ref: CanonRef): "added" | "removed";
+  listCommentaries(): readonly CommentaryRecord[];
+  getCommentary(id: string): CommentaryRecord | undefined;
+  findSection(commentaryId: string, ref: CanonRef): CommentarySection | undefined;
+  createSearchQuery(sessionId: string, query: string): string;
+  getSearchQuery(queryId: string, sessionId: string): string | null;
+  searchVerses(versionId: string, tokens: readonly string[], cap: number): readonly SearchHit[];
   close(): void;
 }
+
+export type { VersionRecord };

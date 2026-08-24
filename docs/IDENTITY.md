@@ -448,4 +448,4 @@ Landed. Kept for context.
 - Generic client stub: `open` / `refresh` POST to `/api/apps/:appId/…` with plain JSON (stack, path, `inputText`, `action`). Abort cancels the fetch.
 - Apps return `clipboardText` when Copy should happen. Core writes the device clipboard. No fake clipboard on the server.
 - Client registers only generic remote stubs (`home`, `bible`, `notes`, `account`).
-- Browser bootstrap does not bundle `kjv.json`. The Bible app loads and seeds it. The same Bible and Home modules are unit-tested in-process (that is not a second product path).
+- Browser bootstrap does not bundle Bible corpora. The Bible app imports them on the server. The same Bible and Home modules are unit-tested in-process (that is not a second product path).

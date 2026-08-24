@@ -513,16 +513,19 @@ Ordinary `AppModule`. No database. Catalog label is **Help. Tap the right side o
 
 ### Responsibilities
 
-- Own Bible data via `BibleStore` (SQLite, version + book + chapter + verse). Seed KJV from JSON on first open of an empty Bible file.
-- Graph: version root headings (Old Testament, New Testament, Bookmarks stub, Search stub) → book → chapter → verse → option nodes (Copy, Bookmark stub, Commentary stub).
-- Book lists, chapter lists, and verse lists wrap at the ends. Verse `next` / `prev` stay in the chapter (last verse → first verse of the same chapter, and the reverse). They do not join the next or previous chapter.
-- Chapter labels are `N (chapter)` (number first); verse labels are `N. text` only. Copy still writes `Book C:V. text`.
-- Chapter → verse uses `replace` (not `push`); verse `back` replaces to that verse’s chapter so a deep-linked verse still has a chapter to return to.
+- Own Bible data via `BibleStore` (SQLite). `ensureCatalog` upserts catalog rows and imports VPL / HelloAO / TSK, or a tiny test seed. Commentaries are version-independent ranges.
+- Graph: catalog `RootItem`s (Old Testament, New Testament, Bookmarks, Search, Version) → book → chapter → verse → catalog `VerseOption`s (Copy, Bookmark, Versions, Commentary). One verse renderer plus a sequence object (chapter / bookmarks / search).
+- Book lists, chapter lists, and chapter-sequence verses wrap at the ends. Bookmark and search hits do not wrap. Verse `next` / `prev` in a chapter stay in that chapter.
+- Chapter labels are `N (chapter)` (number first); chapter-sequence verse labels are `N. text` only. Bookmark and search hits use `Book C:V. text`. Copy writes `Version. Book C:V. text`.
+- Chapter → verse uses `replace` (not `push`); verse `back` replaces to that verse’s chapter so a deep-linked verse still has a chapter to return to. Bookmark/search verses `back` pop.
 - `open(path)` parses canonical verse/book paths; bootstrap stack tip = resolved node (stack may be a single leaf after open reset—the app still exposes internal pops via map once the user pushes deeper in-session).
 - After open, user builds in-app stack via `push` / `replace` edges; `back` = `pop` or chapter `replace` within bible; root `back` = `app` edge to the root app.
-- Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) returns `clipboardText` (the line `Book C:V. text`) and “Copied”, or an error label with no `clipboardText`. Core writes the clipboard. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
-- Warm + map: use app kit neighborhood helper or hand-built edges for nearby books/chapters/verses as appropriate.
-- Search and bookmarks: headings and verse-menu options exist as stubs ("not available yet") until the catalog slice lands. Bookmarks are **user-owned** (`ctx.userId`); signed-out users get a sign-in node (same pattern as Notes), never session-id rows. Search does not require sign-in.
+- Copy: the `enter` edge from the Copy option carries `action: true` and lands on a status node whose warm label is “Copying…”; the resulting refresh (the only call with `extras.action`) returns `clipboardText` (the line `Version. Book C:V. text`) and “Copied”, or an error label with no `clipboardText`. Core writes the clipboard. `prev` / `next` over the Copy option carry no flag and therefore do nothing.
+- Version: root and verse-menu lists walk `VersionRecord`s. Enter is `action: true` plus a same-app `kind: "app"` edge (resets stack). Prefs (`reader_prefs`) write only when `ctx.userId` is set. Missing verse in the target version clamps to the last verse of that chapter.
+- Search: enter Search pushes an input (Display’s generic `"Input"` name). Done is `action` + `passInputText`; results replace the input. Tokenize non-letters, AND of whole words, canon order, cap `SearchPolicy.maxHits`. Empty/no hits: a text node. Session-scoped query id; hits are re-run on refresh.
+- Bookmarks are **user-owned** (`ctx.userId`); signed-out enter is a sign-in node (enter → Account, back pops). Never session-id rows. Verse-menu Bookmark toggles; status “Bookmarked” / “Bookmark removed”.
+- Commentary: catalog list of works. Enter one → the most specific inclusive range covering this verse. TSK xrefs are stored and flattened into the section label.
+- Warm + map: nearby books/chapters/verses as appropriate.
 
 ### Domain-only
 
