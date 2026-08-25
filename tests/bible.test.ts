@@ -77,7 +77,7 @@ describe("Bible app", () => {
     expect(result.node.label).toBe("Old Testament");
     expect(result.navigationMap[testamentId(VERSION, "OT")]?.back).toEqual({
       kind: "app",
-      to: { appId: "home", path: "/" },
+      to: { appId: "home", path: "/app/bible" },
     });
     expect(result.location).toEqual({ appId: "bible", path: "/kjv" });
   });

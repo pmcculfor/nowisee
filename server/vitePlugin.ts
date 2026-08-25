@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, Plugin } from "vite";
-import { productionGmailGrants } from "../src/apps/gmail/oauth.ts";
 import { createNowiseeHost, type NowiseeHost } from "./host.ts";
 import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
@@ -23,7 +22,6 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
       db: options.dbPath ?? process.env.NOWISEE_DB ?? "data/nowisee.db",
       scrypt: SCRYPT_PRODUCTION,
       configuredOrigin: process.env.NOWISEE_ORIGIN,
-      ...productionGmailGrants(),
     });
     return host;
   }

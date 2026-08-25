@@ -101,20 +101,21 @@ describe("inputEdges", () => {
 });
 
 describe("rootBackToHome", () => {
-  it("authors an app back edge to the root app", () => {
-    expect(rootBackToHome("bible-root", "home")).toEqual({
+  it("authors an app back edge to that app's Home catalog row", () => {
+    expect(rootBackToHome("bible-root", "home", "bible")).toEqual({
       "bible-root": {
-        back: edgeApp({ appId: "home", path: "/" }),
+        back: edgeApp({ appId: "home", path: "/app/bible" }),
       },
     });
   });
 });
 
 describe("signedOut", () => {
-  it("returns a complete result with enter to Account and back to Home", () => {
+  it("returns a complete result with enter to Account and back to this app on Home", () => {
     const result = signedOut({
       accountAppId: "account",
       rootAppId: "home",
+      appId: "notes",
       text: "Sign in to use Notes.",
     });
     expect(result.node.label).toBe("Sign in to use Notes.");
@@ -122,7 +123,7 @@ describe("signedOut", () => {
       edgeApp({ appId: "account", path: "/" }),
     );
     expect(result.navigationMap[result.node.id]?.back).toEqual(
-      edgeApp({ appId: "home", path: "/" }),
+      edgeApp({ appId: "home", path: "/app/notes" }),
     );
     expect(result.location).toBeNull();
   });
@@ -132,13 +133,13 @@ describe("buildMap", () => {
   it("merges fragments into a nested map", () => {
     const map = buildMap(
       siblingListEdges(["a", "b"]),
-      rootBackToHome("a", "home"),
+      rootBackToHome("a", "home", "a"),
       { a: { enter: edgeNode("child", "push") } },
       { a: { enter: edgeNode("other", "push") } }, // overwrite
     );
     expect(map.a?.prev).toBeUndefined();
     expect(map.a?.next).toEqual(edgeNode("b", "replace"));
-    expect(map.a?.back).toEqual(edgeApp({ appId: "home", path: "/" }));
+    expect(map.a?.back).toEqual(edgeApp({ appId: "home", path: "/app/a" }));
     expect(map.a?.enter).toEqual(edgeNode("other", "push"));
     expect(map.b?.prev).toEqual(edgeNode("a", "replace"));
   });

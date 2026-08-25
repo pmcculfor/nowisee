@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createAppHost } from "../server/host.ts";
 import { handleAppHttp } from "../server/http.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 function host() {
-  return createAppHost({ bibleSeed: fixtureKjv, rootAppId: "home" });
+  return createAppHost({ rootAppId: "home" });
 }
 
 describe("app host", () => {
@@ -19,6 +18,12 @@ describe("app host", () => {
       "Account",
     ]);
     expect(result.node.label).toBe(HELP_APP_LABEL);
+  });
+
+  it("open Home /app/bible lands on the Bible catalog row", async () => {
+    const result = await host().open("home", "/app/bible", {});
+    expect(result.node.label).toBe("Bible");
+    expect(result.location).toEqual({ appId: "home", path: "/app/bible" });
   });
 
   it("opens Notes signed-out as a sign-in node", async () => {

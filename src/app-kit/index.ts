@@ -16,7 +16,7 @@ export { buildMap, siblingListEdges, type MapFragment } from "./lists.ts";
 
 export { inputEdges, type InputEdgesOptions } from "./input.ts";
 
-export { rootBackToHome } from "./home.ts";
+export { edgeToHome, homeCatalogPath, rootBackToHome } from "./home.ts";
 
 export { signedOut, type SignedOutOptions } from "./signedOut.ts";
 

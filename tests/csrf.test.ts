@@ -3,13 +3,11 @@ import { SESSION_COOKIE_NAME } from "../server/cookie.ts";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 import { SCRYPT_TEST } from "../server/identity/hash.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 const ORIGIN = "http://localhost:5173";
 
 function host(): NowiseeHost {
   return createNowiseeHost({
-    bibleSeed: fixtureKjv,
     scrypt: SCRYPT_TEST,
     configuredOrigin: ORIGIN,
   });

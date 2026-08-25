@@ -31,7 +31,7 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 
 Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account, Bible, Notes, and Gmail memory files so tests do not write `data/`.
 
-`ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`). Never a database.
+`ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). Never a database.
 
 ## App-owned schemas
 
@@ -45,7 +45,7 @@ Apps own columns, indexes, and when they read or write. Migrations are numbered 
 
 ## Bible
 
-Bible talks to a [`BibleStore`](../src/apps/bible/store.ts), not to JSON arrays in the view. Production opens `data/apps/bible.db` and runs [`ensureCatalog`](../src/apps/bible/import.ts) against the committed import files under [`src/apps/bible/data/raw/`](../src/apps/bible/data/raw/) (VPL texts, HelloAO JSON, TSK table). Tests pass a tiny `bibleSeed` and never load those files. The host does not import corpus files. The client bundle still must not contain them.
+Bible talks to a [`BibleStore`](../src/apps/bible/store.ts), not to JSON arrays in the view. Production opens `data/apps/bible.db` and runs [`ensureCatalog`](../src/apps/bible/import.ts) against the committed import files under [`src/apps/bible/data/raw/`](../src/apps/bible/data/raw/) (VPL texts, HelloAO JSON, TSK table). Tests pass a tiny seed into `startBibleApp` and never load those files. The host does not import corpus files or pass a seed. The client bundle still must not contain them.
 
 Lookup is **version + canon book id + chapter + verse**. Reading URLs still include version (`/asv/Matthew/5/8`). Bookmark keys are canon refs without version. Later translations are more `VersionRecord`s plus rows, not new code paths.
 

@@ -1,10 +1,4 @@
-import { startAccountApp } from "../src/apps/account/store.ts";
-import { startBibleApp } from "../src/apps/bible/store.ts";
-import type { BibleSeed } from "../src/apps/bible/types.ts";
-import { startGmailApp } from "../src/apps/gmail/store.ts";
-import { createHelpApp } from "../src/apps/help/index.ts";
-import { createHomeApp } from "../src/apps/home.ts";
-import { startNotesApp } from "../src/apps/notes/store.ts";
+import { FIRST_PARTY_APPS, type StartedApp } from "./firstPartyApps.ts";
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
 import { AppRegistry } from "../src/core/registry.ts";
 import type {
@@ -29,18 +23,13 @@ import { envOAuthSecrets, type OAuthSecrets } from "./oauth/secrets.ts";
 export type AppHostOptions = {
   readonly rootAppId?: string;
   readonly accountAppId?: string;
-  /** Seed Bible's own database (tests). Production imports from raw/ on first open. */
-  readonly bibleSeed?: BibleSeed;
-  readonly bibleDb?: string;
-  readonly accountDb?: string;
-  readonly notesDb?: string;
-  readonly gmailDb?: string;
   /** Host identity database, or a file path. Default `:memory:`. */
   readonly db?: Db | string;
   readonly allowRegistration?: boolean;
   readonly identityAppIds?: readonly string[];
   readonly lockboxAppIds?: readonly string[];
   readonly oauthAppIds?: readonly string[];
+  readonly directoryAppIds?: readonly string[];
   readonly lockboxKeys?: LockboxKeyring;
   readonly oauthProviders?: readonly OAuthProviderConfig[];
   readonly oauthSecrets?: OAuthSecrets;
@@ -57,6 +46,7 @@ export type NowiseeHost = {
   readonly identityAppIds: ReadonlySet<string>;
   readonly lockboxAppIds: ReadonlySet<string>;
   readonly oauthAppIds: ReadonlySet<string>;
+  readonly directoryAppIds: ReadonlySet<string>;
   readonly configuredOrigin: string | undefined;
   readonly identity: IdentityService;
   readonly oauth?: OAuthBroker;
@@ -93,15 +83,62 @@ export type NowiseeHost = {
 
 /**
  * In-process open/refresh for apps that run on the server.
- * Home, Help, Bible, Notes, Gmail, and Account.
+ * First-party apps come from the pack list; the host only loops.
  */
 export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const rootAppId = options.rootAppId ?? "home";
   const accountAppId = options.accountAppId ?? "account";
-  const identityAppIds = new Set(options.identityAppIds ?? [accountAppId]);
-  const lockboxAppIds = new Set(options.lockboxAppIds ?? []);
-  const oauthAppIds = new Set(options.oauthAppIds ?? []);
+  const ephemeral = isEphemeral(options.db);
   const db = resolveDb(options.db);
+
+  const identity = createIdentityService({
+    db,
+    scrypt: options.scrypt,
+    hashConcurrency: options.hashConcurrency,
+    allowRegistration: options.allowRegistration,
+  });
+
+  const registry = new AppRegistry();
+  const started: StartedApp[] = [];
+  const hostStart = { rootAppId, ephemeral };
+  for (const pack of FIRST_PARTY_APPS) {
+    const app = pack.start(hostStart);
+    registry.register(app);
+    started.push(app);
+  }
+  for (const extra of options.extraApps ?? []) {
+    registry.register(extra);
+  }
+
+  const catalogIdentity: string[] = [];
+  const catalogLockbox: string[] = [];
+  const catalogOauth: string[] = [];
+  const catalogDirectory: string[] = [];
+  const catalogProviders: OAuthProviderConfig[] = [];
+  for (let i = 0; i < FIRST_PARTY_APPS.length; i++) {
+    const pack = FIRST_PARTY_APPS[i]!;
+    const app = started[i]!;
+    if (pack.identity) {
+      catalogIdentity.push(app.id);
+    }
+    if (pack.lockbox) {
+      catalogLockbox.push(app.id);
+    }
+    if (pack.oauth) {
+      catalogOauth.push(app.id);
+      catalogProviders.push(pack.oauth);
+    }
+    if (pack.directory) {
+      catalogDirectory.push(app.id);
+    }
+  }
+
+  const identityAppIds = new Set(options.identityAppIds ?? catalogIdentity);
+  const directoryAppIds = new Set(options.directoryAppIds ?? catalogDirectory);
+  const lockboxAppIds = new Set(options.lockboxAppIds ?? (ephemeral ? [] : catalogLockbox));
+  const oauthAppIds = new Set(options.oauthAppIds ?? (ephemeral ? [] : catalogOauth));
+  const oauthProviders = options.oauthProviders ?? (ephemeral ? [] : catalogProviders);
+
   const keyring = options.lockboxKeys ?? lockboxKeyringFromEnv();
   if ((lockboxAppIds.size > 0 || oauthAppIds.size > 0) && !keyring) {
     throw new Error(
@@ -123,52 +160,33 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       db,
       lockbox,
       keyring,
-      providers: options.oauthProviders ?? [],
+      providers: oauthProviders,
       secrets: options.oauthSecrets ?? envOAuthSecrets(),
       configuredOrigin: options.configuredOrigin,
       fetch: options.fetch,
     });
   }
-  const identity = createIdentityService({
-    db,
-    scrypt: options.scrypt,
-    hashConcurrency: options.hashConcurrency,
-    allowRegistration: options.allowRegistration,
-  });
 
-  const bible = startBibleApp({
-    rootAppId,
-    dbPath: options.bibleDb ?? defaultAppDbPath(options.db, "bible"),
-    seed: options.bibleSeed,
-  });
-  const notes = startNotesApp({
-    rootAppId,
-    dbPath: options.notesDb ?? defaultAppDbPath(options.db, "notes"),
-  });
-  const gmail = startGmailApp({
-    rootAppId,
-    dbPath: options.gmailDb ?? defaultAppDbPath(options.db, "gmail"),
-    fetch: options.fetch,
-  });
-  const account = startAccountApp({
-    rootAppId,
-    dbPath: options.accountDb ?? defaultAppDbPath(options.db, "account"),
-  });
-
-  const registry = new AppRegistry();
-  registry.register(
-    createHomeApp({
-      listEnabled: () => registry.listEnabled(),
-      rootAppId,
-    }),
-  );
-  registry.register(createHelpApp({ rootAppId }));
-  registry.register(bible);
-  registry.register(notes);
-  registry.register(gmail);
-  registry.register(account);
-  for (const extra of options.extraApps ?? []) {
-    registry.register(extra);
+  async function resolveCtx(app: AppModule, ctx?: AppServerContext): Promise<AppServerContext> {
+    if (ctx) {
+      return ctx;
+    }
+    const resolved = await identity.resolve(null);
+    return buildAppContext({
+      userId: resolved.userId,
+      sessionId: resolved.sessionId,
+      accountAppId,
+      app,
+      identityAppIds,
+      identity,
+      slot: {},
+      directoryAppIds,
+      directory: () => registry.listDescriptors(),
+      lockboxAppIds,
+      lockbox,
+      oauthAppIds,
+      oauth,
+    });
   }
 
   async function open(
@@ -177,7 +195,9 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     extras: WireExtras,
     ctx?: AppServerContext,
   ): Promise<RefreshResult> {
-    return invoke(registry, appId, (app) => app.open(path, toRefreshExtras(extras), ctx));
+    return invoke(registry, appId, async (app) =>
+      app.open(path, toRefreshExtras(extras), await resolveCtx(app, ctx)),
+    );
   }
 
   async function refresh(
@@ -186,7 +206,9 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     extras: WireExtras,
     ctx?: AppServerContext,
   ): Promise<RefreshResult> {
-    return invoke(registry, appId, (app) => app.refresh(stack, toRefreshExtras(extras), ctx));
+    return invoke(registry, appId, async (app) =>
+      app.refresh(stack, toRefreshExtras(extras), await resolveCtx(app, ctx)),
+    );
   }
 
   return {
@@ -195,6 +217,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     identityAppIds,
     lockboxAppIds,
     oauthAppIds,
+    directoryAppIds,
     configuredOrigin: options.configuredOrigin,
     identity,
     oauth,
@@ -218,6 +241,8 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
         identityAppIds,
         identity,
         slot: args.slot,
+        directoryAppIds,
+        directory: () => registry.listDescriptors(),
         lockboxAppIds,
         lockbox,
         oauthAppIds,
@@ -229,10 +254,9 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       return app.refresh(args.stack ?? [], toRefreshExtras(args.extras), ctx);
     },
     close() {
-      bible.close();
-      notes.close();
-      gmail.close();
-      account.close();
+      for (const app of started) {
+        app.close?.();
+      }
       db.close();
     },
   };
@@ -270,14 +294,11 @@ function resolveDb(db: Db | string | undefined): Db {
   return openDatabase({ path: typeof db === "string" ? db : ":memory:" });
 }
 
-function defaultAppDbPath(hostDb: Db | string | undefined, appId: string): string {
+function isEphemeral(hostDb: Db | string | undefined): boolean {
   if (hostDb && typeof hostDb === "object") {
-    return ":memory:";
+    return true;
   }
-  if (hostDb === undefined || hostDb === ":memory:") {
-    return ":memory:";
-  }
-  return `data/apps/${appId}.db`;
+  return hostDb === undefined || hostDb === ":memory:";
 }
 
 function toRefreshExtras(extras: WireExtras): RefreshExtras {

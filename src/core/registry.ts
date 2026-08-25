@@ -3,8 +3,7 @@ import type { AppDescriptor, AppModule } from "./types.ts";
 /**
  * Registers AppModule instances at bootstrap.
  * `get` is core-internal only — never hand the registry (or a module) to an app.
- * Apps that need the catalog (Home) receive `listEnabled()` descriptors via a
- * callback injected at construction.
+ * Home reads descriptors through `ctx.directory`, not this object.
  */
 export class AppRegistry {
   private readonly modules = new Map<string, AppModule>();
@@ -20,7 +19,7 @@ export class AppRegistry {
     return this.modules.get(id) ?? null;
   }
 
-  listEnabled(): AppDescriptor[] {
+  listDescriptors(): AppDescriptor[] {
     return [...this.modules.values()].map((app) => ({
       id: app.id,
       label: app.label,

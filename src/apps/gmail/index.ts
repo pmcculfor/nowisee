@@ -47,4 +47,4 @@ export function createGmailApp(deps: GmailAppDeps): GmailApp {
 
 export type { ComposeDraft, GmailClient, GmailStore, InboxMessage } from "./types.ts";
 export { GMAIL_APP_ID, GMAIL_APP_LABEL, GMAIL_OAUTH_SLOT, NODE } from "./ids.ts";
-export { GMAIL_OAUTH_PROVIDER, productionGmailGrants } from "./oauth.ts";
+export { GMAIL_OAUTH_PROVIDER } from "./oauth.ts";

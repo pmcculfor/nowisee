@@ -56,7 +56,7 @@ export function addRootLevel(
       continue;
     }
     const id = testamentId(version, item.testament);
-    fragments.push(rootBackToHome(id, rootAppId));
+    fragments.push(rootBackToHome(id, rootAppId, session.deps.appId));
     const books = store.listBooks(version, item.testament);
     const first = books[0];
     if (first) {
@@ -65,9 +65,9 @@ export function addRootLevel(
       });
     }
   }
-  fragments.push(rootBackToHome(bookmarksId(), rootAppId));
-  fragments.push(rootBackToHome(searchId(), rootAppId));
-  fragments.push(rootBackToHome(versionsHeadingId(), rootAppId));
+  fragments.push(rootBackToHome(bookmarksId(), rootAppId, session.deps.appId));
+  fragments.push(rootBackToHome(searchId(), rootAppId, session.deps.appId));
+  fragments.push(rootBackToHome(versionsHeadingId(), rootAppId, session.deps.appId));
 
   if (currentTestament) {
     for (const book of store.listBooks(version, currentTestament).slice(0, 8)) {

@@ -51,7 +51,7 @@ A **platform** service (same idea as clipboard: the shell/platform provides it; 
 
 Refresh tokens **are** meant to be stored — on the **server**, encrypted, never in the page. OAuth 2 warns against keeping them in browser JavaScript, not against a backend remembering them so the user is not sent through Google every hour.
 
-Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If `lockboxAppIds` or `oauthAppIds` is non-empty and there is no keyring, the host throws at startup. Production currently leaves both lists empty, so existing deploys do not need the key.
+Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If `lockboxAppIds` or `oauthAppIds` is non-empty and there is no keyring, the host throws at startup. Tests are ephemeral and leave those lists empty unless a test passes them. The running host collects Gmail from the pack catalog when the process is not ephemeral.
 
 ### Normative
 
@@ -255,7 +255,7 @@ The change is a `secret` flag on the input node that makes Display render `type=
 
 Today `server/host.ts` calls `app.open(path, toRefreshExtras(extras))`, and `RefreshExtras` is filled in by the **client**. There is no channel for "the server knows who this is," so this decision must be made before any user-owned data exists.
 
-**Agreed:** the host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`). `ctx` never crosses to the browser.
+**Agreed:** the host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). `ctx` never crosses to the browser.
 
 | Rule | Note |
 |------|------|
@@ -267,6 +267,7 @@ Today `server/host.ts` calls `app.open(path, toRefreshExtras(extras))`, and `Ref
 | `ctx.identity` | Only for apps the host allows (§6). Everything else never sees it |
 | `ctx.lockbox` | Only for apps in `lockboxAppIds` (§3). Bound to `(userId, appId)` |
 | `ctx.oauth` | Only for apps in `oauthAppIds` (§3). Bound to `(userId, sessionId, appId)` |
+| `ctx.directory` | Only for apps the pack catalog marks (today: Home). `list()` returns descriptors, never modules |
 
 `ctx` may carry host **capabilities** (methods), not only data — see §11.3. That does not weaken the app boundary: the plain-data rule in [`ARCHITECTURE.md`](ARCHITECTURE.md) governs *payloads* (`stack`, `RefreshResult`, `NodePayload`, `NavigationMap`), and `PlatformContext` already establishes that capabilities are method-bearing.
 
@@ -320,13 +321,9 @@ The mechanism already exists and needs no new core concept: an `app` edge trigge
 
 ### Home is an ordinary app
 
-`AppRegistry.listEnabled()` returns `[{ id, label }]` for every registered app — plain descriptors, never the registry object — and Home is handed it as an injected callback to build its menu.
+`AppRegistry.listDescriptors()` returns `[{ id, label }]` for every registered app — plain descriptors, never the registry object. The host grants that list as `ctx.directory` only to apps the pack catalog marks (today: Home). Home feature-detects it on each `open` / `refresh`.
 
-Home is **not special here**. Like every app it receives `ctx.userId`: `null` when nobody is signed in, a user when somebody is. Like every app it owns its own data, so which apps a given user sees, in what order, enabled or hidden, is Home's table and Home's decision. Signed out yields a sensible default catalog.
-
-The only core-side consequence is plumbing: the catalog callback currently takes no arguments and the host builds Home **once at startup**, so it must become per-request (or take the user) once `ctx` exists. Nothing about this belongs in core, and there is no host-level "requires a signed-in user" flag — that was an earlier idea, dropped with the decision above.
-
-Not needed for the first slice. Signed-out Home listing Help, Bible, Notes, and Account is enough to ship. The host does not rewrite any app's catalog label.
+Home is **not special** for identity: it receives `ctx.userId` like every app. Per-user visible apps can later be filtered inside the directory bind using that user id. Signed out yields the full registered list. The host does not rewrite any app's catalog label.
 
 ---
 

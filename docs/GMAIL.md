@@ -250,7 +250,7 @@ MIME: prefer `text/plain` in `multipart/alternative`. If only HTML, a **conserva
 - **Account deletion** is still deferred in IDENTITY §13; when it exists, Gmail must revoke + delete cache + lockbox slot.
 - **Rate limit / abuse:** a connected user who holds Down could list+get many messages. Cache metadata in `gmail.db` and refresh via `history.list`. Exponential backoff on 429.
 - **Push mail (`users.watch` + Pub/Sub):** extra GCP setup, watches expire in 7 days, needs `requestRefresh`. Skip for v1.
-- **Host start list** still names each `start*App` ([`PREPAREDNESS.md`](PREPAREDNESS.md) owner follow-up). Adding Gmail is one more line until that catalog exists — acceptable.
+- **First-party start** is a pack list ([`server/firstPartyApps.ts`](../server/firstPartyApps.ts)). Gmail's row declares lockbox + the Google OAuth provider; the host grants those on the running (non-ephemeral) host.
 - **Docs:** [`MODULES.md`](MODULES.md) §14 still describes a **demo** mail app with fake data. Replace or add a real Gmail section; do not leave two mail stories.
 
 ---

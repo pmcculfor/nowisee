@@ -1,6 +1,8 @@
 import type {
+  AppDescriptor,
   AppModule,
   AppServerContext,
+  DirectoryCapability,
   IdentityCapability,
   LockboxCapability,
   OAuthCapability,
@@ -44,6 +46,14 @@ export function bindIdentity(
   };
 }
 
+export function bindDirectory(list: () => readonly AppDescriptor[]): DirectoryCapability {
+  return {
+    list() {
+      return list();
+    },
+  };
+}
+
 export function buildAppContext(args: {
   readonly userId: string | null;
   readonly sessionId: string;
@@ -52,6 +62,8 @@ export function buildAppContext(args: {
   readonly identityAppIds: ReadonlySet<string>;
   readonly identity: IdentityService;
   readonly slot: CookieSlot;
+  readonly directoryAppIds?: ReadonlySet<string>;
+  readonly directory?: () => readonly AppDescriptor[];
   readonly lockboxAppIds?: ReadonlySet<string>;
   readonly lockbox?: LockboxService;
   readonly oauthAppIds?: ReadonlySet<string>;
@@ -64,6 +76,7 @@ export function buildAppContext(args: {
     identity?: IdentityCapability;
     lockbox?: LockboxCapability;
     oauth?: OAuthCapability;
+    directory?: DirectoryCapability;
   } = {
     userId: args.userId,
     sessionId: args.sessionId,
@@ -71,6 +84,9 @@ export function buildAppContext(args: {
   };
   if (args.identityAppIds.has(args.app.id)) {
     ctx.identity = bindIdentity(args.identity, args.sessionId, args.slot);
+  }
+  if (args.directory && args.directoryAppIds?.has(args.app.id)) {
+    ctx.directory = bindDirectory(args.directory);
   }
   if (args.lockbox && args.lockboxAppIds?.has(args.app.id)) {
     ctx.lockbox = bindLockbox(args.lockbox, args.userId, args.app.id);

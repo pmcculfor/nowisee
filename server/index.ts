@@ -19,7 +19,6 @@ import { createServer as createHttpsServer } from "node:https";
 import { readFileSync, existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
-import { productionGmailGrants } from "../src/apps/gmail/oauth.ts";
 import { createNowiseeHost } from "./host.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
@@ -48,7 +47,6 @@ const host = createNowiseeHost({
   db: DB_PATH,
   scrypt: SCRYPT_PRODUCTION,
   configuredOrigin: process.env.NOWISEE_ORIGIN,
-  ...productionGmailGrants(),
 });
 
 async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {

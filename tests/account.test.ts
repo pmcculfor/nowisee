@@ -5,13 +5,11 @@ import { SCRYPT_TEST } from "../server/identity/hash.ts";
 import { NODE } from "../src/apps/account/ids.ts";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 const ORIGIN = "http://localhost:5173";
 
 function makeHost(extra?: { extraApps?: AppModule[]; identityAppIds?: string[] }): NowiseeHost {
   return createNowiseeHost({
-    bibleSeed: fixtureKjv,
     scrypt: SCRYPT_TEST,
     configuredOrigin: ORIGIN,
     extraApps: extra?.extraApps,
@@ -112,7 +110,7 @@ describe("Account app", () => {
     expect(signedBody.location).toBeNull();
     expect(signedBody.navigationMap[NODE.auth]?.enter).toEqual({
       kind: "app",
-      to: { appId: "home", path: "/" },
+      to: { appId: "home", path: "/app/account" },
     });
 
     const nextCookie = cookieFrom(signedIn.headers?.["Set-Cookie"]) ?? cookie;

@@ -22,7 +22,7 @@ src/core/       shell (navigator, display, …)
 src/apps/       home, help, bible, notes, gmail, account modules (imported by the server host)
 src/apps/remote.ts  client RPC stub
 src/shell/      registers remote Home + Help + Bible + Notes + Gmail + Account
-server/         HTTP, host identity SQLite, identity service, createNowiseeHost
+server/         HTTP, host identity SQLite, identity service, createNowiseeHost, first-party app pack list
 server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
 server/index.ts production entry (SPA + /api)
 ```

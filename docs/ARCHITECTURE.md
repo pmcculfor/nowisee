@@ -324,8 +324,8 @@ export interface ShellConfig {
 
 ### AppRegistry
 
-- `register` / `get(id) → AppModule | null` (core-internal) / `listEnabled() → AppDescriptor[]` (app-facing).
-- Home app uses `listEnabled()` for labels + `app` edges (not node ids of other apps, and not the registry object).
+- `register` / `get(id) → AppModule | null` (core-internal) / `listDescriptors() → AppDescriptor[]` (host directory).
+- Home reads `ctx.directory` for labels + `app` edges (not node ids of other apps, and not the registry object).
 
 ### Platform capabilities
 
@@ -389,5 +389,5 @@ Unit-test without DOM where possible:
 - `Router.hrefFor(Router.parse(href))` round-trips; no other module emits a `#` string.
 - Every `RefreshResult` an MVP app returns survives a `structuredClone` round-trip.
 - Copy with no device clipboard → Navigator shows “clipboard unavailable”; the app still only returned `clipboardText`.
-- `listEnabled()` returns descriptors; the registry object is not reachable from any app.
+- `listDescriptors()` returns descriptors; the registry object is not reachable from any app.
 - App refresh: wrap-or-not is app-defined; action tip updates label in place without stack jump.
