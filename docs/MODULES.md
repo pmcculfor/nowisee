@@ -52,8 +52,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the canonical definitions.
 
 - Register `AppModule` instances at bootstrap.
 - `get(id) → AppModule | null` — **core-internal only**; never handed to an app.
-- `listEnabled() → AppDescriptor[]` — plain `{ id, label }` data (MVP: all registered are enabled).
-- Provide the catalog Home uses for labels + `app` edges.
+- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home reads this through `ctx.directory`, never the registry object.
 
 ### Edge cases
 
@@ -459,10 +458,11 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | `edgeAction(toNodeId)` | `enter` edge with `action: true` — the one-line button press |
 | `siblingListEdges(ids, opts)` | `prev` / `next` `replace` edges; `wrap?: boolean` |
 | `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) commits; `back` abandons (`backTo` is a node id or `"pop"`) |
-| `rootBackToHome(rootId, rootAppId)` | `back` app edge to the root app |
+| `rootBackToHome(rootId, rootAppId, fromAppId)` | `back` app edge to that app's Home catalog row (`/app/:fromAppId`) |
+| `edgeToHome(rootAppId, fromAppId)` / `homeCatalogPath(appId)` | Same Home row address |
 | `collectNeighborhood({ tipId, neighbors, payload, depth, maxNodes })` | Callback-driven walk → warm payloads + map fragment |
 | `buildMap(fragments)` | Assemble the nested `fromNodeId → intent → edge` structure |
-| `signedOut({ accountAppId, rootAppId, text })` | Complete `RefreshResult` for a signed-out user-scoped app |
+| `signedOut({ accountAppId, rootAppId, appId, text })` | Complete `RefreshResult` for a signed-out user-scoped app |
 
 ### Non-goals
 
@@ -476,7 +476,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ### Responsibilities
 
-- `open` / `refresh`: present sibling list of enabled apps from a `listEnabled(): AppDescriptor[]` callback injected at construction. Home receives descriptors, **not** the registry object — it is an ordinary app and gets no privileged handle.
+- `open` / `refresh`: present sibling list of installed apps from `ctx.directory.list()` (granted only to Home). Home receives descriptors, **not** the registry object — it is an ordinary app and gets no privileged handle. `open("/app/:id")` lands on that catalog row so leaving an app resumes there.
 - Each app label is a node; `enter` is `kind: "app"` to `{ appId, path: "/" }`.
 - `prev` / `next` among app labels with `replace` (wrap optional—Home SHOULD wrap for a short list).
 - `back` at home root: missing edge or no-op (already home).

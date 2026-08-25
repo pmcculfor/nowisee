@@ -1,8 +1,8 @@
 import {
   buildMap,
-  edgeApp,
   edgeNode,
   edgePop,
+  edgeToHome,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -100,7 +100,7 @@ function doneLabelFor(inputText: string | undefined): string {
 
 function helpMap(rootAppId: string): NavigationMap {
   return buildMap(
-    rootBackToHome(NODE.welcome, rootAppId),
+    rootBackToHome(NODE.welcome, rootAppId, HELP_APP_ID),
     {
       [NODE.welcome]: {
         enter: edgeNode(NODE.backPractice, "push"),
@@ -130,8 +130,8 @@ function helpMap(rootAppId: string): NavigationMap {
     }),
     {
       [NODE.done]: {
-        enter: edgeApp({ appId: rootAppId, path: "/" }),
-        back: edgeApp({ appId: rootAppId, path: "/" }),
+        enter: edgeToHome(rootAppId, HELP_APP_ID),
+        back: edgeToHome(rootAppId, HELP_APP_ID),
       },
     },
   );

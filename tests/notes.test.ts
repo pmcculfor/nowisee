@@ -56,7 +56,7 @@ describe("Notes app", () => {
     expect(result.location).toEqual({ appId: "notes", path: "/create" });
     expect(result.navigationMap[CREATE_NODE_ID]?.back).toEqual({
       kind: "app",
-      to: { appId: "home", path: "/" },
+      to: { appId: "home", path: "/app/notes" },
     });
     expect(result.navigationMap[CREATE_NODE_ID]?.enter).toEqual({
       kind: "node",
@@ -267,7 +267,7 @@ describe("Notes app", () => {
       edgeApp({ appId: "account", path: "/" }),
     );
     expect(result.navigationMap[result.node.id]?.back).toEqual(
-      edgeApp({ appId: "home", path: "/" }),
+      edgeApp({ appId: "home", path: "/app/notes" }),
     );
 
     await app.refresh(

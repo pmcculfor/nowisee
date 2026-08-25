@@ -2,9 +2,9 @@ import type { AccountFlowStore } from "./types.ts";
 import {
   buildMap,
   edgeAction,
-  edgeApp,
   edgeNode,
   edgePop,
+  edgeToHome,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -213,7 +213,7 @@ function signedOutView(
         enter: edgeNode(NODE.password, "push"),
       },
     },
-    rootBackToHome(NODE.start, deps.rootAppId),
+    rootBackToHome(NODE.start, deps.rootAppId, ACCOUNT_APP_ID),
     {
       [NODE.emailPrompt]: { back: edgePop() },
       [NODE.passwordPrompt]: { back: edgePop() },
@@ -261,8 +261,8 @@ function signedInView(
 
   const navigationMap = buildMap(
     siblingListEdges([NODE.settings, NODE.signOut]),
-    rootBackToHome(NODE.settings, deps.rootAppId),
-    rootBackToHome(NODE.signOut, deps.rootAppId),
+    rootBackToHome(NODE.settings, deps.rootAppId, ACCOUNT_APP_ID),
+    rootBackToHome(NODE.signOut, deps.rootAppId, ACCOUNT_APP_ID),
     {
       [NODE.signOut]: {
         enter: edgeAction(NODE.signOutStatus),
@@ -270,8 +270,8 @@ function signedInView(
     },
     {
       [NODE.signOutStatus]: {
-        enter: edgeApp({ appId: deps.rootAppId, path: "/" }),
-        back: edgeApp({ appId: deps.rootAppId, path: "/" }),
+        enter: edgeToHome(deps.rootAppId, ACCOUNT_APP_ID),
+        back: edgeToHome(deps.rootAppId, ACCOUNT_APP_ID),
       },
     },
   );
@@ -301,8 +301,8 @@ function authStatusView(
   if (signedIn) {
     navigationMap = buildMap({
       [NODE.auth]: {
-        enter: edgeApp({ appId: deps.rootAppId, path: "/" }),
-        back: edgeApp({ appId: deps.rootAppId, path: "/" }),
+        enter: edgeToHome(deps.rootAppId, ACCOUNT_APP_ID),
+        back: edgeToHome(deps.rootAppId, ACCOUNT_APP_ID),
       },
     });
   } else {
@@ -326,8 +326,8 @@ function signedOutStatusView(deps: AccountViewDeps): RefreshResult {
   return {
     navigationMap: buildMap({
       [NODE.signOutStatus]: {
-        enter: edgeApp({ appId: deps.rootAppId, path: "/" }),
-        back: edgeApp({ appId: deps.rootAppId, path: "/" }),
+        enter: edgeToHome(deps.rootAppId, ACCOUNT_APP_ID),
+        back: edgeToHome(deps.rootAppId, ACCOUNT_APP_ID),
       },
     }),
     warm: [node],

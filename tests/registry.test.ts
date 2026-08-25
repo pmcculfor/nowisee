@@ -36,11 +36,11 @@ describe("AppRegistry", () => {
     );
   });
 
-  it("listEnabled returns plain descriptors, not modules", () => {
+  it("listDescriptors returns plain descriptors, not modules", () => {
     const registry = new AppRegistry();
     registry.register(fakeApp("a", "A"));
     registry.register(fakeApp("b", "B"));
-    const list = registry.listEnabled();
+    const list = registry.listDescriptors();
     expect(list).toEqual([
       { id: "a", label: "A" },
       { id: "b", label: "B" },

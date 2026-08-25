@@ -5,7 +5,6 @@ import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createHomeApp } from "../src/apps/home.ts";
 import { startShell } from "../src/shell/bootstrap.ts";
 import { createAppHost } from "../server/host.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 describe("shell bootstrap", () => {
   it("opens Home at #/ with rootAppId home and lists Help first", async () => {
@@ -15,11 +14,11 @@ describe("shell bootstrap", () => {
 
     const shell = startShell(mount, {
       config: { rootAppId: "home" },
-      rpc: createAppHost({ bibleSeed: fixtureKjv, rootAppId: "home" }),
+      rpc: createAppHost({ rootAppId: "home" }),
     });
     await shell.navigator.openLocation({ appId: "home", path: "/" });
 
-    expect(shell.registry.listEnabled()).toEqual([
+    expect(shell.registry.listDescriptors()).toEqual([
       { id: "home", label: "Home" },
       { id: "help", label: HELP_APP_LABEL },
       { id: "bible", label: "Bible" },
@@ -35,10 +34,9 @@ describe("shell bootstrap", () => {
     shell.stop();
   });
 
-  it("Home is constructed with listEnabled descriptors, not the registry object", () => {
+  it("Home has no registry handle; the directory is a ctx grant", () => {
     const home = createHomeApp({
       rootAppId: "home",
-      listEnabled: () => [{ id: "home", label: "Home" }],
     });
     expect(home.id).toBe("home");
     expect(home).not.toHaveProperty("registry");

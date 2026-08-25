@@ -397,7 +397,7 @@ function locationFor(session: ViewSession, parsed: ParsedNode, version: string):
 function emptyBibleView(session: ViewSession): RefreshResult {
   const id = emptyId();
   return {
-    navigationMap: buildMap(rootBackToHome(id, session.deps.rootAppId)),
+    navigationMap: buildMap(rootBackToHome(id, session.deps.rootAppId, session.deps.appId)),
     warm: [{ id, label: "Bible data is not available." }],
     node: { id, label: "Bible data is not available." },
     location: { appId: session.deps.appId, path: "/" },

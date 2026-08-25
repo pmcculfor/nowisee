@@ -9,7 +9,6 @@ import type { LockboxKeyring } from "../server/lockbox/crypto.ts";
 import { handleOAuthHttp } from "../server/oauth/http.ts";
 import { mapOAuthSecrets } from "../server/oauth/secrets.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -181,7 +180,6 @@ describe("oauth broker", () => {
       return probe(id, seen[id]!);
     });
     h = createNowiseeHost({
-      bibleSeed: fixtureKjv,
       scrypt: SCRYPT_TEST,
       configuredOrigin: ORIGIN,
       extraApps,

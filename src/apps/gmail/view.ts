@@ -1,10 +1,10 @@
 import {
   buildMap,
   edgeAction,
-  edgeApp,
   edgeExternal,
   edgeNode,
   edgePop,
+  edgeToHome,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -91,6 +91,7 @@ function signedOutGmail(deps: GmailViewDeps, ctx: AppServerContext | undefined):
   return signedOut({
     accountAppId: ctx?.accountAppId ?? deps.rootAppId,
     rootAppId: deps.rootAppId,
+    appId: GMAIL_APP_ID,
     text: SIGNED_OUT_TEXT,
   });
 }
@@ -253,7 +254,7 @@ async function connectView(
       navigationMap: buildMap({
         [NODE.connect]: {
           enter: edgeExternal(authorizeUrl),
-          back: edgeApp({ appId: deps.rootAppId, path: "/" }),
+          back: edgeToHome(deps.rootAppId, GMAIL_APP_ID),
         },
       }),
       location: { appId: GMAIL_APP_ID, path: "/connect" },
@@ -271,7 +272,7 @@ function unavailable(deps: GmailViewDeps): RefreshResult {
   return {
     node,
     warm: [node],
-    navigationMap: buildMap(rootBackToHome(NODE.unavailable, deps.rootAppId)),
+    navigationMap: buildMap(rootBackToHome(NODE.unavailable, deps.rootAppId, GMAIL_APP_ID)),
     location: { appId: GMAIL_APP_ID, path: "/" },
   };
 }
@@ -281,7 +282,7 @@ function loadError(deps: GmailViewDeps): RefreshResult {
   return {
     node,
     warm: [node],
-    navigationMap: buildMap(rootBackToHome(NODE.loadError, deps.rootAppId)),
+    navigationMap: buildMap(rootBackToHome(NODE.loadError, deps.rootAppId, GMAIL_APP_ID)),
     location: { appId: GMAIL_APP_ID, path: "/" },
   };
 }
@@ -293,8 +294,8 @@ function disconnectedView(deps: GmailViewDeps): RefreshResult {
     warm: [node],
     navigationMap: buildMap({
       [NODE.disconnectStatus]: {
-        enter: edgeApp({ appId: deps.rootAppId, path: "/" }),
-        back: edgeApp({ appId: deps.rootAppId, path: "/" }),
+        enter: edgeToHome(deps.rootAppId, GMAIL_APP_ID),
+        back: edgeToHome(deps.rootAppId, GMAIL_APP_ID),
       },
     }),
     location: { appId: GMAIL_APP_ID, path: "/disconnect" },
@@ -428,7 +429,7 @@ function buildNavigationMap(
   ];
 
   for (const id of listIds) {
-    fragments.push(rootBackToHome(id, rootAppId));
+    fragments.push(rootBackToHome(id, rootAppId, GMAIL_APP_ID));
   }
 
   for (const message of messages) {

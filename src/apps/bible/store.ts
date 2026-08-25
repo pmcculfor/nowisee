@@ -4,6 +4,7 @@ import { openSqlite, type Db } from "../../../server/sqlite.ts";
 import { COMMENTARY_RECORDS, ROOT_ITEMS, getCanonBook, resolveBookToken, verseOrd } from "./catalog.ts";
 import { createBibleApp, type BibleApp } from "./index.ts";
 import { ensureCatalog, type EnsureCatalogOptions } from "./import.ts";
+import { MEMORY_SEED } from "./memorySeed.ts";
 import { tokenize } from "./search.ts";
 import type {
   BibleBook,
@@ -348,9 +349,10 @@ export type StartBibleAppOptions = {
 
 /** Opens Bible's own SQLite file and returns the AppModule. Used by the host. */
 export function startBibleApp(options: StartBibleAppOptions): BibleApp {
-  const db = openBibleDatabase(options.dbPath ?? DEFAULT_BIBLE_DB_PATH);
+  const dbPath = options.dbPath ?? DEFAULT_BIBLE_DB_PATH;
+  const db = openBibleDatabase(dbPath);
   const catalog: EnsureCatalogOptions = {
-    seed: options.seed,
+    seed: options.seed ?? (dbPath === ":memory:" ? MEMORY_SEED : undefined),
     rawDir: options.rawDir,
   };
   ensureCatalog(db, catalog);

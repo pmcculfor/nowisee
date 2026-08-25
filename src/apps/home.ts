@@ -1,6 +1,7 @@
 import {
   buildMap,
   edgeApp,
+  homeCatalogPath,
   siblingListEdges,
 } from "../app-kit/index.ts";
 import type {
@@ -18,31 +19,30 @@ const HOME_APP_ID = "home";
 const ROOT_NODE_ID = "home:root";
 
 export type HomeAppDeps = {
-  /** Plain descriptors only — never pass the registry object. */
-  readonly listEnabled: (userId?: string | null) => readonly AppDescriptor[];
   readonly rootAppId: string;
 };
 
 /**
- * Home is an ordinary AppModule. It lists enabled apps from an injected
- * catalog callback and links to them with `app` edges — never foreign node ids.
+ * Home is an ordinary AppModule. It lists installed apps from `ctx.directory`
+ * and links to them with `app` edges — never foreign node ids.
  */
 export function createHomeApp(deps: HomeAppDeps): AppModule {
   return {
     id: HOME_APP_ID,
     label: "Home",
     open(path: string, _extras?: RefreshExtras, ctx?: AppServerContext): RefreshResult {
-      return viewForPath(deps, path, ctx?.userId ?? null);
+      return viewForPath(deps, path, ctx);
     },
     refresh(stack: readonly StackEntry[], _extras?: RefreshExtras, ctx?: AppServerContext): RefreshResult {
       const tipId = stack[stack.length - 1]?.nodeId;
-      return viewForTip(deps, tipId, ctx?.userId ?? null);
+      return viewForTip(deps, tipId, ctx);
     },
   };
 }
 
-function peerApps(deps: HomeAppDeps, userId: string | null): AppDescriptor[] {
-  return deps.listEnabled(userId).filter((app) => app.id !== deps.rootAppId);
+function peerApps(deps: HomeAppDeps, ctx?: AppServerContext): AppDescriptor[] {
+  const list = ctx?.directory?.list() ?? [];
+  return list.filter((app) => app.id !== deps.rootAppId);
 }
 
 function appNodeId(appId: string): string {
@@ -51,7 +51,7 @@ function appNodeId(appId: string): string {
 
 function catalog(
   deps: HomeAppDeps,
-  userId: string | null,
+  ctx?: AppServerContext,
 ): {
   ids: string[];
   payloads: Map<string, NodePayload>;
@@ -61,7 +61,7 @@ function catalog(
   const appIdByNode = new Map<string, string>();
   const ids: string[] = [];
 
-  const peers = peerApps(deps, userId);
+  const peers = peerApps(deps, ctx);
   if (peers.length === 0) {
     ids.push(ROOT_NODE_ID);
     payloads.set(ROOT_NODE_ID, {
@@ -100,8 +100,8 @@ function buildNavigationMap(
   return buildMap(siblingListEdges(ids, { wrap: true }), ...enterFragments);
 }
 
-function viewForPath(deps: HomeAppDeps, path: string, userId: string | null): RefreshResult {
-  const cat = catalog(deps, userId);
+function viewForPath(deps: HomeAppDeps, path: string, ctx?: AppServerContext): RefreshResult {
+  const cat = catalog(deps, ctx);
 
   const appMatch = /^\/app\/([^/]+)\/?$/.exec(path);
   if (appMatch) {
@@ -117,9 +117,9 @@ function viewForPath(deps: HomeAppDeps, path: string, userId: string | null): Re
 function viewForTip(
   deps: HomeAppDeps,
   tipId: string | undefined,
-  userId: string | null,
+  ctx?: AppServerContext,
 ): RefreshResult {
-  const cat = catalog(deps, userId);
+  const cat = catalog(deps, ctx);
   if (tipId && cat.payloads.has(tipId)) {
     return resultForCatalog(cat, tipId);
   }
@@ -151,7 +151,7 @@ function locationFor(
   }
   const appId = appIdByNode.get(tipId);
   if (appId) {
-    return { appId: HOME_APP_ID, path: `/app/${appId}` };
+    return { appId: HOME_APP_ID, path: homeCatalogPath(appId) };
   }
   return { appId: HOME_APP_ID, path: "/" };
 }

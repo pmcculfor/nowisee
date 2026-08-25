@@ -13,16 +13,3 @@ export const GMAIL_OAUTH_PROVIDER: OAuthProviderConfig = {
     prompt: "consent",
   },
 };
-
-/** Grants for the running host (`npm start` / Vite). Tests leave lists empty. */
-export function productionGmailGrants(): {
-  readonly lockboxAppIds: readonly string[];
-  readonly oauthAppIds: readonly string[];
-  readonly oauthProviders: readonly OAuthProviderConfig[];
-} {
-  return {
-    lockboxAppIds: [GMAIL_APP_ID],
-    oauthAppIds: [GMAIL_APP_ID],
-    oauthProviders: [GMAIL_OAUTH_PROVIDER],
-  };
-}

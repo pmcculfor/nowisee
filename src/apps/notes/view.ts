@@ -75,6 +75,7 @@ function signedOutNotes(deps: NotesViewDeps, ctx: AppServerContext | undefined):
   return signedOut({
     accountAppId: ctx?.accountAppId ?? deps.rootAppId,
     rootAppId: deps.rootAppId,
+    appId: NOTES_APP_ID,
     text: SIGNED_OUT_TEXT,
   });
 }
@@ -226,7 +227,7 @@ function buildNavigationMap(
       action: true,
       commitStackBehavior: "replace",
     }),
-    rootBackToHome(CREATE_RESULT_NODE_ID, rootAppId),
+    rootBackToHome(CREATE_RESULT_NODE_ID, rootAppId, NOTES_APP_ID),
   ];
 
   for (const note of notes) {
@@ -250,7 +251,7 @@ function buildNavigationMap(
 
   // Every list tip backs out to Home (app edge).
   for (const id of listIds) {
-    fragments.push(rootBackToHome(id, rootAppId));
+    fragments.push(rootBackToHome(id, rootAppId, NOTES_APP_ID));
   }
 
   return buildMap(...fragments);

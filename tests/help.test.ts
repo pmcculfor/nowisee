@@ -20,7 +20,7 @@ describe("Help app", () => {
     expect(result.node.label).toContain("Welcome to Now I See");
     expect(result.navigationMap[NODE.welcome]?.back).toEqual({
       kind: "app",
-      to: { appId: ROOT, path: "/" },
+      to: { appId: ROOT, path: "/app/help" },
     });
     expect(result.navigationMap[NODE.welcome]?.enter).toEqual({
       kind: "node",
@@ -77,7 +77,7 @@ describe("Help app", () => {
     });
     expect(opened.navigationMap[NODE.done]?.enter).toEqual({
       kind: "app",
-      to: { appId: ROOT, path: "/" },
+      to: { appId: ROOT, path: "/app/help" },
     });
 
     const typed = help().refresh(

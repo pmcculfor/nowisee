@@ -5,7 +5,6 @@ import { handleSessionHttp } from "../server/http.ts";
 import { SCRYPT_TEST } from "../server/identity/hash.ts";
 import { NODE } from "../src/apps/account/ids.ts";
 import type { AppModule, RefreshResult } from "../src/core/types.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -81,7 +80,6 @@ describe("owner-scoped stack ids", () => {
       "CREATE TABLE vault_items (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, body TEXT NOT NULL)",
     );
     h = createNowiseeHost({
-      bibleSeed: fixtureKjv,
       db: ctxDb,
       scrypt: SCRYPT_TEST,
       configuredOrigin: ORIGIN,

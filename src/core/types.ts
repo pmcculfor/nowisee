@@ -139,6 +139,14 @@ export interface AppDescriptor {
   readonly label: string;
 }
 
+/**
+ * Host-owned directory of installed apps as descriptors, never modules.
+ * Granted only to apps the catalog marks (today: Home). Feature-detect.
+ */
+export interface DirectoryCapability {
+  list(): readonly AppDescriptor[];
+}
+
 export interface RefreshResult {
   /** Full replace of the client's navigation map. */
   navigationMap: NavigationMap;
@@ -222,6 +230,8 @@ export interface AppServerContext {
   readonly lockbox?: LockboxCapability;
   /** Present only for apps the host allows. Feature-detect. */
   readonly oauth?: OAuthCapability;
+  /** Present only for apps the host allows. Feature-detect. */
+  readonly directory?: DirectoryCapability;
 }
 
 export interface AppModule {

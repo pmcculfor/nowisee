@@ -11,7 +11,6 @@ import {
 } from "../server/lockbox/crypto.ts";
 import { LockboxError, MAX_BLOB_BYTES } from "../server/lockbox/errors.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
-import { fixtureKjv } from "./helpers/kjvFixture.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -49,7 +48,6 @@ function makeHost(extra?: {
   lockboxKeys?: LockboxKeyring;
 }): NowiseeHost {
   return createNowiseeHost({
-    bibleSeed: fixtureKjv,
     scrypt: SCRYPT_TEST,
     configuredOrigin: ORIGIN,
     extraApps: extra?.extraApps,
