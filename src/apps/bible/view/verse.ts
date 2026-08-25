@@ -18,13 +18,20 @@ import {
   optionId,
   signInId,
   verseNodeId,
-  verseVersionListId,
   verseVersionPickId,
   versionPickId,
 } from "../ids.ts";
 import { tokenize } from "../search.ts";
 import type { BibleRef, CanonRef } from "../types.ts";
-import { addNode, bookLabel, clampVerse, displayedVerse, type ViewSession } from "./helpers.ts";
+import {
+  addNode,
+  bookLabel,
+  clampVerse,
+  displayedVerse,
+  listedCommentaries,
+  listedVersions,
+  type ViewSession,
+} from "./helpers.ts";
 
 export function addVerseLevel(
   session: ViewSession,
@@ -149,9 +156,13 @@ export function optionEnter(
     return edgeAction(bookmarkStatusId(ref));
   }
   if (option === "versions") {
-    return edgeNode(verseVersionListId(version, ref), "push");
+    const firstVersion = listedVersions(session)[0];
+    if (!firstVersion) {
+      return undefined;
+    }
+    return edgeNode(verseVersionPickId(version, ref, firstVersion.id), "push");
   }
-  const firstWork = session.deps.store.listCommentaries()[0];
+  const firstWork = listedCommentaries(session)[0];
   if (!firstWork) {
     return edgeNode(commentaryListId(version, ref), "push");
   }
@@ -176,7 +187,7 @@ export function addVerseVersionList(
   version: string,
   ref: CanonRef,
 ): void {
-  const versions = session.deps.store.listVersions();
+  const versions = listedVersions(session);
   const ids = versions.map((v) => verseVersionPickId(version, ref, v.id));
   for (const item of versions) {
     addNode(payloads, {
@@ -213,7 +224,7 @@ export function addRootVersionList(
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
 ): void {
-  const versions = session.deps.store.listVersions();
+  const versions = listedVersions(session);
   const ids = versions.map((v) => versionPickId(v.id));
   for (const item of versions) {
     addNode(payloads, { id: versionPickId(item.id), label: item.label });

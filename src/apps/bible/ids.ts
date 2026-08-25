@@ -76,10 +76,6 @@ export function bookmarkStatusId(ref: CanonRef): string {
   return `bible:s:${ref.bookId}:${ref.chapter}:${ref.verse}:bookmark`;
 }
 
-export function verseVersionListId(version: string, ref: CanonRef): string {
-  return `bible:vl:${version}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
-}
-
 export function verseVersionPickId(version: string, ref: CanonRef, targetVersionId: string): string {
   return `bible:vp:${version}:${ref.bookId}:${ref.chapter}:${ref.verse}:${targetVersionId}`;
 }
@@ -92,8 +88,13 @@ export function commentaryWorkId(version: string, ref: CanonRef, commentaryId: s
   return `bible:cw:${version}:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}`;
 }
 
-export function commentarySectionId(version: string, ref: CanonRef, commentaryId: string): string {
-  return `bible:cs:${version}:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}`;
+export function commentaryChunkId(
+  version: string,
+  ref: CanonRef,
+  commentaryId: string,
+  index: number,
+): string {
+  return `bible:cs:${version}:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}:${index}`;
 }
 
 export type ParsedNode =
@@ -113,11 +114,10 @@ export type ParsedNode =
   | { kind: "option"; version: string; ref: CanonRef; option: "copy" | "bookmark" | "versions" | "commentary" }
   | { kind: "copy-status"; version: string; ref: CanonRef }
   | { kind: "bookmark-status"; ref: CanonRef }
-  | { kind: "verse-version-list"; version: string; ref: CanonRef }
   | { kind: "verse-version-pick"; version: string; ref: CanonRef; targetVersionId: string }
   | { kind: "commentary-list"; version: string; ref: CanonRef }
   | { kind: "commentary-work"; version: string; ref: CanonRef; commentaryId: string }
-  | { kind: "commentary-section"; version: string; ref: CanonRef; commentaryId: string };
+  | { kind: "commentary-chunk"; version: string; ref: CanonRef; commentaryId: string; index: number };
 
 const REF = "([^:]+):([^:]+):(\\d+):(\\d+)";
 const CANON = "([^:]+):(\\d+):(\\d+)";
@@ -218,11 +218,6 @@ export function parseNodeId(id: string): ParsedNode | null {
     return { kind: "bookmark-status", ref: canonRef(bs[1]!, bs[2]!, bs[3]!) };
   }
 
-  const vl = new RegExp(`^bible:vl:${REF}$`).exec(id);
-  if (vl) {
-    return { kind: "verse-version-list", version: vl[1]!, ref: canonRef(vl[2]!, vl[3]!, vl[4]!) };
-  }
-
   const vp = new RegExp(`^bible:vp:${REF}:([^:]+)$`).exec(id);
   if (vp) {
     return {
@@ -248,13 +243,14 @@ export function parseNodeId(id: string): ParsedNode | null {
     };
   }
 
-  const cs = new RegExp(`^bible:cs:${REF}:([^:]+)$`).exec(id);
+  const cs = new RegExp(`^bible:cs:${REF}:([^:]+):(\\d+)$`).exec(id);
   if (cs) {
     return {
-      kind: "commentary-section",
+      kind: "commentary-chunk",
       version: cs[1]!,
       ref: canonRef(cs[2]!, cs[3]!, cs[4]!),
       commentaryId: cs[5]!,
+      index: Number(cs[6]),
     };
   }
 

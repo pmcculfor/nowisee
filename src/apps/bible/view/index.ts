@@ -14,7 +14,7 @@ import {
   bookmarksId,
   bookId as bookNodeId,
   chapterId,
-  commentarySectionId,
+  commentaryChunkId,
   commentaryWorkId,
   commentaryListId,
   copyStatusId,
@@ -26,7 +26,6 @@ import {
   searchWorkingId,
   signInId,
   testamentId,
-  verseVersionListId,
   verseVersionPickId,
   versionPickId,
   versionsHeadingId,
@@ -36,12 +35,13 @@ import {
 import type { CanonRef } from "../types.ts";
 import { addBookLevel, addChapterLevel, addRootLevel } from "./root.ts";
 import { addBookmarksEmpty } from "./bookmarks.ts";
-import { addCommentaryWorks, commentaryLabel } from "./commentary.ts";
+import { addCommentaryWorks, commentaryChunkLabel } from "./commentary.ts";
 import { idleCopyStatus, resolveCopyStatus } from "./copy.ts";
 import {
   activeVersion,
   addNode,
   displayedVerse,
+  touchRecency,
   verseLocation,
   viewSession,
   type BibleViewDeps,
@@ -68,7 +68,7 @@ export function openBibleView(
   ctx?: AppServerContext,
 ): RefreshResult {
   const session = viewSession(deps, extras, ctx);
-  if (extras.action && session.userId) {
+  if (extras.action) {
     writePrefFromPath(session, path);
   }
   return buildBibleView(session, parseBiblePath(session, path));
@@ -92,9 +92,13 @@ export function refreshBibleView(
 
 function writePrefFromPath(session: ViewSession, path: string): void {
   const versionId = path.replace(/^\/+/, "").split("/").filter(Boolean)[0];
-  if (versionId && session.userId && session.deps.store.getVersion(versionId)) {
+  if (!versionId || !session.deps.store.getVersion(versionId)) {
+    return;
+  }
+  if (session.userId) {
     session.deps.store.setActiveVersionId(session.userId, versionId);
   }
+  touchRecency(session, "version", versionId);
 }
 
 function applyAction(session: ViewSession, tipId: string): RefreshResult | null {
@@ -110,6 +114,10 @@ function applyAction(session: ViewSession, tipId: string): RefreshResult | null 
   }
   if (parsed.kind === "search-working") {
     return applySearch(session);
+  }
+  if (parsed.kind === "commentary-chunk") {
+    touchRecency(session, "commentary", parsed.commentaryId);
+    return null;
   }
   return null;
 }
@@ -217,13 +225,12 @@ export function buildBibleView(session: ViewSession, tipId: string): RefreshResu
       return idleCopyStatus(parsed.version, parsed.ref);
     case "bookmark-status":
       return bookmarkIdle(session, parsed.ref);
-    case "verse-version-list":
     case "verse-version-pick":
       addVerseVersionList(session, payloads, fragments, parsed.version, parsed.ref);
       break;
     case "commentary-list":
     case "commentary-work":
-    case "commentary-section":
+    case "commentary-chunk":
       addCommentaryWorks(session, payloads, fragments, parsed.version, parsed.ref);
       break;
   }
@@ -307,8 +314,6 @@ function payloadFor(session: ViewSession, parsed: ParsedNode, version: string): 
       return { id: copyStatusId(parsed.version, parsed.ref), label: "Copied" };
     case "bookmark-status":
       return { id: bookmarkStatusId(parsed.ref), label: "Bookmarked" };
-    case "verse-version-list":
-      return { id: verseVersionListId(parsed.version, parsed.ref), label: "Versions" };
     case "verse-version-pick":
       return {
         id: verseVersionPickId(parsed.version, parsed.ref, parsed.targetVersionId),
@@ -321,12 +326,10 @@ function payloadFor(session: ViewSession, parsed: ParsedNode, version: string): 
         id: commentaryWorkId(parsed.version, parsed.ref, parsed.commentaryId),
         label: session.deps.store.getCommentary(parsed.commentaryId)?.label ?? parsed.commentaryId,
       };
-    case "commentary-section": {
-      const work = session.deps.store.getCommentary(parsed.commentaryId);
-      const section = session.deps.store.findSection(parsed.commentaryId, parsed.ref);
+    case "commentary-chunk": {
       return {
-        id: commentarySectionId(parsed.version, parsed.ref, parsed.commentaryId),
-        label: commentaryLabel(section, work?.label ?? parsed.commentaryId),
+        id: commentaryChunkId(parsed.version, parsed.ref, parsed.commentaryId, parsed.index),
+        label: commentaryChunkLabel(session, parsed.ref, parsed.commentaryId, parsed.index),
       };
     }
   }
@@ -342,11 +345,10 @@ function versionFor(session: ViewSession, parsed: ParsedNode): string {
       return parsed.ref.version || activeVersion(session);
     case "option":
     case "copy-status":
-    case "verse-version-list":
     case "verse-version-pick":
     case "commentary-list":
     case "commentary-work":
-    case "commentary-section":
+    case "commentary-chunk":
       return parsed.version;
     default:
       return activeVersion(session);
@@ -382,11 +384,10 @@ function locationFor(session: ViewSession, parsed: ParsedNode, version: string):
       return verseLocation(appId, ref.version, ref);
     }
     case "option":
-    case "verse-version-list":
     case "verse-version-pick":
     case "commentary-list":
     case "commentary-work":
-    case "commentary-section":
+    case "commentary-chunk":
       return verseLocation(appId, parsed.version, parsed.ref);
     case "copy-status":
     case "bookmark-status":

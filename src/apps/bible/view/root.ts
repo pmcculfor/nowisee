@@ -1,6 +1,5 @@
 import {
   edgeNode,
-  edgePop,
   rootBackToHome,
   siblingListEdges,
   type MapFragment,
@@ -21,7 +20,7 @@ import {
   versionPickId,
   versionsHeadingId,
 } from "../ids.ts";
-import { addNode, type ViewSession } from "./helpers.ts";
+import { addNode, listedVersions, type ViewSession } from "./helpers.ts";
 
 export function addRootLevel(
   session: ViewSession,
@@ -92,7 +91,7 @@ function rootHeadingIds(version: string): string[] {
 }
 
 function rootEnterEdges(session: ViewSession): MapFragment {
-  const firstVersion = session.deps.store.listVersions()[0];
+  const firstVersion = listedVersions(session)[0];
   const bookmarksEnter = session.userId
     ? firstBookmarkEnter(session)
     : edgeNode(signInId(), "push");
@@ -133,8 +132,8 @@ export function addBookLevel(
   fragments.push(siblingListEdges(ids, { wrap: true }));
   fragments.push({
     [bookNodeId(version, book.bookId)]: {
-      enter: edgeNode(chapterId(version, book.bookId, 1), "push"),
-      back: edgePop(),
+      enter: edgeNode(chapterId(version, book.bookId, 1), "replace"),
+      back: edgeNode(testamentId(version, book.testament), "replace"),
     },
   });
   for (let ch = 1; ch <= Math.min(book.chapterCount, 12); ch++) {
@@ -178,7 +177,7 @@ export function addChapterLevel(
         ),
         "replace",
       ),
-      back: edgePop(),
+      back: edgeNode(bookNodeId(version, book.bookId), "replace"),
     },
   });
   const verses = session.deps.store.listVerses(version, book.bookId, chapter).slice(0, 8);

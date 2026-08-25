@@ -260,11 +260,11 @@ The escapes are known but each has a cost: `role="application"` on the surface f
 
 ## 8. Deep links have no ancestry, so `back` means two different things at the same node
 
-**Status: deferred.** The owner's objection is sound: for many nodes there is no obviously correct parent to synthesize, and inventing one is worse than having none. `RefreshResult.stack` remains available as a purely additive change if the inconsistency proves annoying in practice. The consequence is recorded in `MODULES` §6 so nobody rediscovers it as a bug.
+**Status: deferred** for a core `RefreshResult.stack` on `open`. Bible’s reading tree no longer depends on that: testament → book → chapter → verse (and `back`) are catalog-parent `replace` edges, so a URL-opened verse walks chapter → book → testament without inspecting stack length. Other apps may still see the deep-link gap until the core delta lands.
 
-**Current:** URL open resets the stack (locked); `RefreshResult` carries a single `node`, so an opened deep link starts with a one-entry stack. `MODULES` §13 acknowledges this. `MODULES` §6 says popping the last entry lands the user at Home.
+**Current:** URL open resets the stack (locked); `RefreshResult` carries a single `node`, so an opened deep link starts with a one-entry stack. `MODULES` §6 says popping the last entry lands the user at Home. Apps that still `pop` for tree ascent keep the inconsistency below.
 
-**Consequence.** Reaching `Matthew 5:8` by navigating leaves a stack of Testament → Book → Chapter → Verse, and `back` returns to the chapter. Reaching the *same node* from a shared link leaves a one-entry stack, and `back` exits to Home. The app can work around this — it sees the stack in `refresh` and can author `back` as a URL edge when the stack has length 1 — but that means every app carries branching boilerplate, and the user-visible behavior of a key silently depends on how they arrived. For an audience that navigates by memorized spatial habit, an inconsistent `back` is a significant regression, and shared links are the main growth channel a product like this has.
+**Consequence.** For an app that still uses `pop` for tree ascent, reaching a leaf by navigating leaves ancestry on the stack, and `back` returns to the parent. Reaching the *same node* from a shared link leaves a one-entry stack, and `back` exits to Home. Inspecting `stack.length === 1` in `refresh` to author a different `back` is the workaround we are not taking. For an audience that navigates by memorized spatial habit, an inconsistent `back` is a significant regression, and shared links are the main growth channel a product like this has.
 
 **Proposed delta.** Let `open` (only `open`, never `refresh`) return an optional ancestry proposal:
 

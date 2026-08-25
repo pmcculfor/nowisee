@@ -55,6 +55,7 @@ Tables:
 
 - `canon_books`, `books` (per version), `verses`, `verse_words`
 - `reader_prefs` — signed-in active version; no session owner
+- `reader_recency` — recently used versions and commentaries; owner is the signed-in user or the session
 - `bookmarks` — **user id only** (not session). Signed-out → sign-in node, no row
 - `commentaries` / range-keyed `commentary_sections` + `commentary_coverage` + `commentary_xrefs`
 - `search_queries` (session-scoped query text; hits are re-run)
