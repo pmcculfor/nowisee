@@ -16,7 +16,7 @@ export const fixtureBible: BibleSeed = {
       startVerse: 1,
       endChapter: 5,
       endVerse: 8,
-      body: "Henry on the Beatitudes, covering verses 1 through 8.",
+      body: "Henry on the Beatitudes, covering verses 1 through 8.\n\nA second paragraph of the same range.",
     },
     {
       commentaryId: "tsk",

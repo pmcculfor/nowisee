@@ -1,7 +1,14 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import { COMMENTARY_RECORDS, ROOT_ITEMS, getCanonBook, resolveBookToken, verseOrd } from "./catalog.ts";
+import {
+  COMMENTARY_RECORDS,
+  ROOT_ITEMS,
+  getCanonBook,
+  resolveBookToken,
+  verseOrd,
+  type RecencyWorkKind,
+} from "./catalog.ts";
 import { createBibleApp, type BibleApp } from "./index.ts";
 import { ensureCatalog, type EnsureCatalogOptions } from "./import.ts";
 import { MEMORY_SEED } from "./memorySeed.ts";
@@ -13,6 +20,7 @@ import type {
   BibleVersion,
   BookmarkRecord,
   CommentarySection,
+  RecencyOwner,
   SearchHit,
 } from "./types.ts";
 
@@ -23,7 +31,7 @@ export const DEFAULT_BIBLE_DB_PATH = "data/apps/bible.db";
 export function openBibleDatabase(path: string = DEFAULT_BIBLE_DB_PATH): Db {
   return openSqlite({
     path,
-    migrations: { dir: MIGRATIONS_DIR, files: ["001_corpus.sql", "002_reader.sql"] },
+    migrations: { dir: MIGRATIONS_DIR, files: ["001_corpus.sql", "002_reader.sql", "003_recency.sql"] },
   });
 }
 
@@ -38,9 +46,33 @@ export function createSqliteBibleStore(db: Db): BibleStore {
     getVersion(id) {
       return db.get<BibleVersion>("SELECT id, label, license FROM versions WHERE id = ?", id);
     },
-    listVersions() {
+    listVersions(owner) {
+      if (!owner) {
+        return db.all<BibleVersion>(
+          "SELECT id, label, license FROM versions ORDER BY sort_order ASC, id ASC",
+        );
+      }
       return db.all<BibleVersion>(
-        "SELECT id, label, license FROM versions ORDER BY sort_order ASC, id ASC",
+        `SELECT v.id, v.label, v.license
+         FROM versions v
+         LEFT JOIN reader_recency r
+           ON r.owner_kind = ? AND r.owner_id = ? AND r.work_kind = 'version' AND r.work_id = v.id
+         ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,
+        owner.kind,
+        owner.id,
+      );
+    },
+    touchRecency(owner, workKind, workId) {
+      db.run(
+        `INSERT INTO reader_recency (owner_kind, owner_id, work_kind, work_id, used_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(owner_kind, owner_id, work_kind, work_id)
+         DO UPDATE SET used_at = excluded.used_at`,
+        owner.kind,
+        owner.id,
+        workKind,
+        workId,
+        Date.now(),
       );
     },
     getActiveVersionId(userId) {
@@ -225,8 +257,16 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       );
       return "added";
     },
-    listCommentaries() {
-      return COMMENTARY_RECORDS;
+    listCommentaries(owner) {
+      const recency = recencyMap(db, owner, "commentary");
+      return [...COMMENTARY_RECORDS].sort((a, b) => {
+        const usedA = recency.get(a.id) ?? 0;
+        const usedB = recency.get(b.id) ?? 0;
+        if (usedA !== usedB) {
+          return usedB - usedA;
+        }
+        return a.sortOrder - b.sortOrder || a.id.localeCompare(b.id);
+      });
     },
     getCommentary(id) {
       return COMMENTARY_RECORDS.find((c) => c.id === id);
@@ -320,6 +360,24 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       db.close();
     },
   };
+}
+
+function recencyMap(db: Db, owner: RecencyOwner | null | undefined, workKind: RecencyWorkKind): Map<string, number> {
+  const map = new Map<string, number>();
+  if (!owner) {
+    return map;
+  }
+  const rows = db.all<{ work_id: string; used_at: number }>(
+    `SELECT work_id, used_at FROM reader_recency
+     WHERE owner_kind = ? AND owner_id = ? AND work_kind = ?`,
+    owner.kind,
+    owner.id,
+    workKind,
+  );
+  for (const row of rows) {
+    map.set(row.work_id, row.used_at);
+  }
+  return map;
 }
 
 function toBook(row: {

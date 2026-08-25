@@ -45,6 +45,8 @@ export type VerseOption =
   | { readonly type: "versions" }
   | { readonly type: "commentary" };
 
+export type RecencyWorkKind = "version" | "commentary";
+
 export type SearchPolicy = {
   readonly maxHits: number;
 };
@@ -54,7 +56,7 @@ export type VerseSequence =
   | { readonly type: "bookmarks" }
   | { readonly type: "search"; readonly queryId: string };
 
-export const SEARCH_POLICY: SearchPolicy = { maxHits: 50 };
+export const SEARCH_POLICY: SearchPolicy = { maxHits: 1000 };
 
 export const TESTAMENT_LABELS: Readonly<Record<string, string>> = {
   OT: "Old Testament",
@@ -70,10 +72,10 @@ export const ROOT_ITEMS: readonly RootItem[] = [
 ];
 
 export const VERSE_OPTIONS: readonly VerseOption[] = [
-  { type: "copy" },
-  { type: "bookmark" },
   { type: "versions" },
   { type: "commentary" },
+  { type: "bookmark" },
+  { type: "copy" },
 ];
 
 export const VERSION_RECORDS: readonly VersionRecord[] = [

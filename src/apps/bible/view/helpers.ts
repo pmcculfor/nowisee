@@ -1,7 +1,7 @@
 import type { AppLocation, AppServerContext, NodePayload, RefreshExtras } from "../../../core/types.ts";
-import { getCanonBook } from "../catalog.ts";
+import { getCanonBook, type RecencyWorkKind } from "../catalog.ts";
 import { bookPathSegment } from "../canon.ts";
-import type { BibleRef, BibleStore, CanonRef } from "../types.ts";
+import type { BibleRef, BibleStore, CanonRef, RecencyOwner } from "../types.ts";
 
 export type BibleViewDeps = {
   readonly store: BibleStore;
@@ -88,4 +88,30 @@ export function displayedVerse(store: BibleStore, version: string, ref: CanonRef
       verse: ref.verse,
     }
   );
+}
+
+export function recencyOwner(session: ViewSession): RecencyOwner | null {
+  if (session.userId) {
+    return { kind: "user", id: session.userId };
+  }
+  if (session.sessionId) {
+    return { kind: "session", id: session.sessionId };
+  }
+  return null;
+}
+
+export function listedVersions(session: ViewSession) {
+  return session.deps.store.listVersions(recencyOwner(session));
+}
+
+export function listedCommentaries(session: ViewSession) {
+  return session.deps.store.listCommentaries(recencyOwner(session));
+}
+
+export function touchRecency(session: ViewSession, workKind: RecencyWorkKind, workId: string): void {
+  const owner = recencyOwner(session);
+  if (!owner) {
+    return;
+  }
+  session.deps.store.touchRecency(owner, workKind, workId);
 }

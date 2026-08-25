@@ -1,4 +1,9 @@
-import type { CommentaryRecord, VersionLicense, VersionRecord } from "./catalog.ts";
+import type { CommentaryRecord, RecencyWorkKind, VersionLicense, VersionRecord } from "./catalog.ts";
+
+export type RecencyOwner = {
+  readonly kind: "user" | "session";
+  readonly id: string;
+};
 
 export type BibleVersion = {
   readonly id: string;
@@ -75,9 +80,10 @@ export type BibleSeed = {
 export interface BibleStore {
   defaultVersionId(): string;
   getVersion(id: string): BibleVersion | undefined;
-  listVersions(): readonly BibleVersion[];
+  listVersions(owner?: RecencyOwner | null): readonly BibleVersion[];
   getActiveVersionId(userId: string): string | null;
   setActiveVersionId(userId: string, versionId: string): void;
+  touchRecency(owner: RecencyOwner, workKind: RecencyWorkKind, workId: string): void;
   listTestaments(versionId: string): readonly string[];
   listBooks(versionId: string, testament: string): readonly BibleBook[];
   getBook(versionId: string, bookIdOrAlias: string): BibleBook | undefined;
@@ -89,7 +95,7 @@ export interface BibleStore {
   isBookmarked(userId: string, ref: CanonRef): boolean;
   listBookmarks(userId: string): readonly BookmarkRecord[];
   toggleBookmark(userId: string, ref: CanonRef): "added" | "removed";
-  listCommentaries(): readonly CommentaryRecord[];
+  listCommentaries(owner?: RecencyOwner | null): readonly CommentaryRecord[];
   getCommentary(id: string): CommentaryRecord | undefined;
   findSection(commentaryId: string, ref: CanonRef): CommentarySection | undefined;
   createSearchQuery(sessionId: string, query: string): string;

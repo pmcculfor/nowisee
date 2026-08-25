@@ -51,7 +51,7 @@ New [`src/apps/bible/catalog.ts`](../src/apps/bible/catalog.ts) plus DB rows. Gr
 - `VersionRecord` — `id`, `label`, `sortOrder`, `license: "public-domain"` (seam for `"licensed"` later; unused now).
 - `CommentaryRecord` — `id`, `label`, `sortOrder`.
 - `RootItem[]` — `{ type: "testament", testament } | { type: "bookmarks" } | { type: "search" } | { type: "versions" }`.
-- `VerseOption[]` — `{ type: "copy" | "bookmark" | "versions" | "commentary" }`.
+- `VerseOption[]` — `{ type: "versions" | "commentary" | "bookmark" | "copy" }`.
 
 **Verse sequences** — one verse renderer, three sibling policies:
 
@@ -89,22 +89,24 @@ flowchart TD
   ch --> verse[Verse]
   bmVerses --> verse
   hits --> verse
-  verse -->|enter| opts[Copy Bookmark Versions Commentary]
+  verse -->|enter| opts[Versions Commentary Bookmark Copy]
   opts --> verList2[Version names]
   verList2 -->|enter action plus app edge| verseNew[Same verse in new version]
   opts --> commList[Commentary names]
-  commList -->|enter| section[Section text]
+  commList -->|enter action| chunks[Section chunks]
 ```
 
-**Root Version:** enter pushes the version list. Enter on a version: `action: true` plus same-app `kind: "app"` edge to `{ appId: "bible", path: "/{versionId}" }` (resets stack, lands on OT). Action writes prefs only when `ctx.userId` is set.
+**Reading tree:** testament → book, book → chapter, and chapter → verse all `replace`. `back` is the catalog parent (`replace`), not `pop`, so a URL-opened verse walks verse → chapter → book → testament → Home the same as a navigated verse. Bookmark/search verses still `pop`. Options still `push`.
 
-**Verse Versions:** same action + `app` edge to `/{versionId}/{book}/{chapter}/{verse}`. Missing verse: clamp to last verse of that chapter.
+**Root Version:** enter pushes the version list (most recently used first). Enter on a version: `action: true` plus same-app `kind: "app"` edge to `{ appId: "bible", path: "/{versionId}" }` (resets stack, lands on OT). Action writes prefs when `ctx.userId` is set, and recency for the signed-in user or the session.
 
-**Search:** enter Search pushes an input. Done: `action` + `passInputText`. Cancel pops to Search heading. Results replace the input. Tokenize non-letters, case-insensitive, **AND of all tokens**, whole words, canon order, cap as `SearchPolicy`. Empty/no hits: a text node.
+**Verse Versions:** enter the option lands on the first pick (same as root Version). Same action + `app` edge to `/{versionId}/{book}/{chapter}/{verse}`. Missing verse: clamp to last verse of that chapter.
+
+**Search:** enter Search pushes an input. Done: `action` + `passInputText`. Cancel pops to Search heading. Results replace the input. Tokenize non-letters, case-insensitive, **AND of all tokens**, whole words, canon order, cap as `SearchPolicy` (`maxHits` 1000). Empty/no hits: a text node.
 
 **Bookmarks:** if `!ctx.userId`, enter Bookmarks (and enter verse-menu Bookmark) → sign-in node; `enter` → Account; `back` pops or Home as appropriate (copy Notes). If signed in: enter Bookmarks → first bookmark or “No bookmarks yet.” Prev/next among bookmarks, no wrap. Verse-menu Bookmark toggles; status “Bookmarked” / “Bookmark removed”; option label “Bookmark” / “Remove bookmark”. Owner = `userId` only. No owner ids in node ids or URLs.
 
-**Commentary:** catalog list of the three works. Enter one → the **most specific** section whose inclusive range covers this verse. Text only. Xrefs flattened into the label.
+**Commentary:** catalog list of works, most recently used first. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific inclusive range covering this verse. Chunks do not wrap; `back` pops. TSK xrefs are stored and flattened into the section label.
 
 ---
 
@@ -116,6 +118,7 @@ Do not keep using per-verse `commentary_notes` + `version_id`. Commentaries are 
 - `verses` `(version_id, book_id, chapter, verse)`
 - `verse_words` inverted index (Node 22 `node:sqlite` has no reliable FTS5)
 - `reader_prefs` `(user_id → active_version_id)` — no session owner
+- `reader_recency` `(owner_kind, owner_id, work_kind, work_id → used_at)` — signed-in user or session; versions and commentaries
 - `bookmarks` `(user_id, book_id, chapter, verse)` unique, **no version**
 - `commentaries`, `commentary_sections` (`start_ord`, `end_ord`, `body`), `commentary_coverage`, `commentary_xrefs`
 - `search_queries` session-scoped id + query string; re-run AND on refresh
@@ -159,6 +162,6 @@ Copy line includes version label. Still `clipboardText` on the action refresh on
 
 ## Tests
 
-[`tests/bible.test.ts`](../tests/bible.test.ts): root includes Version; version action → OT and later verse text; verse-context version switch; signed-out bookmarks → sign-in; signed-in toggle + list; search AND / empty / cap; commentary range shared by verses 1–8; copy includes version; no `navigator.clipboard`. Fake `ctx` with/without `userId`.
+[`tests/bible.test.ts`](../tests/bible.test.ts): root includes Version; version action → OT and later verse text; verse-context version switch; verse Versions lands on the first pick; URL-opened verse `back` is chapter → book → testament; recency reorders versions and commentaries; signed-out bookmarks → sign-in; signed-in toggle + list; search AND / empty / cap 1000; commentary range shared and split into `splitText` chunks; copy includes version; no `navigator.clipboard`. Fake `ctx` with/without `userId`.
 
 Browser: version round-trips, search, bookmarks (out and in), commentary on a ranged passage.
