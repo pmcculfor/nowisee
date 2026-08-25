@@ -2,7 +2,8 @@
  * Download public-domain verse-aligned Bibles (eBible USFM + VPL) and
  * commentaries (HelloAO JSON + TSK plaintext xref + CrossWire SWORD zips).
  * Matthew Henry Song of Solomon is filled from LyteWord markdown (HelloAO omits it).
- * Raw files go in src/apps/bible/data/raw/ (gitignored).
+ * Import texts the importer reads live under src/apps/bible/data/raw/ (committed).
+ * Zips, USFM, and SWORD backups stay gitignored; this script re-fetches those.
  */
 import { createWriteStream } from "node:fs";
 import { execFileSync } from "node:child_process";

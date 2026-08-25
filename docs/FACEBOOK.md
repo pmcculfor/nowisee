@@ -13,7 +13,7 @@
 | User token lifetime | **~60 days** |
 | App Review beyond `email` / `public_profile` | **Required** |
 
-Do not start implementation until a reduced product is chosen (options B, C, D, or E below). If the goal is still “use Facebook the way sighted people use the Facebook app,” stop: Meta does not sell that API.
+This file is research, not a build ticket. A reduced product (options B–E below) would still need a product lock before any graph work. If the goal is “use Facebook the way sighted people use the Facebook app,” Meta does not sell that API.
 
 ---
 
@@ -46,7 +46,7 @@ Pick one before any navigation design. Mixing them in one “Facebook” app wil
 | **E. External bounce** | A Nowisee node that says Facebook only exists on facebook.com. Enter is `kind: "external"`. | None. | Fallback if you will not ship a reduced product. |
 | **F. Instagram or Threads instead** | Professional-account media and comments as that professional account. Still not a personal consumer feed. | Separate APIs, separate review, professional account required. | Do not fold into a Facebook app. |
 
-**Suggested decision.** The closest honest Nowisee apps are **D** (read public Pages) or **C** (operate a Page). **B** is a side archive, not a social feed.
+**Closest honest shapes**, if a Facebook app is ever wanted, are **D** (read public Pages) or **C** (operate a Page). **B** is a side archive, not a social feed.
 
 ---
 
@@ -190,15 +190,15 @@ Sketch of states, independent of exact keys: signed out → connect → (option 
 
 ---
 
-## If you proceed: implementation slices
+## Work a reduced product would still need
 
-Do not write the feed graph until option and review strategy are chosen.
+Product option (B, C, D, or E) and review strategy would have to be chosen first. Graph work before that would be wasted.
 
-| Slice | Deliverable | Depends on |
+| Slice | What it is | Depends on |
 |---|---|---|
-| 0. Product lock | Written choice: B, C, D, or E. Permissions list frozen. | This plan. |
+| 0. Product lock | Written choice: B, C, D, or E. Permissions list frozen. | This research. |
 | 1. Meta app + secrets | Developer app, redirect URIs, privacy policy URL, App ID/Secret in host secrets. Testers on the Roles tab. | Public HTTPS origin for anything beyond localhost testers. |
-| 2. Lockbox + OAuth bounce | **Landed** on the host ([`IDENTITY.md`](IDENTITY.md) §3). Remaining: grant the Facebook app id on `lockboxAppIds` / `oauthAppIds`, register the provider, long-lived token via `finalizeTokens`, reconnect node. | Slice 1. Signed-in Nowisee user. |
+| 2. Lockbox + OAuth bounce | **Landed** on the host ([`IDENTITY.md`](IDENTITY.md) §3). Remaining would be: grant this app id on `lockboxAppIds` / `oauthAppIds`, register the provider, long-lived token via `finalizeTokens`, reconnect node. | Slice 1. Signed-in Nowisee user. |
 | 3. Deauthorize + data deletion | Public POSTs, mapping table, lockbox delete. Required before Live. | Slice 2. |
 | 4. Read path | Graph client on the server, pagination cursors, text flattening for photos/links, signed-out and not-connected nodes, tests with recorded Graph fixtures (no live Facebook in CI). | Slice 2. Graph Explorer for fixture capture. |
 | 5. Write path (C only) | Comment and react as Page on action edges. Stay on the node; refresh may update text in place. | Slice 4 plus `pages_manage_engagement` in Development. |
@@ -208,7 +208,7 @@ Do not write the feed graph until option and review strategy are chosen.
 
 ## Open questions
 
-These block implementation more than navigation details do.
+These decide whether a reduced Facebook app is worth starting, more than navigation details do.
 
 1. **Which product is actually acceptable?** If “friends’ News Feed + comment/react as me” is non-negotiable, the honest outcome is do not build a Facebook app (option E at most). If a reduced product is acceptable, is the user a Page operator (C), a reader of public Pages (D), or someone who wants their own archive (B)?
 

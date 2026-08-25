@@ -1,22 +1,16 @@
-# Nowisee — Gmail app
+# Gmail — Google OAuth and API research
 
-**Status:** v1 **landed** (August 2026). Inbox subjects, body chunks, compose/send, connect/disconnect. No reply/forward. Uses the host lockbox and generic OAuth broker ([`IDENTITY.md`](IDENTITY.md) §3). Product locks: [`SPEC.md`](SPEC.md).
+Product graph and v1 behavior: [`README.md`](README.md). Identity/lockbox: [`docs/IDENTITY.md`](../../../docs/IDENTITY.md) §3.
 
-**v1 graph:** signed-out → Connect Gmail (`kind: "external"`) → inbox subjects (open lands on the first). Up from the first subject is Compose; Up from Compose is Disconnect. Enter a subject to read body chunks (`back` pops). Compose is To → Subject → Body → Sent in place. No teleport to inbox. No Reply/Forward.
-
-Code: [`src/apps/gmail/`](../src/apps/gmail/). Tokens: `ctx.oauth` only (never `gmail.db`, never a `RefreshResult`). Env: `NOWISEE_LOCKBOX_KEY`, `NOWISEE_OAUTH_GMAIL_CLIENT_ID`, `NOWISEE_OAUTH_GMAIL_CLIENT_SECRET`, `NOWISEE_ORIGIN` (OAuth redirect `{origin}/oauth/callback`).
-
-The rest of this file is the feasibility research that led to that slice.
+This file is the feasibility research that led to that slice (console setup, restricted scopes, quota, verification). It is not an implementation ticket.
 
 ---
 
-# Feasibility notes (research)
-
-**Verdict:** Talking to Gmail from Nowisee will work. The product already assumed this: apps run on the server, the browser never calls Google, tokens live in the host lockbox, and signed-out (or unconnected) is an ordinary node — see [`IDENTITY.md`](IDENTITY.md) §2–3 and [`PREPAREDNESS.md`](PREPAREDNESS.md) “Real mail”. Nothing in core needs a Gmail special case.
+**Verdict:** Talking to Gmail from Nowisee works. Apps run on the server, the browser never calls Google, tokens live in the host lockbox, and signed-out (or unconnected) is an ordinary node. Nothing in core needs a Gmail special case.
 
 What is *not* free or automatic is **Google’s OAuth program**: reading mail requires **restricted** scopes, which caps you at 100 test users until you complete verification (and a security assessment if you store mail on the server — which we must, because tokens and message bodies never belong in the page).
 
-This plan consumes the host **lockbox** and **OAuth broker** ([`IDENTITY.md`](IDENTITY.md) §3). Distinguish two secret kinds; they are different slots:
+The slice consumes the host **lockbox** and **OAuth broker**. Distinguish two secret kinds; they are different slots:
 
 | Secret | What it is | Who it belongs to |
 |--------|------------|-------------------|
@@ -52,7 +46,7 @@ There is no Gmail API key that can read someone’s inbox. User mail is **OAuth 
 
 ## 2. Two logins, not one
 
-Nowisee identity and Google identity stay separate ([`IDENTITY.md`](IDENTITY.md) §2). Core still knows nothing about “signed in.”
+Nowisee identity and Google identity stay separate. Core still knows nothing about “signed in.”
 
 ```mermaid
 sequenceDiagram
@@ -81,9 +75,9 @@ sequenceDiagram
   end
 ```
 
-**Required order:** Nowisee session first (`ctx.userId`), then Google connect. The lockbox cannot store a token against `null`. Reuse the existing `signedOut()` helper from [`src/app-kit/signedOut.ts`](../src/app-kit/signedOut.ts) for the Nowisee-signed-out case. The “Connect Gmail” node is a **different** node: enter is `kind: "external"` to Google’s authorize URL, not an `app` edge to Account.
+**Required order:** Nowisee session first (`ctx.userId`), then Google connect. The lockbox cannot store a token against `null`. Reuse the existing `signedOut()` helper from app-kit for the Nowisee-signed-out case. The “Connect Gmail” node is a **different** node: enter is `kind: "external"` to Google’s authorize URL, not an `app` edge to Account.
 
-Navigator already leaves the product on `kind: "external"` ([`src/core/navigator.ts`](../src/core/navigator.ts)). That is the correct way to send someone to Google. Apps still must not build `#/…` URLs.
+Navigator already leaves the product on `kind: "external"`. That is the correct way to send someone to Google. Apps still must not build `#/…` URLs.
 
 ### OAuth callback is the one new host HTTP surface
 
@@ -141,7 +135,7 @@ Gmail restricted scopes are only allowed for certain app types (email client, ba
 
 **Yes.** The Gmail REST API is the right backend. The app (server) calls `https://gmail.googleapis.com/gmail/v1/users/me/...` with a Bearer access token minted from the lockbox refresh token.
 
-Keep **zero runtime npm dependencies** for the HTTP client: use Node `fetch`, not `googleapis`. Parse JSON. This matches the rest of the repo ([`package.json`](../package.json)).
+Keep **zero runtime npm dependencies** for the HTTP client: use Node `fetch`, not `googleapis`. Parse JSON. This matches the rest of the repo (zero runtime npm dependencies).
 
 Suggested first calls:
 
@@ -167,102 +161,26 @@ Suggested first calls:
 
 ## 5. Architecture fit (do not put Gmail in core)
 
-Mirror Notes:
+See [`README.md`](README.md) for where graph, REST, store, and tokens live.
 
-| Piece | Where |
-|-------|--------|
-| `AppModule` id `"gmail"`, label `"Gmail"` | [`src/apps/gmail/`](../src/apps/gmail/) |
-| Graph / wording | `view.ts` — no SQLite import |
-| Gmail REST + MIME parse + token refresh | `gmailClient.ts` (test with a fake fetch) |
-| Cache, oauth state, last `historyId` | `store.ts` + `data/apps/gmail.db` |
-| Tokens | `ctx.lockbox` only |
-| Client id/secret | Host secrets for this app id |
-| Register | [`server/host.ts`](../server/host.ts) `startGmailApp`, [`src/shell/bootstrap.ts`](../src/shell/bootstrap.ts) remote stub |
-| Help catalog | Home already lists whatever is registered |
+**Owner in every Gmail query:** treat Google message ids on the stack as untrusted. Always: this `userId`’s token → `users/me`. Never “fetch message X” without going through the connected account.
 
-**Owner in every Gmail query:** treat Google message ids on the stack as untrusted. Always: this `userId`’s lockbox slot → that user’s token → `users/me`. Never “fetch message X” without going through the connected account. Same rule as Notes ([`IDENTITY.md`](IDENTITY.md) §9).
-
-**Do not** put SMTP in core, a `GmailRepository` in core, or a 401/redirect in the shell.
+**Do not** put SMTP in core, a mail repository in core, or a 401/redirect in the shell.
 
 **1 MiB `/api` cap:** never put a whole HTML MIME blob in `warm`. Subjects + a neighborhood of body chunks only.
 
-**`requestRefresh`:** [`PREPAREDNESS.md`](PREPAREDNESS.md) says implement it before mail so new mail can update the current tip in place. **Option:** ship v1 without it (new mail appears on the next intent / revalidation). **Option:** implement the reserved platform capability first (small core change, generic). Recommend the second before a public mail app; not required to prove Gmail talks.
+**`requestRefresh`:** v1 shipped without it (new mail appears on the next intent). The reserved platform capability is still the right seam before a tip must update with no user action — [`docs/PREPAREDNESS.md`](../../../docs/PREPAREDNESS.md).
 
 ---
 
-## 6. App graph (sketch only — not the design focus)
+## 6. Gotchas that remain true
 
-Same pattern as Notes ([`src/apps/notes/view.ts`](../src/apps/notes/view.ts)): create **above** the list (`prev` from the first item), default tip = first real item.
+- **Connect leaves Nowisee** for Google’s UI. Device-code is an in-product alternative only if Google allows it for this client type.
+- **7-day test tokens / revocation:** `invalid_grant` → Connect node again.
+- **Privacy / logs:** never log `/api` bodies, tokens, or Gmail get payloads.
+- **Account deletion** is still deferred in [`docs/IDENTITY.md`](../../../docs/IDENTITY.md) §13; when it exists, Gmail must revoke + delete cache + lockbox slot.
+- **Bodies:** `splitText` in app-kit; prefer `text/plain`; conservative HTML strip. Do not put whole MIME blobs in `warm`.
+- **Push mail (`users.watch` + Pub/Sub):** needs `requestRefresh`. Not in v1.
+- **Going public:** privacy policy, homepage, demo video, domain verify, restricted-scope review, annual CASA. Testing audience (≤100) stays $0.
 
-```text
-Compose                    (prev from first subject; no further prev)
-  --next-->  Subject 1     (open lands here)
-  --next-->  Subject 2
-  --next-->  …             (last next omitted, or a "More" node that loads the next page)
-
-Subject N
-  --enter-->  Body chunk 1
-               --next--> chunk 2 --> …
-               --enter-->  Reply
-                            --next--> Forward
-               --back-->  pop to subject
-
-Compose --enter--> To (input) --enter--> Subject (input) --enter--> Body (input)
-  --enter action--> "Sending…" then "Sent" in place. No teleport to inbox.
-```
-
-**List unit — option:** Gmail **threads** (conversation subject) vs **messages**. Threads match Gmail’s product; messages match “each email.” Either is fine; threads.list is 10 units vs messages.list 5.
-
-**Pagination — option:** first page only (20–50) vs a terminal “Older mail” sibling that replaces the list. Do not dump thousands of ids into the map.
-
-**Reply/forward — option:** `enter` on *any* body chunk vs only after the last chunk vs `next` after the last chunk. Your sketch (enter in the body → reply/forward) is valid; implement with ordinary nodes + `action: true` on Send.
-
-**Empty inbox:** tip = Compose (like empty Notes).
-
-**Disconnect:** a node after Compose or at the bottom of the list; `action: true` → revoke at Google + lockbox delete → “Gmail disconnected.”
-
-Root list `back` = `app` edge to Home.
-
----
-
-## 7. Text splitting (app-kit, not core)
-
-Bodies must not be one giant node (screen-reader dump + 1 MiB risk).
-
-Add an optional helper, e.g. `src/app-kit/splitText.ts`:
-
-- Split on blank lines (paragraphs); if a piece is still huge, split on sentences / hard cap (e.g. 800–1500 characters).
-- Return `string[]`. The Gmail app owns node ids (`gmail:msg:{id}:p:{i}`) and edges.
-
-MIME: prefer `text/plain` in `multipart/alternative`. If only HTML, a **conservative** tag stripper in the Gmail app (or a later small dep). Do not ship a full browser HTML engine.
-
-**Out of v1:** attachments ([`STORAGE.md`](STORAGE.md) already says bytes do not go through open/refresh), inline images (skip or “image omitted”), HTML formatting.
-
----
-
-## 8. Other things that will bite you
-
-- **Connect is a round trip through Google’s UI.** Screen readers can do it; it is still leaving Nowisee. Device-code is the in-product alternative if Google allows it for this client type.
-- **Revocation / password change / 7-day test tokens:** `invalid_grant` → Connect node again. Do not crash refresh.
-- **HTML vs plain, quoted replies, huge threads:** strip quotes as a later nicety; v1 can show the plain part as-is.
-- **Search, labels, spam, drafts, multiple Google accounts:** lockbox already has **slots** (`personal`, `work`). Defer multi-account until one account works.
-- **Privacy / logs:** never log `/api` bodies or tokens (Account already depends on this). Gmail get responses are user mail — keep them out of logs.
-- **Account deletion** is still deferred in IDENTITY §13; when it exists, Gmail must revoke + delete cache + lockbox slot.
-- **Rate limit / abuse:** a connected user who holds Down could list+get many messages. Cache metadata in `gmail.db` and refresh via `history.list`. Exponential backoff on 429.
-- **Push mail (`users.watch` + Pub/Sub):** extra GCP setup, watches expire in 7 days, needs `requestRefresh`. Skip for v1.
-- **First-party start** is a pack list ([`server/firstPartyApps.ts`](../server/firstPartyApps.ts)). Gmail's row declares lockbox + the Google OAuth provider; the host grants those on the running (non-ephemeral) host.
-- **Docs:** [`MODULES.md`](MODULES.md) §14 still describes a **demo** mail app with fake data. Replace or add a real Gmail section; do not leave two mail stories.
-
----
-
-## 9. Suggested build order
-
-1. **Google Cloud project** in Testing; one test user; client id/secret in host env (`NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`).
-2. **OAuth broker + lockbox** — **landed.** Remaining work is to grant the Gmail app id on `oauthAppIds` / `lockboxAppIds` and register providers. Prove “Connect Gmail” round-trips without listing mail.
-3. **Gmail client** (fetch, token refresh, list metadata, get body, send) with a fake HTTP in tests.
-4. **App graph:** signed-out → connect → inbox subjects → body chunks → compose/reply/send status. Register on host + client stub.
-5. **App-kit `splitText`** + MIME plain-text extract.
-6. **Hardening:** historyId cache, disconnect, `invalid_grant`, empty inbox, 429 backoff.
-7. **Only if going public:** privacy policy, homepage, demo video, domain verify, CASA, publish consent screen.
-
-v1 success is: you (as a test user) connect once, land on the first subject, read a body in chunks, send a reply, without tokens ever appearing in a `RefreshResult`.
+Product graph (what v1 actually shipped): [`README.md`](README.md).

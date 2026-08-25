@@ -1,6 +1,6 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). Home, Bible, Notes, and Account run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). iPhone is in [`PREPAREDNESS.md`](PREPAREDNESS.md), not this file. Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). First-party apps run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). Native clients: [`PREPAREDNESS.md`](PREPAREDNESS.md). Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
 
 **Owner deltas applied in this slice**
 
@@ -15,11 +15,11 @@
 
 **The shell stays on the device.** That is keys, swipes, the one text surface, the navigation map, and the warm cache. Pressing Down can still show the next screen immediately from cache, then the real app answers in the background. That is what the cache was for: delay between the device and the **app**, once the app is not inside the web page.
 
-**Apps run on the server.** “Open this path” and “the user just did this” are answered by server code. The browser does not run Bible (or later Gmail) logic and does not call Google. Secrets never sit in the page.
+**Apps run on the server.** “Open this path” and “the user just did this” are answered by server code. The browser does not run app domain logic and does not call third-party APIs. Secrets never sit in the page.
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**Landed:** Home, Bible, Notes, Gmail, and Account run on the server. Lockbox and the generic OAuth broker are host capabilities (`ctx.lockbox` / `ctx.oauth`). Gmail is the first consumer (`oauthAppIds` / `lockboxAppIds` include `"gmail"` on the running host). Facebook is not built.
+**Landed:** first-party apps run on the server. Lockbox and the generic OAuth broker are host capabilities (`ctx.lockbox` / `ctx.oauth`). The running host grants those to apps that declare them on the pack catalog.
 
 ---
 
@@ -27,14 +27,14 @@ This is not “every keypress waits on the network.” A cache hit is local. A c
 
 These are **not** the same store. That is not a hack; they do different jobs.
 
-| | Nowisee account | App secrets (Gmail, etc.) |
+| | Nowisee account | App secrets (OAuth tokens, etc.) |
 |---|-----------------|---------------------------|
 | Purpose | Prove who is using Nowisee | Remember a token an **app** must use later |
 | When it is needed | **Before** any app runs, on every request | After we already know the user, inside one app |
 | What we store | Email, **one-way password hash**, session cookie | Encrypted tokens we **must be able to give back** |
 | Who sees it | Identity service + the browser cookie (HttpOnly) | That app’s **server** code only, never the page |
 
-You cannot put the Nowisee password in the secret lockbox. Opening the lockbox requires knowing which user it is; the password is how we know. Also a password must be hashed (checkable, not recoverable). Gmail tokens must be decryptable. One box cannot honestly do both.
+You cannot put the Nowisee password in the secret lockbox. Opening the lockbox requires knowing which user it is; the password is how we know. Also a password must be hashed (checkable, not recoverable). OAuth refresh tokens must be decryptable. One box cannot honestly do both.
 
 Neither store belongs to the Account app. Who owns what is §6.
 
@@ -42,23 +42,23 @@ Neither store belongs to the Account app. Who owns what is §6.
 
 ## 3. App secrets (lockbox) — landed
 
-A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`server/lockbox/`](../server/lockbox/). The host grants `ctx.lockbox` only to app ids in `lockboxAppIds` (default empty — Notes, Home, Bible, Help, and Account do not receive it unless listed).
+A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`server/lockbox/`](../server/lockbox/). The host grants `ctx.lockbox` only to app ids in `lockboxAppIds` (default empty).
 
 - An app says: “save this blob under slot `personal`” / “give me slot `personal`.”
-- The service keys it by **this user + this app id + this slot**. One app may have many slots (two Gmail accounts). Our Gmail app and a third-party Gmail app have **different app ids** and cannot read each other’s slots.
+- The service keys it by **this user + this app id + this slot**. One app may have many slots (two connected accounts). Two apps with different ids cannot read each other’s slots, even if they talk to the same provider.
 - Only that app’s **server** code can read the blob. The browser never receives it.
 - Slot names match `[a-z0-9][a-z0-9:_-]{0,63}`. Blobs larger than **8 KiB** are rejected. This is not a file store.
 
-Refresh tokens **are** meant to be stored — on the **server**, encrypted, never in the page. OAuth 2 warns against keeping them in browser JavaScript, not against a backend remembering them so the user is not sent through Google every hour.
+Refresh tokens **are** meant to be stored — on the **server**, encrypted, never in the page. OAuth 2 warns against keeping them in browser JavaScript, not against a backend remembering them so the user is not sent through the provider every hour.
 
-Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If `lockboxAppIds` or `oauthAppIds` is non-empty and there is no keyring, the host throws at startup. Tests are ephemeral and leave those lists empty unless a test passes them. The running host collects Gmail from the pack catalog when the process is not ephemeral.
+Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If `lockboxAppIds` or `oauthAppIds` is non-empty and there is no keyring, the host throws at startup. Tests are ephemeral and leave those lists empty unless a test passes them. The running host grants lockbox/OAuth to apps that declare them on the pack catalog.
 
 ### Normative
 
 | Rule | Why |
 |------|-----|
 | AES-256-GCM (or another AEAD), fresh random nonce per write | Detects tampering, not just hides content |
-| `(userId, appId, slot)` passed as the AEAD **associated data** | A blob copied to another row in the database fails to decrypt. Without this, database write access lets an attacker move someone else’s Gmail token onto their own account |
+| `(userId, appId, slot)` passed as the AEAD **associated data** | A blob copied to another row in the database fails to decrypt. Without this, database write access lets an attacker move someone else’s token onto their own account |
 | Every row stores a `keyId` | Master-key rotation later is a background re-encrypt, not a migration |
 | `appId` is the **host’s** notion of which app is calling | Never a value taken from the request body |
 | Blobs never appear in a `RefreshResult` | The lockbox is server-to-server; the page must not receive plaintext or ciphertext |
@@ -72,7 +72,7 @@ Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). Th
 | Surface | Job |
 |---------|-----|
 | `GET /oauth/callback` | IdP redirect. Dispatch by `state`, not by app id in the path. Cookie + hashed state is CSRF for this GET — do **not** run the JSON Origin check. |
-| `POST /oauth/:appId/events` | Reserved for cookie-less provider webhooks (Facebook deauthorize). No Facebook handler ships yet. |
+| `POST /oauth/:appId/events` | Reserved for cookie-less provider webhooks (deauthorize, data deletion). No first-party handler ships yet. |
 
 Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when `oauthAppIds` is non-empty. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less callback does **not** mint a session.
 
@@ -85,13 +85,13 @@ Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `conf
 
 `getAccessToken` refreshes under a mutex per `(userId, appId, slot)`. `invalid_grant` deletes the lockbox slot and throws `needs-reconnect`. `disconnect` best-effort revokes then deletes the slot.
 
-Gmail consumes this surface (`ctx.oauth`). Facebook is still not built.
+First-party mail is the first consumer (`ctx.oauth`).
 
 ---
 
 ## 4. Data and hosting
 
-- **Bible slice (landed):** no login on the host. KJV is seeded into Bible's own SQLite (`data/apps/bible.db`) from JSON next to the Bible app. The host does not import that file.
+- **App corpora (landed):** each app seeds its own SQLite file. The host does not import those files. Example: Bible — [`src/apps/bible/README.md`](../src/apps/bible/README.md).
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
 - **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`002_lockbox.sql`](../server/db/migrations/002_lockbox.sql)).
 - Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy.
@@ -103,12 +103,12 @@ Gmail consumes this surface (`ctx.oauth`). Facebook is still not built.
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
 1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
-2. **Database.** `server/db/` — host identity (`001_identity.sql`) plus lockbox / OAuth state (`002_lockbox.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Account, Bible, and Notes open their own files.
+2. **Database.** `server/db/` — host identity (`001_identity.sql`) plus lockbox / OAuth state (`002_lockbox.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Each app opens its own file.
 3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
 
-The lockbox and OAuth broker (§3) have landed. Gmail consumes them. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md).
+The lockbox and OAuth broker (§3) have landed. iPhone waits; see [`PREPAREDNESS.md`](PREPAREDNESS.md).
 
 ---
 
@@ -139,12 +139,12 @@ It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-laye
 
 Two reasons it cannot live inside the Account app:
 
-1. **It runs before any app does, on every request.** The host must produce `ctx.userId` before it can call Bible, Notes, or Home. If resolution lived in the Account app, Bible would depend on the Account app being registered and healthy, and the host would be calling one app in order to serve another.
+1. **It runs before any app does, on every request.** The host must produce `ctx.userId` before it can call any app. If resolution lived in the Account app, every other app would depend on Account being registered and healthy, and the host would be calling one app in order to serve another.
 2. **`AppModule` has exactly two methods**, and session resolution is neither. Bolting a second interface onto one app would make "the Account app" two things sharing a folder — the same shared ownership, just relocated.
 
 ### The Account app is still not special
 
-This is the shape a domain store already established: the app owns the graph and the wording, a store the **app** opens owns persistence. Notes owns `NotesStore` (not `localStorage`, not the host `Db`). Bible owns `BibleStore` and its SQLite file. Home does not own the registry. Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
+This is the shape a domain store already established: the app owns the graph and the wording; a store the **app** opens owns persistence. Home does not own the registry. Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
 
 The only asymmetry is a host config list naming which app ids receive `ctx.identity`. That is data, it belongs to the host, and it generalizes: the same mechanism governs the lockbox (§3) and, later, per-capability permissions for third-party apps. Building it now for one app brings a planned mechanism forward instead of carving out a special case.
 
@@ -239,23 +239,15 @@ The concurrency cap is not optional bookkeeping: at 128 MiB and ~250 ms each, a 
 
 **Registration is open by default.** Owner decision, August 2026: this product is not advertised, so anyone who finds it may register. There is no invite code. `allowRegistration` on the host (default `true`) can close it later without a schema change; closed registration returns `registration-closed`. Rate limiting and email verification remain deferred (§13).
 
-### Approved delta to a locked behavior: secret input mode
+### Secret input mode — landed
 
-Owner-approved, August 2026. `Display.showInput` currently renders one visible `<textarea>` with `autocomplete="off"`. For password entry that means the password is on screen in cleartext, and password managers — a real accessibility win for this audience — are actively blocked from filling it.
-
-The change is a `secret` flag on the input node that makes Display render `type="password"` and set honest `autocomplete` tokens (`username`, `current-password`, `new-password`). Notes for whoever implements it:
-
-- A boolean flag on the existing input kind, **not** a new `NodeKind`. A new kind would collide with the unresolved "what does core do with an unrecognized node kind" question in [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §11.
-- This edits the Display contract in [`ARCHITECTURE.md`](ARCHITECTURE.md) and the input rows in [`../AGENTS.md`](../AGENTS.md). Update both in the same change; do not let the code diverge from the lock quietly.
-- Input **leave** does not change: Done → `enter`, Cancel → `back`, no Escape exit.
+`secret` on `kind: "input"` makes Display render `type="password"` and honest `autocomplete` tokens (`username`, `current-password`, `new-password`). It is a flag on the existing kind, **not** a new `NodeKind` (unknown kinds stay undefined until response validation — [`PREPAREDNESS.md`](PREPAREDNESS.md)). Input **leave** is unchanged: Done → `enter`, Cancel → `back`, no Escape exit.
 
 ---
 
 ## 9. Where the verified user id enters an app
 
-Today `server/host.ts` calls `app.open(path, toRefreshExtras(extras))`, and `RefreshExtras` is filled in by the **client**. There is no channel for "the server knows who this is," so this decision must be made before any user-owned data exists.
-
-**Agreed:** the host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). `ctx` never crosses to the browser.
+The host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). `RefreshExtras` still comes from the client (`inputText`, `action`). `ctx` never crosses to the browser.
 
 | Rule | Note |
 |------|------|
@@ -307,7 +299,7 @@ The app RPC therefore does not use `401` at all. The host resolves an absent or 
 
 **The signed-out node.** Text explaining the situation, `enter` → `app` edge to `ctx.accountAppId`, `back` → `app` edge to the root app. This is boilerplate every user-scoped app repeats, so it belongs in **app-kit** as a helper (`signedOut({ accountAppId, rootAppId, text })` returning a complete `RefreshResult`) — optional, imported by apps, never called by Navigator.
 
-An app may also carry a return address in the account app's path (`{ appId: "account", path: "/sign-in/from/mail" }`) so that finishing sign-in can offer a way back. That is app-owned path shape, and it is not a teleport: the user navigates each step deliberately.
+An app may also carry a return address in the account app's path so that finishing sign-in can offer a way back. That is app-owned path shape, and it is not a teleport: the user navigates each step deliberately.
 
 **Expired mid-session** needs no separate mechanism. The next refresh simply arrives with `userId: null` and a stack of nodes the app can no longer authorize; the app returns the signed-out node as the tip. That is the existing "repair, not teleport" rule (`AppModule` MUST #8), not a new one.
 
@@ -378,32 +370,14 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
 
 ### 11.4 The sign-in flow on screen — landed
 
-**Owner decision, August 2026.** Sign-in reuses the action-edge status pattern exactly as Copy does. Combined register / sign-in (one option, not two):
+**Owner decision, August 2026.** Combined register / sign-in; screens: [`src/apps/account/README.md`](../src/apps/account/README.md).
 
-```text
-"Sign in or register"
-    --enter-->  "Please enter your email on the next screen."
-                    --enter-->  email input (autocomplete=username)
-                                    --enter (action, passInputText)-->  "Please enter your password on the next screen."
-                                                                          --enter-->  password input (secret)
-                                                                                          --enter (action, passInputText)-->  "Signing in…"
-                                                                                                                                │
-                                                                                                                                └── success → "You are signed in as …"  (enter/back → Home)
-                                                                                                                                └── failure → "Sign-in was unsuccessful."  (enter/back → pop to the password input)
-```
+Identity-relevant rules (the Account app implements them; they are not Account-only accidents):
 
-Typed email is stored against `ctx.sessionId` in Account's `account_flow` table (never in a node id, label, or URL). Authenticate tries `register`, then `signIn` on `email-taken`. Failed auth, including a password that is too short to register, is one unsuccessful message — the Account app does not teach password rules on this screen. Failure `pop`s so the stack still has a single password input.
-
-Signed-in Account at `/`:
-
-```text
-Settings (dead-end placeholder)  --next-->  Sign out  --enter (action)-->  "Signing out…"
-                                                                              └── "You are signed out."  (enter/back → Home)
-```
-
-Status nodes return `location: null`. Sign-out is an action to a status node whose enter/back are `app` edges to Home, which clears the client cache.
-
-The password arrives in `extras.inputText` on that action call. The host never logs `/api` request bodies.
+- Typed email is stored against `ctx.sessionId` in that app’s flow table (never in a node id, label, or URL).
+- Authenticate tries `register`, then `signIn` on `email-taken`. Failed auth is one unsuccessful message. Failure `pop`s so the stack still has a single password input.
+- Status nodes return `location: null`. Sign-out is an action to a status node whose enter/back are `app` edges to Home, which clears the client cache.
+- The password arrives in `extras.inputText` on that action call. The host never logs `/api` request bodies.
 
 ---
 
@@ -417,7 +391,7 @@ The password arrives in `extras.inputText` on that action call. The host never l
 | Pragmas | `foreign_keys = ON`, a `busy_timeout` |
 | Schema changes | A numbered migration runner per database — a `migrations` table plus ordered files, applied in a transaction when *that* file is opened. Not scattered `CREATE TABLE IF NOT EXISTS` |
 | Backups | Required before real user data. "A file on one machine with a disk" is also a file you can lose |
-| Ownership | `users` and `sessions` belong to the **identity service** (§6) on the **host** file. `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core `NotesRepository`, same rule as always. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
+| Ownership | `users` and `sessions` belong to the **identity service** (§6) on the **host** file. `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core per-app repository. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
 
 ---
 
@@ -434,15 +408,15 @@ Recorded so these are decisions rather than oversights. None of them change the 
 | **Password reset** | No reset flow means "contact the owner" for a small user base | It needs an email sender, which is a new dependency and a new cost. Budget it before sign-up is public |
 | **Email verification** | Same dependency as reset | Public sign-up, or anything that mails the user |
 | **Account deletion and data export** | Notes exist but the user base is still private | Real users in a real jurisdiction |
-| **Server-held stacks** | Explored and set aside; see [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §13 | Untrusted third-party apps, or cross-device continuity |
+| **Server-held stacks** | Set aside: rapid keys stay local because of the client map + warm cache ([`PREPAREDNESS.md`](PREPAREDNESS.md)) | Untrusted third-party apps, or cross-device continuity |
 
 ---
 
-## 14. History: the first server slice (Bible)
+## 14. History: the first server slice
 
 Landed. Kept for context.
 
 - Generic client stub: `open` / `refresh` POST to `/api/apps/:appId/…` with plain JSON (stack, path, `inputText`, `action`). Abort cancels the fetch.
 - Apps return `clipboardText` when Copy should happen. Core writes the device clipboard. No fake clipboard on the server.
-- Client registers only generic remote stubs (`home`, `bible`, `notes`, `account`).
-- Browser bootstrap does not bundle Bible corpora. The Bible app imports them on the server. The same Bible and Home modules are unit-tested in-process (that is not a second product path).
+- Client registers only generic remote stubs.
+- Browser bootstrap does not bundle app corpora. Each app imports its data on the server. The same modules are unit-tested in-process (that is not a second product path).

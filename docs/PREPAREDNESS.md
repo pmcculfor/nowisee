@@ -1,79 +1,70 @@
-# Nowisee — long-term preparedness
+# Nowisee — preparedness
 
-**Reviewed:** August 2026. Specs: [`SPEC.md`](SPEC.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), [`MODULES.md`](MODULES.md), [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md), [`STORAGE.md`](STORAGE.md). Code: `src/` as of that date. Identity, sessions, host SQLite, and the Account app are specified and **landed** in [`IDENTITY.md`](IDENTITY.md). App-owned databases are specified in [`STORAGE.md`](STORAGE.md). The secret lockbox and generic OAuth broker **landed** (August 2026). Gmail consumes them; Facebook does not.
+This file explains why the architecture looks the way it does, how it is meant to scale, and what is still deferred. Product locks live in [`SPEC.md`](SPEC.md). Layering rules live in [`../AGENTS.md`](../AGENTS.md).
 
-**Question asked:** how ready is Nowisee to grow into a product with a database, signed-in users, more apps (including ones we did not write), monetization, and thin native clients?
-
-**Verdict:** the expensive architectural bets are already right — portable `AppModule`s, intents instead of keystrokes, a data-only `open` / `refresh` boundary, app-owned stores (Notes keyed by `userId`), and no product names in core. Those are the decisions that would force a rewrite later. Adding a database, app number fifty, or a phone swipe layer does **not** require a new architecture. Signed-in users are in place (identity service + Account app). Live social/AI and a native UI remain small named additions on seams already reserved, not a redesign.
+Until the product is no longer in development, there is **no compatibility tax**: do not add code whose only job is keeping old clients or existing stored data working.
 
 ---
 
-## How to read the tables
+## Why this shape
 
-**When** is about rewrite risk, not whether the feature is desirable.
+The expensive bets are already in place. They exist so that app number fifty, a phone swipe layer, or a worker/iframe host do not force a rewrite of the shell.
 
-- **Wait** — additive later; doing it now is extra work, not protection.
-- **Before a named milestone** — waiting until *after* that milestone (iPhone, real mail, Facebook, synced Notes) is what creates rework.
-- **Ready now / keep the discipline** — the path already exists; do not undo it.
+- **Apps answer `open` / `refresh`.** Core never computes the next node id. A new app is a module plus a pack row.
+- **Intents, not keystrokes, in app data.** Remapping, right-to-left locales, VoiceOver pads, and a native gesture layer are all one binding table in core.
+- **Message-shaped boundary.** Stack, map, and payloads are plain data. That is what makes a later sandbox — a worker, an iframe, or a server — the same protocol over a different transport. It is a discipline today, not isolation yet.
+- **Per-app stack; Home is an app.** Histories do not mix products. Core identifies Home only as `config.rootAppId`.
+- **App-owned stores; host-owned identity.** Core has no database. `ctx.userId` comes from the session cookie. Secrets such as OAuth tokens sit in the host lockbox, not in an app file and not in a `RefreshResult`.
 
-Until the product is no longer in development, there is **no compatibility tax**: do not add code to keep old clients or existing stored data working. The binding rule lives in [`../AGENTS.md`](../AGENTS.md) (quality bar, **long-horizon design**, anti-patterns, lock table).
+Rapid keys stay local because of the navigation map plus the warm cache. Do not move Navigator or first-party apps onto the server just to add a feature that the cache already covers.
 
----
-
-## Preparedness by aspect
-
-| Aspect | Current state | Scaled long-term | Getting there | When |
-|--------|---------------|------------------|---------------|------|
-| **Database** | Host SQLite for `users` / `sessions`. Account, Bible, and Notes each open `data/apps/*.db`. Notes rows are keyed by `owner_id` (`ctx.userId`). Bible verses are keyed by version. No `platform.storage`, no `ctx.db`. | Core still has no database. Each app owns its file or remote store. Host identity may later swap to Postgres; that does not rewrite apps. | Keep `owner_id` in every user-data query. Never add a core `BibleRepository` or `NotesRepository`. | **Keep the discipline.** Spec in [`STORAGE.md`](STORAGE.md). |
-| **User logins** | Identity service + Account app landed. Lockbox and generic OAuth broker landed. Gmail is granted `ctx.oauth` on the running host (tests leave grant lists empty). Notes and Gmail list/write only when `userId` is set. | Identity lives on the **server host**, not as a client capability. Each app decides what signed-out means — Bible still reads; Notes and Gmail explain and offer a way in. | Facebook/X still to consume the vault. **No `platform.identity` on the client.** | **Facebook app next if wanted.** Spec in [`IDENTITY.md`](IDENTITY.md) §3. |
-| **Saved user data** | Account flow is session-scoped in Account's db. Notes are user-scoped in Notes' db (`owner_id` = `ctx.userId`, never session id). | User-scoped records in that app's database. Credentials in the lockbox, not in a Notes-like JSON blob. | `ownerId` in every query ([`IDENTITY.md`](IDENTITY.md) §9). Export/deletion deferred. Do not start new apps on raw `localStorage`. | **Keep the discipline.** |
-| **Hosting and traffic** | Vite SPA plus same-origin `/api` in dev. `npm start` serves `dist/` and `/api`. Home, Bible, Notes, and Account run on the Node host. SQLite file on disk. Vite base `/`. KJV is not in the client bundle. | Keep the shell static (or same-site with the API). Add a small API plus one database only when user data exists. Public corpora on CDN and lazy-loaded. Traffic stays cheap until social or AI (API rate limits, LLM cost). | No host migration needed to scale the Bible. Stand up a public Node (or equivalent) host that serves the site and `/api` together. History API paths, if wanted, touch Router only. **Login wants same-site cookies** — a real domain (SPA + API on one site) is the production auth host. | **A static-only host cannot run this slice.** Public deploy is a Node host, not GitHub Pages. |
-| **First-party apps** | Home, Help, Bible, Notes, Gmail, Account. Registry is compile-time `register()`. Home lists descriptors via `ctx.directory`, not the registry object. Help is first in the catalog. App-kit helpers exist. Core has no product names. The host walks [`FIRST_PARTY_APPS`](../server/firstPartyApps.ts). | New app = folder + `AppModule` + one catalog/start row (later: lazy import and per-user enabled flags). Facebook, X, and AI chat are graphs of text/input nodes. Home stays an ordinary app. | Almost no core work. Domain, URLs, and warm policy stay in the app. Lazy-load large apps so a game or social client does not ship KJV. | **Ready now.** Adding apps you write is a catalog row. |
-| **Third-party apps** | Message-shaped `open`/`refresh`, in-process. No sandbox, no `apiVersion`, no response caps, no runtime loading, no App Store. Discipline, not isolation. | Each untrusted app in a worker, iframe, or server. Versioned contract, warm/map caps, per-capability permissions, catalog and review. Same `open`/`refresh` messages over a different transport. | Keep returning plain JSON from every app. Then add validation at the single Navigator `apply()` choke point, `apiVersion`, a sandbox host, and store UI. Do not hand apps the DOM, registry, or live objects. | **Wait until you want outsiders.** Sandbox is additive if the data-only rule holds. |
-| **Live data and push** | The screen changes only when the user fires an intent. `requestRefresh` is typed and not provided. `AbortSignal` already cancels superseded reads. Action calls are never aborted. | Apps call `platform.requestRefresh()` when mail, social, or a chat reply has new text for the current tip. Label updates in place; no teleport. Streaming AI is in-place label refresh or chunked nodes, not a new core workflow. | Implement the reserved capability in Navigator as a read-only refresh of the current tip. Decide AI streaming without a new `NodeKind` if possible. Do not let apps `setInterval` or touch the DOM to fake push. | **Before mail, social, or AI.** If those apps poll internally, that polling becomes the rework. |
-| **Monetization** | Accounts exist; no payments or ad surface. Display is one text blob or one input (locked). | Subscription (sync, extra apps, AI quota) via an Account app and Stripe. Optional later cut of a third-party store. Sponsorships need no architecture. Display ads fight the product: they need chrome core must not grow, and impression ads for people who cannot see them are hostile and likely invalid traffic for ad networks. | Auth first, then Account + Stripe. Freemium at the app layer (Bible free, sync paid). Do not add an ad region, banner slot, or second competing surface to Display. | **Wait.** Do not leave an ad hole in core. Payments need auth anyway. |
-| **Maintenance** | Small vanilla TS shell, strict `tsc`, Vitest. CI runs tests and the build on Node 22; there is no deploy step yet. Specs are strong and partly duplicate `types.ts`. Busy, dead-end, and failure are all silent to the user. No backend to operate. | Keep core small and generic. Apps proliferate. Status channel so silence is not three meanings. Telemetry at Navigator. Contract version when apps ship on a different cadence. Operate a small API when it exists. | Status channel is Display + Navigator, additive. Telemetry is one hook at `apply()`. Do not add a UI framework. Treat `ARCHITECTURE.md` and `types.ts` as one contract. | **Status channel sooner; rest wait.** Silence is a product bug for this audience, not an architecture rewrite. |
-| **iPhone thin client** | Intents already exist. Keyboard and VoiceOver edge pads are two input hosts. Navigator imports the DOM `Display` class (`showText`, `showInput`, `getInputText`). Apps run in-page. No JS bridge, no native gesture layer. | Native maps swipe and direct-touch to `prev`/`next`/`enter`/`back`. Near term: native chrome + hidden WKWebView running this core, bridge to `onIntent`, native text/input (VoiceOver bypassed for navigation). Scaled: the same messages over a session API so apps can run on a server. | Extract a Display port so Navigator is headless (three methods today). Native Done/Cancel fire `enter`/`back`. Implement platform clipboard on iOS. Identity needs no iOS work beyond letting the WKWebView keep the session cookie — do not build a second login path. Do not port apps to Swift. Do not teach apps about swipes. | **Display port before iOS starts.** Small now; stickier after more Display calls. Gesture UI is new native work, not a core rewrite. Session API only if you outgrow WebView. |
-| **Android** | None. TalkBack users would use the website. NavPads were built for VoiceOver, not TalkBack as a first-class host. | Second host of the same intent protocol and Display port. Direct-touch vs TalkBack is an Android input module. Apps unchanged. | Reuse the iPhone bridge. Do not fork `AppModule`s per OS. | **After the iPhone path.** Not harder later. |
+Production is a Node host that serves the site and `/api` together (`npm start`). A static-only host cannot run this product. Login wants same-site cookies, so the SPA and the API stay on one origin.
 
 ---
 
-## Planned and hypothetical apps
+## How it scales
 
-| App | Fit with the shell | What would actually block it | When |
-|-----|--------------------|------------------------------|------|
-| **Notes** (shipped) | List / create / edit as text and input nodes. Store injected. Graph does not need to change for a remote DB. | Multi-device sync and owner enforcement. Delete is missing on the store. No conflict policy yet. | Sync with auth. Local Notes can stay as they are. |
-| **Real mail** | Gmail app: inbox subjects, body chunks, compose/send. New mail appears on the next intent. | `requestRefresh`, restricted-scope verification for a public launch. Do not put SMTP in core. | `requestRefresh` before live-updating the current tip. The Gmail graph has landed. |
-| **Facebook / X** | Feed as a sibling list, post as enter, comments as children. Images become text descriptions or skipped. | App graph + `requestRefresh`. Lockbox and generic callback already exist. Meta and X platform rules are the real risk: unofficial clients get shut off; official APIs are restricted or paid. That is product/legal, not a shell gap. | After live refresh. Do not prototype these as client-only `fetch` + `localStorage`. |
-| **AI chat** | Prompt as an input node, history as a list, “Thinking…” then the reply updating in place. Fits the no-teleport rule. | API keys and cost (subscription maps well). Streaming: prefer in-place label updates via `requestRefresh`. Do not let the app write the DOM. | After `requestRefresh`. Quota/billing wait for payments. The graph can be sketched anytime. |
-| **Games** | Text adventures, quizzes, and turn-based games are ordinary `AppModule`s. Visual or real-time action games are not a one-text-surface product. | Do not add sprites, canvas, or a game loop to core. A visual game should be `kind: "external"` or a different product. Third-party games need the sandbox path. | Text games anytime. Do not extend `NodeKind` for graphics. |
+| Growth | What changes | What must not change |
+|--------|----------------|----------------------|
+| More first-party apps | A folder, an `AppModule`, a pack row, and a remote stub. Home lists `ctx.directory`. | No product names in core. The host does not open that app’s database. |
+| Larger corpora | They stay on the server; the app seeds its own file. The client bundle stays a shell. | No corpus in `src/core/` or in the browser graph. |
+| Hosted identity at volume | The identity service could swap SQLite for another engine behind `server/db`. | Apps still see `ctx.userId`, never `ctx.db`. |
+| Native client (iPhone) | Map swipe and direct-touch to the same four intents. Extract a three-method Display port (`showText` / `showInput` / `getInputText`) so Navigator can run headless. Keep the session cookie in the WebView. | Do not port apps to Swift. Do not teach apps about swipes. Do not build a second login path. |
+| Live updates | Implement reserved `platform.requestRefresh()` as a read-only refresh of the current tip. The label updates in place; there is no teleport. | Apps must not `setInterval` or touch the DOM to fake push. |
+| Third-party apps | Same `open` / `refresh` messages. Then validate at Navigator `apply()`, add `apiVersion`, cap warm/map size, and run a sandbox host with catalog/review. | Do not hand apps the DOM, the registry, or live objects. Do not grow core branches per outsider feature. |
+| Payments | The Account app plus an external processor. Freemium stays at the app layer. | No ad region or second competing surface on Display. |
 
----
-
-## What to schedule (from the review)
-
-**Do before the next milestone**
-
-- If iPhone is soon: extract a three-method Display port from Navigator so a native surface can replace the DOM without forking the shell.
-- Before Facebook, X, or synced Notes: implement `requestRefresh`. Gmail v1 ships without it (new mail on the next intent).
-- Keep the discipline that makes later sandbox possible: apps return plain data and never touch `localStorage`, clipboard, or the DOM.
-
-**Safe to postpone**
-
-- An App Store, contract versioning, response validation, Android, Stripe, and any ad system.
-- A status channel (busy vs dead-end vs failure) is not a rewrite, but it is the deferred item not to keep postponing for users who cannot see a spinner.
-
-**Runtime (specified in [`IDENTITY.md`](IDENTITY.md))**
-
-- Do **not** move Navigator or first-party `AppModule`s onto the server in order to add login. Rapid keys stay local because of the navigation map + warm cache.
-- Production is a Node host that serves the site and `/api` together (`npm start`). A static-only host cannot run this slice.
+Keep `owner_id` (from `ctx.userId`) in every user-data query. Keep returning JSON that would survive `structuredClone`.
 
 ---
 
-## Owner follow-ups (not yet scheduled)
+## Still deferred
 
-Wanted eventually. Not a rewrite; recorded so it is not treated as an accident of the current host.
+These items are additive. The cost of waiting is recorded so they are not treated as accidents later.
 
-| Item | Current | Wanted | Constraint |
-|------|---------|--------|------------|
-| **Generic host start** | Landed. `createNowiseeHost` walks [`FIRST_PARTY_APPS`](../server/firstPartyApps.ts); `close()` walks started apps. Pack rows declare `ctx` grants (`directory`, `identity`, `lockbox`, `oauth`). | Adding an app is a catalog row. | Each app still owns its own start — opens its own file, seeds, receives granted capabilities. The host must not grow a `switch (appId)` or open app databases itself. |
+### Status channel (busy / dead-end / failure)
+
+A dead-end key is a silent no-op (locked). A warm miss blocks with no placeholder. A refresh failure keeps the last text and clears busy.
+
+For this audience those three states are identical: the user presses a key and nothing is spoken. They cannot tell “nothing that way” from “still working” from “it failed.” The predictable coping behavior is to mash the key, which is the worst input pattern for in-flight transitions.
+
+**When taken up:** add a second, screen-reader-only announcement channel in Display, distinct from the focused content surface. It is an announcement, not a competing interactive region. Pending work after a short delay can speak a polite “working”; failure can speak a generic core announcement; a dead end can use a distinguishable cue (or silence as a setting). Content announcement stays focus-only. Until this lands, apps **MUST** resolve action calls with a status node rather than reject — a rejection strands the user on the working label.
+
+### Deep-link ancestry
+
+URL `open` resets the stack (locked), so a shared link starts with one entry. Reaching a node by navigating leaves parents on the stack, and `back` returns to the parent. Reaching the same node from a link makes `back` exit to Home. Apps can inspect stack length in `refresh` and author `back` accordingly; that is boilerplate, and the key’s meaning still depends on how the user arrived.
+
+**When taken up:** allow optional ancestry on `open` only (`RefreshResult.stack`). Core validates that the last entry matches `node.id` and ignores the field on `refresh`. This is rehydration at entry, not a teleport. The correct parent is not always obvious — inventing one is worse than having none — which is why this stayed deferred.
+
+### Other reserved work
+
+| Item | Notes |
+|------|--------|
+| `requestRefresh` | Typed, not provided. Implement it before a tip must update without a user intent (for example, new mail on the current subject). |
+| Display port | Three methods. Extract them before a native iOS surface. The seam gets stickier after more Display calls. |
+| Response validation / `apiVersion` / unknown values | Typed, not provided. The single choke point is Navigator `apply()`. Wait until apps you did not write exist. Intended later: unknown edge kind → missing edge; unknown node kind → render as text; unknown intent → never matched. |
+| Browser Back/Forward vs session stack | Hashchange → `openLocation` is enough for now. |
+| Identity rate limits, password reset, email verify, export/deletion | See [`IDENTITY.md`](IDENTITY.md) §13. |
+| Monetization | Wait. Do not leave an ad hole in core. |
+
+Screen-reader browse mode (arrows never reaching the page) was an existential risk. It is **settled** in the product: `role="application"` on text tips, Cancel/Done on input, and VoiceOver edge pads. Evidence is in [`spikes/README.md`](../spikes/README.md).

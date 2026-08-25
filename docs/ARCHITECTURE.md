@@ -1,211 +1,86 @@
-# Nowisee — architecture contracts
+# Nowisee — architecture
 
-Precise interfaces for the MVP and beyond. Behavior locks: [`SPEC.md`](SPEC.md). Module responsibilities: [`MODULES.md`](MODULES.md). Persistence: [`STORAGE.md`](STORAGE.md). Review history and open items: [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md). Do not put product names in core types.
+This file covers contracts, packaging, and the stack. Product locks are in [`SPEC.md`](SPEC.md). Core behavior is in [`MODULES.md`](MODULES.md). Persistence is [`STORAGE.md`](STORAGE.md). Identity is [`IDENTITY.md`](IDENTITY.md). Do not put product names in core types.
+
+**Canonical TypeScript** is [`src/core/types.ts`](../src/core/types.ts). This file explains those contracts in words; do not treat a pasted snippet here as newer than the source.
 
 ---
 
-## Types (`src/core/types.ts`)
+## Stack
 
-```ts
-/**
- * Navigation intents. Apps author edges keyed by intent, never by keystroke.
- * Core's Keyboard module owns the physical binding table (MODULES §9), so input
- * devices, remapping, touch gestures, and RTL never reach app data.
- */
-export type NavIntent =
-  | "prev"   // previous sibling
-  | "next"   // next sibling
-  | "enter"  // descend / follow / commit from an input node
-  | "back"   // ascend / return / abandon from an input node
-  | (string & {}); // apps may define extra symbolic intents; delivered only if bound
+| Choice | Decision | Why |
+|--------|----------|-----|
+| Client | Vanilla TypeScript + Vite | One text/input surface; no UI framework |
+| App host | TypeScript on Node, small `/api` router (no Express) | Same language and `RefreshResult` types as the apps |
+| Where apps run | First-party `open` / `refresh` on the server | Proof of the intended split; large corpora stay off the client bundle |
+| Client apps | Generic `createRemoteApp` stubs | Not a second copy of each app |
+| Database | SQLite via `node:sqlite` (`server/sqlite.ts`) | Host identity in `data/nowisee.db`; each app opens `data/apps/*.db`. `:memory:` in tests |
+| URL style | Hash routes behind `AppLocation` | Switching to History API later touches Router only |
+| Copy | `clipboardText` on the result; Navigator writes | Apps must not think they own the clipboard |
+| Identity | Host-layer service + Account app | See [`IDENTITY.md`](IDENTITY.md) |
 
-export type StackBehavior = "push" | "replace" | "pop";
+### Layout
 
-export type NodeKind = "text" | "input";
-
-/** HTML autocomplete tokens Display may set on an input node. */
-export type InputAutocomplete = "off" | "username" | "current-password" | "new-password";
-
-/** Plain data — anything that survives being sent as a message. */
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
-
-/** Opaque to core beyond id, label, kind. Apps may stash private fields in data. */
-export interface NodePayload {
-  id: string;
-  label: string;
-  kind?: NodeKind; // default "text"
-  /** When kind is "input": mask typed characters (`<input type="password">`). */
-  secret?: boolean;
-  /** When kind is "input": HTML autocomplete token. Default "off". */
-  autocomplete?: InputAutocomplete;
-  /** App-private optional data; core ignores it but requires it to be plain data. */
-  data?: JsonValue;
-}
-
-/**
- * An address inside Nowisee. Core owns how this becomes a browser URL
- * (Router.hrefFor); apps never build `#/...` strings.
- */
-export interface AppLocation {
-  readonly appId: string;
-  /** App-owned remainder, normalized to start with "/" (e.g. "/kjv/Matthew/5/8"). */
-  readonly path: string;
-}
-
-export type NavEdge =
-  | {
-      kind: "node";
-      /** Required for push/replace. Omit when stackBehavior is "pop". */
-      toNodeId?: string;
-      stackBehavior: StackBehavior;
-      /** When true and tip is input, core passes input box text into refresh extras. */
-      passInputText?: boolean;
-      /** Marks this traversal as a deliberate trigger; see "Action edges" below. */
-      action?: boolean;
-    }
-  | {
-      kind: "app";
-      /** Another location inside Nowisee (same app or another app). */
-      to: AppLocation;
-      passInputText?: boolean;
-      action?: boolean;
-    }
-  | {
-      kind: "external";
-      /** Leaves Nowisee entirely. Core does not manage what happens next. */
-      href: string;
-    };
-
-/**
- * Navigation map: nested so no delimiter can collide with app-owned node ids.
- * Semantically (fromNodeId, intent) → NavEdge.
- */
-export type NavigationMap = Readonly<
-  Record<string /* fromNodeId */, Readonly<Record<string /* NavIntent */, NavEdge>>>
->;
-
-export interface StackEntry {
-  nodeId: string;
-  label: string;
-  /** Last non-null location associated while this entry was tip, if any. */
-  location: AppLocation | null;
-}
-
-export interface RefreshExtras {
-  /** Present when the triggering edge had passInputText and tip was input. */
-  inputText?: string;
-  /**
-   * True only on the single call caused by traversing an edge with `action: true`.
-   * Absent on bootstrap, revalidation, and every other call. Apps perform side
-   * effects only when this is true.
-   */
-  action?: boolean;
-  /**
-   * Aborted when a read-only call is superseded by a newer transition.
-   * Core never aborts an action call.
-   */
-  signal?: AbortSignal;
-}
-
-/**
- * The only sanctioned channel for effects an app cannot perform itself.
- * Every member is optional: apps must feature-detect, because a given host
- * (or a future sandboxed host) may not offer all of them.
- */
-export interface PlatformContext {
-  /**
-   * Copy text to the clipboard. Only meaningful during an action call —
-   * browsers only permit a clipboard write while the user's keypress is
-   * still fresh, and core is the only party holding that. See MODULES §10.
-   */
-  readonly clipboard?: {
-    writeText(text: string): Promise<void>;
-  };
-  /** Screen-reader-only status text. Does not move the tip. Not provided in MVP. */
-  readonly announce?: (text: string) => void;
-  /** Ask core for a read-only refresh of the current tip. Not provided in MVP. */
-  readonly requestRefresh?: () => void;
-}
-
-/** What the registry exposes about an app. Plain data, not the module. */
-export interface AppDescriptor {
-  readonly id: string;
-  readonly label: string;
-}
-
-export interface RefreshResult {
-  /** Full replace of the client's navigation map. */
-  navigationMap: NavigationMap;
-  /** Full replace of warm set (core still pins stack entry payloads). */
-  warm: NodePayload[];
-  /**
-   * Tip payload after refresh (authoritative).
-   * May correct a stale tip within no-teleport rules (same conceptual place / fallback).
-   * Core adopts `node.id` as the new tip id.
-   */
-  node: NodePayload;
-  /**
-   * Canonical location for the tip, or null to keep the previous address bar.
-   * Required — omitting the field is not the same as null.
-   */
-  location: AppLocation | null;
-  /**
-   * Text the client should copy during an action traversal.
-   * Apps return this string; they never write the clipboard themselves.
-   */
-  clipboardText?: string;
-}
-
-export interface AppModule {
-  id: string;
-  label: string;
-  open(
-    path: string,
-    extras?: RefreshExtras,
-    ctx?: AppServerContext,
-  ): Promise<RefreshResult> | RefreshResult;
-  refresh(
-    stack: readonly StackEntry[],
-    extras?: RefreshExtras,
-    ctx?: AppServerContext,
-  ): Promise<RefreshResult> | RefreshResult;
-}
-
-/**
- * Server-only. Never serialized to the browser. `userId` comes only from
- * the identity service resolving the session cookie.
- */
-export interface AppServerContext {
-  readonly userId: string | null;
-  readonly sessionId: string;
-  readonly accountAppId: string;
-  readonly identity?: IdentityCapability;
-  readonly lockbox?: LockboxCapability;
-  readonly oauth?: OAuthCapability;
-}
-
-export type AuthOutcome =
-  | { ok: true; userId: string }
-  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" | "registration-closed" };
-
-export interface IdentityCapability {
-  register(email: string, password: string): Promise<AuthOutcome>;
-  signIn(email: string, password: string): Promise<AuthOutcome>;
-  signOut(): Promise<void>;
-}
+```text
+src/core/         shell (navigator, display, …)
+src/app-kit/      optional helpers apps import
+src/apps/         AppModules (imported by the server host)
+src/apps/remote.ts  client RPC stub
+src/shell/        registers remote stubs, mounts display, wires keyboard
+server/           HTTP, host identity SQLite, identity service, first-party pack list
+server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
+server/index.ts   production entry (SPA + /api)
 ```
+
+### Dev
+
+`npm run dev` runs Vite plus `/api` middleware on the same origin, with SQLite and sessions.
+
+`npm run preview` uses the same API plugin on the preview server.
+
+`npm run build && npm start` has `server/index.ts` serve `dist/` and `/api` together. Vite `base` is `/`.
+
+### Environment
+
+See [`.env.example`](../.env.example). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty.
+
+| Variable | Role |
+|----------|------|
+| `PORT` | Listen port (default `3000`) |
+| `NOWISEE_DB` | Host SQLite file (default `data/nowisee.db`) |
+| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI |
+| `NOWISEE_LOCKBOX_KEY` | 32-byte AES key, base64. Required if lockbox/OAuth apps are granted |
+| `NOWISEE_LOCKBOX_KEY_ID` | Optional key id (default `v1`) |
+| `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
+| `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY` | Optional PEM paths; both set enables HTTPS |
+
+---
+
+## Types (summary)
+
+Full definitions live in [`src/core/types.ts`](../src/core/types.ts). The names below are the ones that show up in almost every conversation.
+
+| Name | Role |
+|------|------|
+| `NavIntent` | `prev` / `next` / `enter` / `back`, plus app-defined symbolic intents |
+| `NavEdge` | `node` (push/replace/pop), `app` (`AppLocation`), or `external` (`href`); optional `action`, `passInputText` |
+| `NavigationMap` | Nested `fromNodeId → intent → edge` (no delimiter) |
+| `NodePayload` | `id`, `label`, optional `kind` (`text` \| `input`), `secret`, `autocomplete`, `data` (`JsonValue`) |
+| `AppLocation` | `{ appId, path }` with `path` starting `/`. Apps never build `#/…` strings |
+| `RefreshExtras` | `inputText`, `action`, `signal` |
+| `RefreshResult` | `navigationMap`, `warm`, `node`, `location` (or `null`), optional `clipboardText` |
+| `AppModule` | `open(path, extras, ctx?)` and `refresh(stack, extras, ctx?)` |
+| `AppServerContext` | Server-only: `userId`, `sessionId`, `accountAppId`, optional `identity` / `lockbox` / `oauth` / `directory` |
+| `PlatformContext` | Client-only clipboard (and reserved `announce` / `requestRefresh`, not provided) |
+| `ShellConfig` | `rootAppId`; optional `keyBindings` |
+
+**Display** currently uses the input node’s `label` as the field value, and the accessible name for a generic input is `"Input"`. A later payload field could name the field without changing the value. Do not add that until a slice needs it.
 
 ---
 
 ## Action edges
 
-Side effects are still ordinary navigation — there is no `activate()` and no separate action edge *kind*. What changed is that the app marks the **edge** that constitutes the button press, and core reports that one traversal back to the app.
+Side effects are ordinary navigation — there is no `activate()` and no separate action edge *kind*. The app marks the **edge** that constitutes the button press; core reports that one traversal back to the app.
 
 | Rule | Owner |
 |------|-------|
@@ -217,21 +92,13 @@ Side effects are still ordinary navigation — there is no `activate()` and no s
 | Perform side effects only when `extras.action` is true; otherwise read-only | App |
 | Resolve with a status node on failure rather than rejecting | App |
 
-**Why this is enough.** Sibling browsing uses `prev` / `next` edges, which carry no flag, so passing over an option node cannot fire it. Background revalidation carries no flag, so a warm-hit refresh cannot repeat a send. Returning to a status node later carries no flag, so the effect does not replay. The intended shape stays exactly as authored:
-
-```text
-"Copy"  --enter (action: true)-->  "Copying…"  (warm, shown immediately)
-                                        │
-                                        └── refresh(extras.action = true) → "Copied"
-```
-
-Rapid double-press is naturally safe: after the local move the tip is the status node, and the trigger edge belonged to the previous node. Status tips should return `location: null` so a reload does not land the user back on the action node.
+Sibling browsing uses `prev` / `next` (no flag). Background revalidation carries no flag. Returning to a status node later carries no flag. After the local move the tip is the status node, so a rapid double-press cannot re-fire the trigger. Status tips should return `location: null` so a reload does not land the user back on the action node.
 
 ---
 
 ## App boundary: data in, data out
 
-`open` and `refresh` are a **message protocol**. Home and Bible currently run on the server; the browser holds generic RPC stubs. Preserving the data-only property is what makes that split (and a later Worker or iframe) possible without changing the contract.
+`open` and `refresh` are a **message protocol**. First-party apps run on the server; the browser holds generic RPC stubs. Preserving the data-only property is what makes that split (and a later Worker or iframe) possible without changing the contract.
 
 | Crossing the boundary | Rule |
 |-----------------------|------|
@@ -239,108 +106,58 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 | `AbortSignal` | Call mechanic, not payload. Core never aborts an action call. On the wire, abort cancels the HTTP request. |
 | Anything else | Not permitted. Core hands apps no other live object; apps return no other live object. |
 
-Consequences, all normative:
+Consequences:
 
-- Apps do not touch browser APIs that core can mediate. Copy text is `clipboardText` on the refresh result; core writes the clipboard. An app reaching for `navigator.clipboard` or `localStorage` directly is a bug even though nothing stops it today.
+- Apps do not touch browser APIs that core can mediate. Copy text is `clipboardText` on the refresh result; core writes the clipboard.
 - The registry hands Home `AppDescriptor[]`, never the `AppRegistry` object.
-- `NodePayload.data` is typed as `JsonValue` so the compiler catches accidents rather than a sandbox migration years later.
+- `NodePayload.data` is typed as `JsonValue`.
 
-This is a discipline, not a sandbox. Nothing here builds isolation; it only avoids foreclosing it.
+This is a discipline, not a sandbox.
 
 ---
 
 ## Packaging
 
-| Path (proposed) | Contents |
-|-----------------|----------|
-| `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities, busy |
-| `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk) |
-| `src/apps/` | `home`, `bible`, `notes`, `account` (and later `mail`) as `AppModule`s |
-| `src/shell/` | Bootstrap: config, register apps, mount display, wire keyboard |
+| Path | Contents |
+|------|----------|
+| `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities |
+| `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk, signed-out, split text) |
+| `src/apps/` | First-party `AppModule`s. Graph/docs next to each app |
+| `src/shell/` | Bootstrap: config, register remote stubs, mount display, wire keyboard |
 
-**Smell test:** If a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app—not in core. If every session would break unless Navigator runs it, it belongs in core.
+**Smell test:** if a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app — not in core. If every session would break unless Navigator runs it, it belongs in core.
+
+To add an app today, implement `AppModule`, add a pack row in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts), and register a matching remote stub in [`src/shell/bootstrap.ts`](../src/shell/bootstrap.ts). Home lists whatever the server registry exposes via `ctx.directory`.
 
 ---
 
 ## Core module contracts (summary)
 
-See [`MODULES.md`](MODULES.md) for full behavior. Summary:
+See [`MODULES.md`](MODULES.md) for full behavior.
 
-### Shell config
+**Router** is a pure boundary: `parse` / `hrefFor` / `setAddressBar`, and `hashchange` → `openLocation`. It never owns stack, cache, map, or busy.
 
-Core has no product constants. Bootstrap supplies:
+**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. A warm miss moves the stack, keeps the previous label, and blocks until refresh. Failure should leave last-good state (see MODULES).
 
-```ts
-export interface ShellConfig {
-  /** App used for the empty path and for recovery. No core file names it. */
-  readonly rootAppId: string;
-  readonly keyBindings?: readonly KeyBinding[]; // defaults in MODULES §9
-}
-```
+**Display:** text tips use `role="application"`, remount, and focus, with no `aria-live`. Input tips use a textarea or password field plus Cancel/Done (click only). Hide NavPads while input is open.
 
-### Router (pure boundary)
+**Keyboard** owns the physical → intent table. By default, plain arrows apply on text tips only.
 
-- `parse(href) → AppLocation` — `#/` → `{ rootAppId, "/" }`; `#/<appId>/rest` → `{ appId, "/rest" }`. Always a location; unknown or corrupt hrefs resolve to the root app.
-- `hrefFor(location) → string` — the only place a `#/...` string is produced.
-- Listens for `hashchange` and forwards the parsed location to Navigator.
-- Unknown appId / corrupt href: resolve to the root app; do not crash.
-- Does **not** own stack, cache, map, busy, or the display.
+**NavPads** deliver the same four intents on VoiceOver focus or click.
 
-### Navigator (single owner of state transitions)
+**NodeCache** stores warm payloads, pins stack ids, and clears on app switch.
 
-1. Own per-app **stack**, **blocked** (intents ignored while true; “busy” in older wording means the same flag), and a monotonic transition token.
-2. `onIntent(intent)`: look up `(tipId, intent)`; missing or malformed edge → silent no-op (does not increment the transition token).
-3. `openLocation(location, extras)`: increment token, block, call `app.open(path)`. On success, then clear stack/cache/map, set current app, and apply. On failure, keep the previous session.
-4. `kind: "app"` edge → `openLocation`. `kind: "external"` → hand the href to the browser.
-5. `kind: "node"`:
-   - `push`: push `toNodeId`
-   - `replace`: replace tip with `toNodeId`
-   - `pop`: pop; destination = new tip; **ignore any toNodeId**. If pop would empty the stack, open the root app *without* popping first.
-6. If destination payload in warm (or pinned stack): display immediately; start `refresh`.
-7. Else: block until `refresh` returns; then display.
-8. Apply: replace map; replace warm (re-pin stack); set tip from `result.node` (**including its id**); set address bar from `result.location` rules. Remount Display only when the tip changed; identical warm revalidation must not remount (screen readers restart on remount). Same-id text label changes remount once so focus can announce the new label.
-9. Every transition increments the token. A result is applied only if its token is the newest issued — tip-id comparison is not sufficient.
-10. On refresh or open failure: keep display, stack, map, and cache; clear block/busy.
+**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (host directory).
 
-### NodeCache
-
-- Key by `nodeId` within current app scope; app switch clears the cache.
-- `replace` from refresh warm; `get`; pin stack ids.
-- Defensive max size allowed; never invents network fetches.
-
-### Display
-
-- Text node: show `label` in one focusable `role="application"` surface (`tabindex="-1"`, `aria-label` = the label). Announce by moving focus — **no** `aria-live` on that surface (live + focus double-speaks on VoiceOver iOS). The accessible name is required: NVDA will not read the text content of an unnamed application.
-- Input node: show a multiline `<textarea>` seeded from the label, plus Cancel (`back`) and Done (`enter`) after it in DOM order. When `secret` is set, show `<input type="password">` instead, with honest `autocomplete` (`username`, `current-password`, `new-password`). Activate on click only. Hide NavPads while this surface is up. **Deferred:** `label` is the value; the accessible name for a normal input is currently the generic `"Input"`. A later generic payload field could name the field without changing the value. See [`ENGINEERING.md`](ENGINEERING.md).
-
-### Keyboard
-
-- Owns the physical → intent binding table; resolves `(event, tipKind) → NavIntent | none`.
-- Unbound key: no call to Navigator, no `preventDefault`.
-- Default table: plain arrows on text tips only. Input tips leave via Cancel / Done.
-- Keystrokes from a textarea/input are ignored so the caret and Enter-as-newline keep them.
-- While blocked: ignore intents.
-- Escape is **not** a platform exit.
-
-### AppRegistry
-
-- `register` / `get(id) → AppModule | null` (core-internal) / `listDescriptors() → AppDescriptor[]` (host directory).
-- Home reads `ctx.directory` for labels + `app` edges (not node ids of other apps, and not the registry object).
-
-### Platform capabilities
-
-- Owns the browser-side clipboard write for `clipboardText` on an action result (MODULES §10).
-- Offers clipboard only when the host can actually honour it.
+**Platform** owns the clipboard write for `clipboardText` during an action.
 
 ---
 
-## Addressing conventions (MVP)
+## Addressing (MVP)
 
-- Apps address `AppLocation`; core serializes. Hash routes today (`#/…`) because static hosting needs no rewrites; switching to History API paths later touches Router only.
-- Root app at `#/` (canonical); `#/<rootAppId>` may alias.
-- Other apps: `#/<appId>/...` with app-owned remainder.
-- Bible example: `{ appId: "bible", path: "/kjv/Matthew/5/8" }` (path shape is Bible's choice).
-- Status tips often return `location: null` so the address bar stays on the prior shareable node.
+Apps address `AppLocation`; core serializes. Hash routes are used today (`#/…`); a later History API change touches Router only.
+
+The root app lives at `#/` (canonical). `#/<rootAppId>` may alias. Other apps are `#/<appId>/...` with an app-owned remainder. Status tips often return `location: null`.
 
 ---
 
@@ -354,11 +171,11 @@ export interface ShellConfig {
 4. Not embed foreign apps' node ids in the navigation map (use `app` edges).
 5. Not silently rewrite the stack to teleport the user after a workflow.
 6. Perform side effects only when `extras.action` is true.
-7. Not throw through to freeze core busy state—prefer status text on failure. This matters most for action calls, where a rejection strands the user on "Sending…".
+7. Not throw through to freeze core busy state—prefer status text on failure. This matters most for action calls.
 8. Treat stack tip as possibly stale; return a valid fallback `node` when needed (repair, not teleport).
 9. Author edges by intent only; never assume a keystroke.
 10. Return plain data only — nothing that would fail to survive being sent as a message.
-11. Return copy text as `clipboardText` on the refresh result when the user should copy; never call `navigator.clipboard`. Core performs the write.
+11. Return copy text as `clipboardText` on the refresh result when the user should copy; never call `navigator.clipboard`.
 
 ### SHOULD
 
@@ -375,19 +192,19 @@ export interface ShellConfig {
 
 ## Testing contracts
 
-Unit-test without DOM where possible:
+Unit-test without the DOM where possible. The list below is the behavior to cover, not a second spec.
 
 - Map lookup; push/replace/pop; pop omits toNodeId; `app` edge clears stack and switches app.
 - Warm hit vs warm miss (block); refresh failure clears busy.
 - Transition token: an A → B → A sequence discards the first A's in-flight result.
 - A superseded read-only call receives an aborted signal; an action call never does.
-- `extras.action` is set on exactly the traversal of an `action: true` edge, and on no other call — including the revalidation that follows a warm hit, and re-entry to the same node later.
+- `extras.action` is set on exactly the traversal of an `action: true` edge, and on no other call.
 - Walking the full sibling option list past an effectful node performs no effect.
 - `passInputText` included only when flag set from input tip.
 - Home lists apps as `app` edges; app root `back` opens the root app.
 - Rebinding the keyboard table changes behavior with zero app changes.
 - `Router.hrefFor(Router.parse(href))` round-trips; no other module emits a `#` string.
-- Every `RefreshResult` an MVP app returns survives a `structuredClone` round-trip.
+- Every `RefreshResult` an app returns survives a `structuredClone` round-trip.
 - Copy with no device clipboard → Navigator shows “clipboard unavailable”; the app still only returned `clipboardText`.
 - `listDescriptors()` returns descriptors; the registry object is not reachable from any app.
 - App refresh: wrap-or-not is app-defined; action tip updates label in place without stack jump.

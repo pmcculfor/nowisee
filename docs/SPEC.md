@@ -1,7 +1,7 @@
-# Nowisee — product & architecture specification
+# Nowisee — product specification
 
-**Audience:** planning/building agents with zero prior chat context.  
-**Status:** Product/architecture **what** is locked (post adversarial review, then post longevity review). Contracts: [`ARCHITECTURE.md`](ARCHITECTURE.md). Module specs: [`MODULES.md`](MODULES.md). Review findings and deferrals: [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md). Engineering proposals: [`ENGINEERING.md`](ENGINEERING.md).
+**Audience:** people (including agents) planning or building with no prior chat context.  
+**Status:** The product and architecture **what** is locked. Contracts: [`ARCHITECTURE.md`](ARCHITECTURE.md). Core module behavior: [`MODULES.md`](MODULES.md). Per-app graphs live next to each app.
 
 ---
 
@@ -9,28 +9,28 @@
 
 **Nowisee** is a website for blind (and screen-reader / keyboard-primary) users who struggle with modern, cluttered UIs.
 
-**Core UX idea:** the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label (`role="application"` so arrow keys reach the page). When the current node is an **input** node, that surface is a multiline text box plus Cancel and Done. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to the arrow keys by default on text tips (and to VoiceOver edge pads on focus or click) and which a user or locale can rebind without any app changing.
+The core idea is that the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label (`role="application"` so arrow keys reach the page). When the current node is an **input** node, that surface is a multiline text box plus Cancel and Done. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to the arrow keys by default on text tips (and to VoiceOver edge pads on focus or click). A user or locale can rebind those keys without any app changing.
 
-**Why it exists:** typical sites force tabbing through chrome or exploring by touch. Users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
+Typical sites force tabbing through chrome or exploring by touch, so users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
 
-**MVP apps (portable `AppModule`s, including Home):**
+**First-party apps** are portable `AppModule`s, including Home:
 
-1. **Home** — lists enabled apps; links to each by URL.
-2. **Bible** — King James Version (public domain): Testament → book → chapter → verse → options (e.g. Copy, Commentary stub); search can be added as ordinary nodes.
-3. **Account** — sign in / register / sign out. Credentials live in the identity service, not in this app.
-4. **Notes** — per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
+1. **Home** lists enabled apps and links to each by URL.
+2. **Help** is a short tutorial of intents, lists, and typing. It is the first catalog item.
+3. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
+4. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
+5. **Gmail** connects a Google account and shows inbox subjects, body chunks, and compose/send. Tokens go through host OAuth/lockbox.
+6. **Account** is sign in / register / sign out. Credentials live in the identity service, not in this app.
 
-**Later apps (must fit the same contracts with no core special cases):** e.g. **Mail** (real Gmail/OAuth).
+Long-term there should be many apps, and possibly third-party apps and an in-product App Store. Core must never special-case product names. A new app is a module plus a pack row, not a core edit.
 
-**Long-term:** many apps; possibly third-party apps and an in-product App Store. Core must never special-case product names.
-
-**Quality bar:** prefer robust, generic, long-term design over shipping fast. Incomplete is OK; sloppy, duplicated, or product-specific core design is not.
+Prefer robust, generic, long-term design over shipping fast. Incomplete is OK; sloppy, duplicated, or product-specific core design is not.
 
 ---
 
 ## 2. User-visible navigation
 
-Apps author **intents**. Core owns which keystroke produces each one (defaults in [`MODULES.md`](MODULES.md) §9).
+Apps author **intents**. Core owns which keystroke produces each one (defaults in [`MODULES.md`](MODULES.md) § Keyboard).
 
 | Intent | Default input | Typical meaning (authored by apps via navigation map) |
 |--------|---------------|--------------------------------------------------------|
@@ -42,13 +42,13 @@ Apps author **intents**. Core owns which keystroke produces each one (defaults i
 
 Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.
 
-**Display:** one text blob, or a multiline field plus Cancel / Done. Screen reader announces updates by focusing the remounted text surface (no `aria-live` on that surface). Help lives **in the tree** as nodes, not modals.
+The display is one text blob, or a multiline field plus Cancel / Done. The screen reader announces updates by focusing the remounted text surface (there is no `aria-live` on that surface). Help is a first-class app, not a modal.
 
-**Example paths:**
+A few example paths:
 
-- Home shows “Bible” → `next` might show “Mail” → `enter` opens the Bible app via an `app` edge.
-- Bible → `enter` → “Old Testament” / `next` → “New Testament” → … → verse → `enter` → “Copy” / `next` → “Commentary”.
-- Mail → Inbox → subjects → body → options; Compose uses an **input** node; `enter` commits toward Send/status.
+- Home shows an app label; `next` shows the next app; `enter` opens that app via an `app` edge.
+- A reading app typically goes list → item → options (copy, and so on).
+- Compose uses an **input** node; `enter` (Done) commits toward a status node.
 
 ---
 
@@ -73,13 +73,15 @@ Core ──open/refresh(+action?)──► AppModule
      ◄── map + warm + tip + location ──
 ```
 
+Packaging, stack, and env: [`ARCHITECTURE.md`](ARCHITECTURE.md). How apps call core: [`MODULES.md`](MODULES.md).
+
 ---
 
 ## 4. Locked decisions and why
 
 ### 4.1 Portable apps by id (Home included)
 
-**Decision:** Apps register as `AppModule` with stable `id` + `label`. Home is an app that lists others and links by `app` edge. No core `BibleRepository` / `MailRepository`. Home must not embed foreign **node** ids—only locations. Core identifies Home through `config.rootAppId`; no core file names it.
+**Decision:** Apps register as `AppModule` with stable `id` + `label`. Home is an app that lists others and links by `app` edge. No core per-product repository. Home must not embed foreign **node** ids—only locations. Core identifies Home through `config.rootAppId`; no core file names it.
 
 **Why:** Many apps and possible third-party/App Store later.
 
@@ -119,7 +121,7 @@ Core ──open/refresh(+action?)──► AppModule
 
 ### 4.5 No separate `activate()`; effects are marked on the **edge**
 
-**Decision:** Side effects (copy, send) still happen inside an ordinary `refresh` on an ordinary node — there is no `activate()` call and no action edge *kind*. The app marks the single edge that constitutes the button press with `action: true`. Core sets `extras.action` on exactly the call caused by traversing that edge, and on no other call. Warm may show “Sending…” and the resulting refresh updates to “Sent” **in place**.
+**Decision:** Side effects (copy, send) still happen inside an ordinary `refresh` on an ordinary node — there is no `activate()` call and no action edge *kind*. The app marks the single edge that constitutes the button press with `action: true`. Core sets `extras.action` on exactly the call caused by traversing that edge, and on no other call. Warm may show a working label and the resulting refresh updates **in place**.
 
 - App: marks the trigger edge; performs effects only when `extras.action` is true.
 - Core: sets the flag on that one traversal; never on bootstrap, revalidation, replay, or retry; never re-issues, retries, aborts, or coalesces an action call.
@@ -128,8 +130,8 @@ Core ──open/refresh(+action?)──► AppModule
 
 | Failure | Why it cannot happen |
 |---------|----------------------|
-| Browsing sibling options fires Copy | `prev` / `next` edges carry no flag |
-| Warm-hit background revalidation re-sends | Revalidation carries no flag |
+| Browsing sibling options fires the effect | `prev` / `next` edges carry no flag |
+| Warm-hit background revalidation repeats it | Revalidation carries no flag |
 | Returning to a status node replays the effect | Ordinary edges carry no flag |
 
 Rapid double-press is naturally safe: after the local move the tip is the status node, and the trigger edge belonged to the previous node.
@@ -138,7 +140,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.6 No silent teleport; no auto-dismiss
 
-**Decision:** Apps must not rewrite the stack to jump the user (e.g. to inbox after send). Status/confirmation text stays until the user presses a mapped key. Refresh may update the **current tip’s text** in place.
+**Decision:** Apps must not rewrite the stack to jump the user after a workflow. Status/confirmation text stays until the user presses a mapped key. Refresh may update the **current tip’s text** in place.
 
 **Why:** Blind users must not have location change without an explicit key.
 
@@ -158,32 +160,31 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.9 Addressing
 
-- Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a browser URL, so the hash-vs-path decision, a sub-path mount, or a locale segment never reaches app code.
-- Shareable tips **may** return a location from refresh; not required for every node.
-- Aliases OK; app canonicalizes on open.
-- Null location → core **keeps** the previous address bar. The field is required; omitting it is not the same as null.
-- Cross-app and Home exit: `kind: "app"` edges only. `kind: "external"` leaves the platform.
+Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a browser URL, so the hash-vs-path decision, a sub-path mount, or a locale segment never reaches app code.
+
+Shareable tips **may** return a location from refresh; that is not required for every node. Aliases are fine; the app canonicalizes on open. A null location means core **keeps** the previous address bar. The field is required; omitting it is not the same as null.
+
+Cross-app and Home exit use `kind: "app"` edges only. `kind: "external"` leaves the platform.
 
 ### 4.10 App boundary: data in, data out
 
-**Decision:** `open` / `refresh` is a **message protocol**. Home and Bible currently run on the server; the browser holds generic RPC stubs. Everything crossing the boundary — stack, input text, node payloads, navigation map, result, location, `clipboardText` — must be plain data that would survive being serialized and sent as a message. The abort signal cancels the HTTP request. Platform context stays on the client (core uses it to write `clipboardText`).
+**Decision:** `open` / `refresh` is a **message protocol**. First-party apps run on the server; the browser holds generic RPC stubs. Everything crossing the boundary — stack, input text, node payloads, navigation map, result, location, `clipboardText` — must be plain data that would survive being serialized and sent as a message. The abort signal cancels the HTTP request. Platform context stays on the client (core uses it to write `clipboardText`).
 
 Copy is `clipboardText` on the result; core writes the clipboard. Durable storage, screen-reader status, and app-initiated refresh are not in this slice. The registry hands Home plain `{ id, label }` descriptors, never the registry object.
 
 **Why:** the roadmap includes third-party apps and an App Store, and code we did not write cannot share a page with everyone's data. The realistic containment is a worker, an iframe, or a server, and all three exchange messages rather than objects. Keeping the boundary message-shaped now costs nothing and preserves that option; letting apps quietly depend on being in-page forecloses it.
 
-**This is a discipline, not a sandbox.** No isolation is being built. See [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`MODULES.md`](MODULES.md) §10.
+**This is a discipline, not a sandbox.** No isolation is being built. See [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`MODULES.md`](MODULES.md).
 
 **Immediate payoff:** the clipboard. Browsers only permit a write while the user's keypress is still fresh, so copying after an async (or server) refresh fails intermittently. Core opens the write inside the keydown. Apps return `clipboardText` on the action result; they never write the clipboard themselves.
 
 ### 4.11 Client vs server cache
 
-- **Client warm:** core NodeCache as above.
-- **Server/durable cache:** behind the app (or its API). Not core. HTTP cookies are set by the host (`__Host-nowisee_session`). Identity is a server-host concern, not a client platform capability. See [`IDENTITY.md`](IDENTITY.md).
+**Client warm** is core NodeCache, as above. **Server or durable cache** sits behind the app (or its API) and is not core. HTTP cookies are set by the host (`__Host-nowisee_session`). Identity is a server-host concern, not a client platform capability. See [`IDENTITY.md`](IDENTITY.md).
 
 ### 4.12 Sibling list ends
 
-**Not locked to wrap.** Each app authors edges (wrap, stop, or other). Earlier “always wrap” is retired.
+**Not locked to wrap.** Each app authors its own edges (wrap, stop, or something else). The earlier “always wrap” rule is retired.
 
 ### 4.13 Busy / blocking / errors
 
@@ -194,61 +195,55 @@ Copy is `clipboardText` on the result; core writes the clipboard. Durable storag
 | Refresh failure | Keep last text; clear busy; do not crash shell |
 | Missing edge | Silent no-op |
 
-**Known MVP limitation:** those first three states are indistinguishable to a user who cannot see a spinner — blocked, dead-end, and failed all present as silence. Accepted for MVP; a status channel is deferred (see [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) §6). This is also why apps MUST resolve with a status node rather than reject: a rejected action call otherwise strands the user on “Sending…”.
+**Known limitation:** those first three states are indistinguishable to a user who cannot see a spinner — blocked, dead-end, and failed all present as silence. A status channel is deferred ([`PREPAREDNESS.md`](PREPAREDNESS.md)). This is also why apps MUST resolve with a status node rather than reject: a rejected action call otherwise strands the user on a working label.
 
 ### 4.14 Auth / database
 
 Identity and per-app SQLite have landed. Clipboard is still the only platform capability the **client** provides. Auth lives on the host identity service; each app opens its own database. See [`IDENTITY.md`](IDENTITY.md) and [`STORAGE.md`](STORAGE.md).
 
-### 4.15 MVP scope
-
-Home + real KJV Bible + Notes + Account. No real Gmail.
-
 ---
 
 ## 5. Recommendations for app authors (SHOULD)
 
-1. **Runtime-unknown next node:** Temporary warm node + edge; replace content on refresh.
-2. **List ends:** Choose wrap/stop/message; do not assume platform wrap.
-3. **Action / send / copy:** Put `action: true` on the `enter` edge into a status node; “Sending…” → “Sent”/error in place; leave only via mapped intents; never silent stack jump. Resolve with an error label rather than rejecting — a rejected action call strands the user on “Sending…”.
-4. **Leaving the app:** Root `back` MUST be an `app` edge to Home.
-5. **Input:** Instruction node → input node; `enter` (Done) with `passInputText` to commit; `back` (Cancel) to abandon.
-6. **Addressing:** Stable canonical location when bookmarkable; `location: null` for status tips that should not change the bar (this also stops a reload from re-entering an action node).
-7. **Prefetch:** Publish likely edges + warm payloads.
-8. **Home:** Labels + `app` edges only.
-9. **App kit:** Prefer shared helpers for edge/list/input/neighborhood boilerplate.
-10. **Intents only:** Never assume a keystroke, a direction, or a screen.
-11. **Plain data only:** Return nothing that would not survive being sent as a message.
-12. **Copy:** return `clipboardText` on the action refresh result; never touch `navigator.clipboard`.
+1. **Runtime-unknown next node.** Ship a temporary warm node plus an edge, then replace the content on refresh.
+2. **List ends.** Choose wrap, stop, or a message. Do not assume the platform wraps.
+3. **Action / send / copy.** Put `action: true` on the `enter` edge into a status node. Show a working label, then done or error in place. Leave only via mapped intents; never jump the stack silently. Resolve with an error label rather than rejecting — a rejected action call strands the user on the working label.
+4. **Leaving the app.** Root `back` MUST be an `app` edge to Home.
+5. **Input.** Put an instruction node before the input node. `enter` (Done) with `passInputText` commits; `back` (Cancel) abandons.
+6. **Addressing.** Return a stable canonical location when the tip is bookmarkable. Use `location: null` for status tips that should not change the bar (this also stops a reload from re-entering an action node).
+7. **Prefetch.** Publish likely edges plus warm payloads.
+8. **Home.** Labels and `app` edges only.
+9. **App kit.** Prefer shared helpers for edge, list, input, and neighborhood boilerplate.
+10. **Intents only.** Never assume a keystroke, a direction, or a particular screen.
+11. **Plain data only.** Return nothing that would not survive being sent as a message.
+12. **Copy.** Return `clipboardText` on the action refresh result; never touch `navigator.clipboard`.
 
 ---
 
 ## 6. Roadmap
 
-1. Persist handoff + adversarial locks in-repo — **this revision**.
-2. Scaffold core + app kit + Home/Bible/Mail modules.
-3. Accessibility pass (SR + keyboard).
-4. Later: real mail, App Store groundwork; browser Back/Forward policy.
+Landed so far: core and the app kit, first-party apps on a Node host, identity, lockbox, OAuth, the Bible corpus and reader features, Notes, and Gmail v1.
+
+Later work can happen without changing the contracts above: a status channel; optional deep-link ancestry; `requestRefresh`; a Display port for a native client; third-party sandbox and contract versioning; browser Back/Forward versus the session stack.
 
 ---
 
 ## 7. Deferred (must preserve contracts above)
 
-- UI toolkit, bundler, hosting vendor (see ENGINEERING proposals)
-- Exact path syntax per app (behavior locked; shapes app-owned)
-- IndexedDB / service worker
-- Dedicated Home intent
-- Browser Back/Forward vs session stack (narrow core item later)
-- Server session TTL, cache keys, auth provider
-- Warm etag/hash protocol
-- Real mail, commentary sources
+These can wait, as long as the locks above stay intact:
 
-Deferred with a known cost, each recorded in [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) with the argument for and against:
+- Exact path syntax per app (behavior is locked; shapes are app-owned)
+- IndexedDB / service worker
+- A dedicated Home intent
+- Browser Back/Forward versus the session stack (a narrow core item later)
+- A warm etag/hash protocol
+- A UI framework (not planned)
+
+A few deferrals have a known cost. See [`PREPAREDNESS.md`](PREPAREDNESS.md):
 
 | Deferred | Cost of deferring | Additive later? |
 |----------|-------------------|-----------------|
-| Status channel distinguishing busy / dead-end / failure (§6) | Those three states are identical to a user who cannot see a spinner | Yes — Display + Navigator addition |
-| Screen-reader browse-mode spike (§7) | The one risk that can invalidate the product premise | Yes, but it may force DOM changes in Display/Keyboard |
-| Deep-link ancestry (§8) | `back` behaves differently depending on how the user arrived | Yes — optional `stack` on `open` |
-| Contract versioning + unknown-value fallbacks (§11) | Core and app must ship together | Yes |
-| Validating / bounding app responses (§12) | A buggy app degrades the shell, and the shell gets blamed | Yes, until third-party apps exist |
+| Status channel distinguishing busy / dead-end / failure | Those three states are identical to a user who cannot see a spinner | Yes — Display + Navigator addition |
+| Deep-link ancestry | `back` behaves differently depending on how the user arrived | Yes — optional `stack` on `open` |
+| Contract versioning + unknown-value fallbacks | Core and app must ship together | Yes |
+| Validating / bounding app responses | A buggy app degrades the shell, and the shell gets blamed | Yes, until third-party apps exist |

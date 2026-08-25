@@ -1,6 +1,6 @@
 /**
  * Shared TypeScript contracts for Nowisee core.
- * Canonical definitions also live in docs/ARCHITECTURE.md — keep them in sync.
+ * Narrative: docs/ARCHITECTURE.md. This file is canonical.
  */
 
 /**
