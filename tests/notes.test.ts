@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { edgeApp } from "../src/app-kit/index.ts";
 import {
   CREATE_EDIT_NODE_ID,
   CREATE_NODE_ID,
@@ -7,16 +8,14 @@ import {
   noteEditNodeId,
   noteNodeId,
 } from "../src/apps/notes/ids.ts";
-import { createNotesApp } from "../src/apps/notes/index.ts";
+import { createNotesApp, type NotesApp } from "../src/apps/notes/index.ts";
 import {
-  createMemoryNotesStore,
   createSqliteNotesStore,
   openNotesDatabase,
   startNotesApp,
 } from "../src/apps/notes/store.ts";
-import type { NoteRecord } from "../src/apps/notes/types.ts";
+import type { NoteRecord, NotesStore } from "../src/apps/notes/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
-import { edgeApp } from "../src/app-kit/index.ts";
 
 const OWNER = "user-1";
 const OTHER = "user-2";
@@ -44,12 +43,49 @@ function note(
   };
 }
 
+const opened: NotesApp[] = [];
+
+afterEach(() => {
+  for (const app of opened) {
+    app.close();
+  }
+  opened.length = 0;
+});
+
+function notesHarness(
+  options: {
+    readonly initial?: readonly (NoteRecord & { ownerId: string })[];
+    readonly idFactory?: () => string;
+    readonly now?: () => string;
+  } = {},
+): { app: NotesApp; store: NotesStore } {
+  const db = openNotesDatabase(":memory:");
+  const store = createSqliteNotesStore(db, {
+    idFactory: options.idFactory,
+    now: options.now,
+  });
+  for (const n of options.initial ?? []) {
+    db.run(
+      "INSERT INTO notes (id, owner_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      n.id,
+      n.ownerId,
+      n.body,
+      n.createdAt,
+      n.updatedAt,
+    );
+  }
+  const app = createNotesApp({
+    rootAppId: "home",
+    store,
+    close: () => db.close(),
+  });
+  opened.push(app);
+  return { app, store };
+}
+
 describe("Notes app", () => {
   it("open with no notes tips Create a note", async () => {
-    const app = createNotesApp({
-      rootAppId: "home",
-      store: createMemoryNotesStore(),
-    });
+    const { app } = notesHarness();
     const result = await app.open("/", {}, signedIn());
     expect(result.node.id).toBe(CREATE_NODE_ID);
     expect(result.node.label).toBe("Create a note");
@@ -79,7 +115,7 @@ describe("Notes app", () => {
   });
 
   it("open with notes tips the most recently edited note, not Create", async () => {
-    const store = createMemoryNotesStore({
+    const { app } = notesHarness({
       initial: [
         note({
           id: "old",
@@ -93,7 +129,6 @@ describe("Notes app", () => {
         }),
       ],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     const result = await app.open("/", {}, signedIn());
 
     expect(result.node.id).toBe(noteNodeId("new"));
@@ -132,7 +167,7 @@ describe("Notes app", () => {
   });
 
   it("enter on a note opens an input with the full body", async () => {
-    const store = createMemoryNotesStore({
+    const { app } = notesHarness({
       initial: [
         note({
           id: "n1",
@@ -141,7 +176,6 @@ describe("Notes app", () => {
         }),
       ],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     const list = await app.open("/", {}, signedIn());
     const enter = list.navigationMap[noteNodeId("n1")]?.enter;
     expect(enter).toEqual({
@@ -172,11 +206,10 @@ describe("Notes app", () => {
 
   it("create action writes a note; edit action updates body and updatedAt", async () => {
     let clock = 0;
-    const store = createMemoryNotesStore({
+    const { app, store } = notesHarness({
       idFactory: () => `id-${clock}`,
       now: () => `2026-03-0${++clock}T00:00:00.000Z`,
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     const ctx = signedIn();
 
     const created = await app.refresh(
@@ -208,10 +241,9 @@ describe("Notes app", () => {
   });
 
   it("does not create or update without extras.action", async () => {
-    const store = createMemoryNotesStore({
+    const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     await app.refresh(
       [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
       { inputText: "should not save" },
@@ -221,10 +253,9 @@ describe("Notes app", () => {
   });
 
   it("does not save when action is set but typed text is missing", async () => {
-    const store = createMemoryNotesStore({
+    const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     await app.refresh(
       [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
       { action: true },
@@ -234,10 +265,9 @@ describe("Notes app", () => {
   });
 
   it("stale edit id does not throw; list falls back to the default tip", async () => {
-    const store = createMemoryNotesStore({
+    const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     const result = await app.refresh(
       [{ nodeId: noteNodeId("gone"), label: "Gone", location: null }],
       { action: true, inputText: "nope" },
@@ -248,10 +278,9 @@ describe("Notes app", () => {
   });
 
   it("deep-links resolve create and note paths", async () => {
-    const store = createMemoryNotesStore({
+    const { app } = notesHarness({
       initial: [note({ id: "abc", body: "Hello" })],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     const ctx = signedIn();
     expect((await app.open("/create", {}, ctx)).node.id).toBe(CREATE_NODE_ID);
     expect((await app.open("/note/abc", {}, ctx)).node.id).toBe(noteNodeId("abc"));
@@ -259,8 +288,7 @@ describe("Notes app", () => {
   });
 
   it("signed out is a sign-in node and does not create a note", async () => {
-    const store = createMemoryNotesStore();
-    const app = createNotesApp({ rootAppId: "home", store });
+    const { app, store } = notesHarness();
     const result = await app.open("/", {}, signedOutCtx());
     expect(result.node.label).toBe("Sign in to use Notes.");
     expect(result.navigationMap[result.node.id]?.enter).toEqual(
@@ -279,22 +307,18 @@ describe("Notes app", () => {
   });
 
   it("missing ctx is treated as signed out", async () => {
-    const app = createNotesApp({
-      rootAppId: "home",
-      store: createMemoryNotesStore(),
-    });
+    const { app } = notesHarness();
     const result = await app.open("/");
     expect(result.node.label).toBe("Sign in to use Notes.");
   });
 
   it("lists only the signed-in owner's notes; a forged id is not found", async () => {
-    const store = createMemoryNotesStore({
+    const { app, store } = notesHarness({
       initial: [
         note({ id: "mine", body: "My note", ownerId: OWNER }),
         note({ id: "theirs", body: "Secret other note", ownerId: OTHER }),
       ],
     });
-    const app = createNotesApp({ rootAppId: "home", store });
     const mine = await app.open("/", {}, signedIn(OWNER));
     expect(mine.node.label).toBe("My note");
     expect(mine.warm.some((n) => n.label.includes("Secret"))).toBe(false);

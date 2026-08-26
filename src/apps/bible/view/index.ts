@@ -140,6 +140,9 @@ function applyBookmarkToggle(session: ViewSession, ref: CanonRef): RefreshResult
 function applySearch(session: ViewSession): RefreshResult {
   const query = session.extras.inputText ?? "";
   const version = activeVersion(session);
+  if (!version) {
+    return emptyBibleView(session);
+  }
   if (!session.sessionId) {
     const id = searchEmptyId("none");
     const label = emptySearchLabel(query);
@@ -176,6 +179,9 @@ export function buildBibleView(session: ViewSession, tipId: string): RefreshResu
   }
 
   const version = versionFor(session, parsed);
+  if (!version) {
+    return emptyBibleView(session);
+  }
   const payloads = new Map<string, NodePayload>();
   const fragments: MapFragment[] = [];
 
@@ -335,7 +341,7 @@ function payloadFor(session: ViewSession, parsed: ParsedNode, version: string): 
   }
 }
 
-function versionFor(session: ViewSession, parsed: ParsedNode): string {
+function versionFor(session: ViewSession, parsed: ParsedNode): string | null {
   switch (parsed.kind) {
     case "testament":
     case "book":

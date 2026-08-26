@@ -2,7 +2,7 @@
 
 Gmail is an ordinary server `AppModule`. Gmail REST and MIME parsing live in this app. Tokens come through `ctx.oauth` (the host lockbox). Inbox cache and compose drafts live in `data/apps/gmail.db`. Tokens never go in that file or in a `RefreshResult`.
 
-Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts), [`gmailClient.ts`](gmailClient.ts), [`mime.ts`](mime.ts), [`oauth.ts`](oauth.ts). Tests: [`tests/gmail.test.ts`](../../../tests/gmail.test.ts). Google Cloud and verification research: [`RESEARCH.md`](RESEARCH.md).
+Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts), [`gmailClient.ts`](gmailClient.ts), [`mime.ts`](mime.ts), [`oauth.ts`](oauth.ts). Tests: [`tests/gmail.test.ts`](../../../tests/gmail.test.ts) (in-memory SQLite, same store as production). Google Cloud and verification research: [`RESEARCH.md`](RESEARCH.md).
 
 On the running host this app needs `NOWISEE_LOCKBOX_KEY`, `NOWISEE_OAUTH_GMAIL_CLIENT_ID`, `NOWISEE_OAUTH_GMAIL_CLIENT_SECRET`, and `NOWISEE_ORIGIN`. The OAuth redirect is `{origin}/oauth/callback`. See [`.env.example`](../../../.env.example).
 

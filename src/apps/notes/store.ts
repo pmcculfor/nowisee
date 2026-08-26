@@ -9,71 +9,17 @@ const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migr
 
 export const DEFAULT_NOTES_DB_PATH = "data/apps/notes.db";
 
-type StoredNote = NoteRecord & { readonly ownerId: string };
-
-export type MemoryNotesStoreOptions = {
-  readonly initial?: readonly StoredNote[];
+export type SqliteNotesStoreOptions = {
   /** Injected for tests; defaults to `randomUUID`. */
   readonly idFactory?: () => string;
   /** Injected for tests; defaults to `() => new Date().toISOString()`. */
   readonly now?: () => string;
 };
 
-/**
- * In-memory store for graph tests. Same owner-in-the-query rules as SQLite.
- */
-export function createMemoryNotesStore(
-  options: MemoryNotesStoreOptions = {},
-): NotesStore {
+export function createSqliteNotesStore(db: Db, options: SqliteNotesStoreOptions = {}): NotesStore {
   const idFactory = options.idFactory ?? defaultIdFactory;
   const now = options.now ?? (() => new Date().toISOString());
-  const notes = new Map<string, StoredNote>();
-  for (const n of options.initial ?? []) {
-    notes.set(n.id, n);
-  }
 
-  return {
-    async list(ownerId) {
-      return sortByUpdatedDesc(
-        [...notes.values()].filter((n) => n.ownerId === ownerId).map(toRecord),
-      );
-    },
-    async get(ownerId, id) {
-      const existing = notes.get(id);
-      if (!existing || existing.ownerId !== ownerId) {
-        return null;
-      }
-      return toRecord(existing);
-    },
-    async create(ownerId, body) {
-      const ts = now();
-      const record: StoredNote = {
-        id: idFactory(),
-        ownerId,
-        body,
-        createdAt: ts,
-        updatedAt: ts,
-      };
-      notes.set(record.id, record);
-      return toRecord(record);
-    },
-    async update(ownerId, id, body) {
-      const existing = notes.get(id);
-      if (!existing || existing.ownerId !== ownerId) {
-        return null;
-      }
-      const record: StoredNote = {
-        ...existing,
-        body,
-        updatedAt: now(),
-      };
-      notes.set(id, record);
-      return toRecord(record);
-    },
-  };
-}
-
-export function createSqliteNotesStore(db: Db): NotesStore {
   return {
     async list(ownerId) {
       const rows = db.all<{
@@ -103,8 +49,8 @@ export function createSqliteNotesStore(db: Db): NotesStore {
       return row ? fromRow(row) : null;
     },
     async create(ownerId, body) {
-      const ts = new Date().toISOString();
-      const id = defaultIdFactory();
+      const ts = now();
+      const id = idFactory();
       db.run(
         "INSERT INTO notes (id, owner_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
         id,
@@ -124,7 +70,7 @@ export function createSqliteNotesStore(db: Db): NotesStore {
       if (!existing) {
         return null;
       }
-      const ts = new Date().toISOString();
+      const ts = now();
       db.run(
         "UPDATE notes SET body = ?, updated_at = ? WHERE id = ? AND owner_id = ?",
         body,
@@ -159,15 +105,6 @@ export function startNotesApp(options: StartNotesAppOptions): NotesApp {
   });
 }
 
-export function sortByUpdatedDesc(notes: readonly NoteRecord[]): NoteRecord[] {
-  return [...notes].sort((a, b) => {
-    if (a.updatedAt === b.updatedAt) {
-      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-    }
-    return a.updatedAt < b.updatedAt ? 1 : -1;
-  });
-}
-
 function fromRow(row: {
   id: string;
   body: string;
@@ -179,15 +116,6 @@ function fromRow(row: {
     body: row.body,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-}
-
-function toRecord(note: StoredNote): NoteRecord {
-  return {
-    id: note.id,
-    body: note.body,
-    createdAt: note.createdAt,
-    updatedAt: note.updatedAt,
   };
 }
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type BibleApp } from "../src/apps/bible/index.ts";
+import { type BibleApp, createBibleApp } from "../src/apps/bible/index.ts";
 import {
   createSqliteBibleStore,
   openBibleDatabase,
@@ -442,6 +442,19 @@ describe("Bible app", () => {
   it("RefreshResult survives structuredClone for open", async () => {
     const result = await bible().open("/kjv/Genesis/1/1", {}, signedOut());
     expect(structuredClone(result)).toEqual(result);
+  });
+
+  it("empty versions table is the empty-data node, not a kjv fallback", async () => {
+    const store = createSqliteBibleStore(openBibleDatabase(":memory:"));
+    expect(store.defaultVersionId()).toBeNull();
+    const empty = createBibleApp({ rootAppId: "home", store });
+    try {
+      const result = await empty.open("/", {}, signedOut());
+      expect(result.node.id).toBe("bible:empty");
+      expect(result.node.label).toBe("Bible data is not available.");
+    } finally {
+      empty.close();
+    }
   });
 
   it("URL-opened verse back walks chapter, book, then testament", async () => {

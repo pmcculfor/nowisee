@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { edgeApp, edgeExternal, edgePop } from "../src/app-kit/index.ts";
-import { createGmailApp } from "../src/apps/gmail/index.ts";
+import { createGmailApp, type GmailApp } from "../src/apps/gmail/index.ts";
 import {
   chunkNodeId,
   GMAIL_APP_ID,
@@ -10,7 +10,6 @@ import {
 import { createGmailApiClient } from "../src/apps/gmail/gmailClient.ts";
 import { decodeBase64Url, encodeRawMessage, extractPlainText } from "../src/apps/gmail/mime.ts";
 import {
-  createMemoryGmailStore,
   createSqliteGmailStore,
   openGmailDatabase,
   startGmailApp,
@@ -94,12 +93,25 @@ function fakeClient(options: {
   };
 }
 
+const opened: GmailApp[] = [];
+
+afterEach(() => {
+  for (const gmail of opened) {
+    gmail.close();
+  }
+  opened.length = 0;
+});
+
 function app(client: GmailClient = fakeClient({})) {
-  return createGmailApp({
+  const db = openGmailDatabase(":memory:");
+  const gmail = createGmailApp({
     rootAppId: "home",
-    store: createMemoryGmailStore(),
+    store: createSqliteGmailStore(db),
     client,
+    close: () => db.close(),
   });
+  opened.push(gmail);
+  return gmail;
 }
 
 describe("Gmail app graph", () => {

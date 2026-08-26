@@ -23,6 +23,9 @@ export function parseBiblePath(session: ViewSession, path: string): string {
 
   const pathVersion = parts[0] && store.getVersion(parts[0]) ? parts[0] : null;
   const version = activeVersion(session, pathVersion);
+  if (!version) {
+    return emptyId();
+  }
 
   if (!pathVersion) {
     return firstRootTip(store, version);

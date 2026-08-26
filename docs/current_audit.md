@@ -62,7 +62,6 @@ These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST 
 | Item | Notes |
 |------|--------|
 | Account Settings node | Intentional stub |
-| Commentaries listed from `COMMENTARY_RECORDS`, not the `commentaries` table | Pick one owner (see §3) |
 | Client stubs in `bootstrap.ts` vs `FIRST_PARTY_APPS` | Must match by hand |
 | Spike copy under `public/spikes/` | For GitHub Pages |
 
@@ -72,19 +71,18 @@ These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST 
 
 These are not bugs. They are worth doing when you are already in that file.
 
-1. **Two app catalogs.** `server/firstPartyApps.ts` and `src/shell/bootstrap.ts` both list apps. One pack description both can read, or a tiny client id list next to the pack, would be enough.
-2. **Bible view dispatcher.** `buildBibleView`, `payloadFor`, `versionFor`, and `locationFor` all switch on `ParsedNode`. A single `kind → { addLevel, payload, version, location }` table would match how the catalogs already work.
-3. **Gmail `view.ts`** (~580 lines). Split it the way Bible was split (`connect` / `inbox` / `compose` plus a dispatcher).
-4. **Notes/Gmail dual memory + SQLite stores.** Prefer `:memory:` SQLite in tests (Bible’s pattern) so the two implementations cannot drift.
-5. **Commentaries list vs DB.** The catalog owns listing, but the `commentaries` table is filled and unused for the list. Pick one owner.
-6. **`collectNeighborhood` unused.** Use it, or stop advertising it in MODULES.
-7. **No `RefreshResult` guard.** `createFetchRpc` casts JSON and `applyResult` assumes the shape. A cheap type guard before apply would help. Full validation waits for third-party apps ([`PREPAREDNESS.md`](PREPAREDNESS.md)).
-8. **Display is a DOM class.** Extract the three-method port before a native client.
-9. **Account register-then-sign-in.** A typo of a new email creates an account. That is a product choice; confirm it if you ever want a separate Register path.
-10. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
-11. **Packaging tests are substring checks.** They do not assert Vite’s client graph.
-12. **Host `isEphemeral`.** A `Db` object is always treated as ephemeral (a tests-only footgun).
-13. **Hardcoded `"kjv"` fallback** in `defaultVersionId()`. Last-ditch if `versions` is empty.
+1. **Two app catalogs.** `server/firstPartyApps.ts` and `src/shell/bootstrap.ts` both list apps. Proposed fix: a Vite-safe `{id, label}` list the client loops, plus a test that the host pack’s started ids/labels match. Not done this pass.
+2. **Bible view dispatcher.** `buildBibleView`, `payloadFor`, `versionFor`, and `locationFor` all switch on `ParsedNode`. A single `kind → { addLevel, payload, version, location }` table would match how the catalogs already work. Not done this pass (explained; awaiting a decision).
+3. **Gmail `view.ts`** (~580 lines). Leave as one file for now; split later if it grows.
+4. **`collectNeighborhood` unused.** Keep as a seam; apps may use it later.
+5. **No `RefreshResult` guard.** `createFetchRpc` casts JSON and `applyResult` assumes the shape. A cheap type guard before apply would help. Full validation waits for third-party apps ([`PREPAREDNESS.md`](PREPAREDNESS.md)). Not done this pass (explained; awaiting a decision).
+6. **Display is a DOM class.** Leave for now. Extract the three-method port before a native client.
+7. **Account register-then-sign-in.** Leave for now. A later emailed sign-in code would replace passwords.
+8. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
+9. **Packaging tests are substring checks.** They do not assert Vite’s client graph. Not done this pass (explained; awaiting a decision).
+10. **Host `isEphemeral`.** A `Db` object is always treated as ephemeral (a tests-only footgun). Not done this pass (explained; awaiting a decision).
+
+Done this pass: Notes/Gmail tests use `:memory:` SQLite (one store implementation); commentary listing reads the `commentaries` table; `defaultVersionId()` returns `null` when `versions` is empty (empty-data node, no `"kjv"` string).
 
 The status channel (busy, dead-end, and failure all silent) is deferred, not an elegance item — see [`PREPAREDNESS.md`](PREPAREDNESS.md). It is the deferred item that most affects real users.
 
