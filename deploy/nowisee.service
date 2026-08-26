@@ -1,0 +1,16 @@
+[Unit]
+Description=Nowisee
+After=network.target
+
+[Service]
+Type=simple
+User=nowisee
+Group=nowisee
+WorkingDirectory=/var/www/nowisee
+EnvironmentFile=/etc/nowisee/nowisee.env
+ExecStart=/usr/bin/node --experimental-strip-types server/index.ts
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

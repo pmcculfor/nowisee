@@ -6,6 +6,7 @@ import type {
   IdentityCapability,
   LockboxCapability,
   OAuthCapability,
+  RequestSignInOutcome,
 } from "../../src/core/types.ts";
 import { bindLockbox } from "../lockbox/capability.ts";
 import type { LockboxService } from "../lockbox/service.ts";
@@ -33,11 +34,11 @@ export function bindIdentity(
   }
 
   return {
-    async register(email: string, password: string) {
-      return take(await service.register(sessionId, email, password));
+    async requestSignIn(email: string): Promise<RequestSignInOutcome> {
+      return service.requestSignIn(sessionId, email);
     },
-    async signIn(email: string, password: string) {
-      return take(await service.signIn(sessionId, email, password));
+    async verifySignIn(code: string) {
+      return take(await service.verifySignIn(sessionId, code));
     },
     async signOut() {
       await service.signOut(sessionId);

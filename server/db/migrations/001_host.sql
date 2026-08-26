@@ -4,12 +4,6 @@
 CREATE TABLE users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
-  password_algo TEXT NOT NULL,
-  password_n INTEGER NOT NULL,
-  password_r INTEGER NOT NULL,
-  password_p INTEGER NOT NULL,
-  password_salt BLOB NOT NULL,
-  password_hash BLOB NOT NULL,
   created_at INTEGER NOT NULL
 );
 
@@ -26,6 +20,21 @@ CREATE TABLE sessions (
 );
 
 CREATE INDEX sessions_user ON sessions (user_id);
+
+CREATE TABLE login_challenges (
+  session_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempt_count INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE login_throttles (
+  key TEXT PRIMARY KEY,
+  window_start INTEGER NOT NULL,
+  count INTEGER NOT NULL
+);
 
 CREATE TABLE lockbox (
   user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,

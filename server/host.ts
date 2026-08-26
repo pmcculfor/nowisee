@@ -12,9 +12,15 @@ import type { Db } from "./db/index.ts";
 import { openDatabase } from "./db/index.ts";
 import { AppNotFoundError } from "./errors.ts";
 import { buildAppContext, type CookieSlot } from "./identity/context.ts";
-import type { ScryptParams } from "./identity/hash.ts";
 import { createIdentityService, type IdentityService } from "./identity/service.ts";
 import { lockboxKeyringFromEnv, type LockboxKeyring } from "./lockbox/crypto.ts";
+import {
+  createSilentMailer,
+  DEV_OTP_PEPPER,
+  mailerFromEnv,
+  otpPepperFromEnv,
+  type Mailer,
+} from "./mail/index.ts";
 import { createLockboxService, type LockboxService } from "./lockbox/service.ts";
 import { createOAuthBroker, type OAuthBroker } from "./oauth/broker.ts";
 import type { OAuthProviderConfig } from "./oauth/providers.ts";
@@ -40,10 +46,10 @@ export type AppHostOptions = {
   readonly oauthProviders?: readonly OAuthProviderConfig[];
   readonly oauthSecrets?: OAuthSecrets;
   readonly fetch?: typeof fetch;
-  readonly scrypt?: ScryptParams;
-  readonly hashConcurrency?: number;
   readonly extraApps?: readonly AppModule[];
   readonly configuredOrigin?: string;
+  readonly mailer?: Mailer;
+  readonly otpPepper?: Uint8Array;
 };
 
 export type NowiseeHost = {
@@ -97,10 +103,17 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const ephemeral = options.ephemeral ?? true;
   const db = resolveDb(options.db);
 
+  const mailer =
+    options.mailer ??
+    (ephemeral
+      ? createSilentMailer()
+      : mailerFromEnv({ configuredOrigin: options.configuredOrigin, fetch: options.fetch }));
+  const otpPepper =
+    options.otpPepper ?? (ephemeral ? DEV_OTP_PEPPER : otpPepperFromEnv());
   const identity = createIdentityService({
     db,
-    scrypt: options.scrypt,
-    hashConcurrency: options.hashConcurrency,
+    mailer,
+    otpPepper,
     allowRegistration: options.allowRegistration,
   });
 

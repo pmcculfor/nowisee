@@ -1,11 +1,11 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). First-party apps run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). Native clients: [`PREPAREDNESS.md`](PREPAREDNESS.md). Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). Email sign-in codes **landed** (August 2026). First-party apps run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `login_challenges` / `login_throttles` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). Native clients: [`PREPAREDNESS.md`](PREPAREDNESS.md). Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
 
 **Owner deltas applied in this slice**
 
 - Registration is **open** by default. There is no invite code. `allowRegistration` on the host can close it later; the default is on because this product is not advertised.
-- Combined sign-in / register: one option, then email, then a secret password field, then “Signing in…”, then “You are signed in as …”. Signed-in Account opens on Settings (a dead-end placeholder) with Sign out as the next sibling.
+- Combined sign-in / register: one option, then email, then a six-character sign-in code sent to that email, then “Signing in…”, then “You are signed in as …”. Signed-in Account opens on Settings (a dead-end placeholder) with Sign out as the next sibling.
 - Secret input is a `secret` flag on the existing `input` kind, not a new `NodeKind`.
 - SQLite on a host that can keep a file; `npm start` serves the SPA and `/api` together.
 
@@ -31,10 +31,10 @@ These are **not** the same store. That is not a hack; they do different jobs.
 |---|-----------------|---------------------------|
 | Purpose | Prove who is using Nowisee | Remember a token an **app** must use later |
 | When it is needed | **Before** any app runs, on every request | After we already know the user, inside one app |
-| What we store | Email, **one-way password hash**, session cookie | Encrypted tokens we **must be able to give back** |
+| What we store | Email, hashed sign-in challenge, session cookie | Encrypted tokens we **must be able to give back** |
 | Who sees it | Identity service + the browser cookie (HttpOnly) | That app’s **server** code only, never the page |
 
-You cannot put the Nowisee password in the secret lockbox. Opening the lockbox requires knowing which user it is; the password is how we know. Also a password must be hashed (checkable, not recoverable). OAuth refresh tokens must be decryptable. One box cannot honestly do both.
+You cannot put a Nowisee sign-in code in the secret lockbox. Opening the lockbox requires knowing which user it is; the code is how we know for that request, and the session cookie is how we know afterwards. Codes are hashed (checkable, not recoverable) and short-lived. OAuth refresh tokens must be decryptable. One box cannot honestly do both.
 
 Neither store belongs to the Account app. Who owns what is §6.
 
@@ -94,7 +94,7 @@ First-party mail is the first consumer (`ctx.oauth`).
 - **App corpora (landed):** each app seeds its own SQLite file. The host does not import those files. Example: Bible — [`src/apps/bible/README.md`](../src/apps/bible/README.md).
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
 - **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`001_host.sql`](../server/db/migrations/001_host.sql)).
-- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy.
+- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Production origin: **https://nowisee.app**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS at the reverse proxy (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN=https://nowisee.app` is the CSRF origin when behind a proxy. Env: [`.env.production.example`](../.env.production.example).
 
 ---
 
@@ -104,7 +104,7 @@ Login, cookies, Account, and SQLite were **one slice**. All five steps have land
 
 1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
 2. **Database.** `server/db/` — host identity, lockbox, and OAuth state (`001_host.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Each app opens its own file.
-3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
+3. **Identity service.** `server/identity/` — email, sign-in codes, sessions, `resolve` / `requestSignIn` / `verifySignIn` / `signOut`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
 
@@ -123,10 +123,10 @@ The split needs one distinction: **identity** — can this request prove it belo
 | Job | Owner |
 |-----|-------|
 | `users` and `sessions` tables and their migrations | **Identity service** |
-| Hash a password; verify a candidate in constant time | **Identity service** |
+| Hash a sign-in code; verify a candidate in constant time | **Identity service** |
 | Mint, rotate, expire, and revoke session tokens | **Identity service** |
 | Resolve a token to `{ sessionId, userId }` | **Identity service** |
-| Email and password rules (normalization, uniqueness, length) | **Identity service**, returning a structured reason — never prose |
+| Email rules and code format (normalization, uniqueness, throttle) | **Identity service**, returning a structured reason — never prose |
 | Read the cookie off the request; write `Set-Cookie` | **Host HTTP layer** |
 | Which apps may receive the identity capability | **Host config** |
 | Sign-in / register / sign-out node graph, wording, error text | **Account app** |
@@ -169,18 +169,22 @@ export interface IdentityService {
     issuedToken?: { value: string; expiresAt: number };
   }>;
 
-  register(sessionId: string, email: string, password: string): Promise<AuthOutcome>;
-  signIn(sessionId: string, email: string, password: string): Promise<AuthOutcome>;
+  requestSignIn(sessionId: string, email: string): Promise<RequestSignInOutcome>;
+  verifySignIn(sessionId: string, code: string): Promise<AuthOutcome>;
   signOut(sessionId: string): Promise<{ issuedToken: null }>;
 }
 
 /** Structured, not prose — the Account app owns the words the user hears. */
+export type RequestSignInOutcome =
+  | { ok: true }
+  | { ok: false; reason: "invalid-credentials" | "throttled" };
+
 export type AuthOutcome =
   | { ok: true; userId: string }
-  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" | "registration-closed" };
+  | { ok: false; reason: "invalid-credentials" };
 ```
 
-The host calls `resolve` once per request and sets a cookie when `issuedToken` comes back. The Account app calls `signIn` / `register` through `ctx.identity` (which returns `AuthOutcome` without the token) and renders the outcome. The HTTP layer owns `Set-Cookie`. Neither does the other's job. The service also exposes `changePassword`, which deletes every session row for that user and issues a new token.
+The host calls `resolve` once per request and sets a cookie when `issuedToken` comes back. The Account app calls `requestSignIn` / `verifySignIn` through `ctx.identity` (which never sees the session token) and renders the outcome. Only a successful `verifySignIn` rotates the cookie. The HTTP layer owns `Set-Cookie`. Neither does the other's job.
 
 ---
 
@@ -197,7 +201,6 @@ The host calls `resolve` once per request and sets a cookie when `issuedToken` c
 | Expiry | Idle **and** absolute, both enforced server-side | A cookie `Max-Age` is a client hint, not a guarantee |
 | On successful sign-in | Always mint a **new** token | Prevents session fixation: an attacker who plants a known cookie value before login does not end up sharing the session. This applies to upgrading an anonymous session too (§11.2) |
 | On sign-out | Delete the row, then clear the cookie | Revocation is real because the token is opaque and looked up, not self-describing |
-| On password change | Delete **all** of that user's session rows | "Someone has my account" has an answer |
 
 Opaque tokens rather than JWTs: we already have a database on the request path, so we get real revocation for free, and a session table is the thing that makes "sign out everywhere" possible.
 
@@ -219,29 +222,35 @@ A double-submit CSRF token is unnecessary while everything is one origin. If a s
 
 ---
 
-## 8. Passwords (normative)
+## 8. Sign-in codes (normative)
 
-Owned by the identity service (§6). Argon2id would be the first choice, but it needs a native dependency and this repo deliberately has **zero** runtime dependencies. Node's built-in `crypto.scrypt` is the agreed choice; it keeps that property and is OWASP's named fallback.
+Owned by the identity service (§6). The user proves they can read mail at that address. After a successful check, the same session cookie as §7 is the continuing credential.
+
+A host mailer (`server/mail/`) sends the plaintext code. Drivers: `console` (localhost only) and `resend` (HTTPS `fetch`, no npm dependency). Account never sends mail. The Gmail app is not the login mailer.
 
 | Rule | Value |
 |------|-------|
-| Algorithm | `crypto.scrypt` from `node:crypto` |
-| Parameters | `N = 2^17`, `r = 8`, `p = 1` (OWASP floor as of 2026; ~128 MiB and roughly a quarter second per hash) |
-| `maxmem` | Must be raised past the 32 MiB default, or the call throws — 128·N·r is 128 MiB, so set 256 MiB |
-| Salt | 16 random bytes per user, stored alongside |
-| Stored record | Algorithm name, parameters, salt, hash — so parameters can be raised later and old records rehashed on next successful sign-in |
+| Code | Three lowercase letters `a-z`, then three digits `0-9` (e.g. `kfm472`). Full alphabet; no letter/digit exclusions |
+| Entropy | `26³ × 10³` ≈ 17.6 million possibilities |
+| Generation | `crypto.randomInt` |
+| Stored record | HMAC-SHA256 of the compact code with a 32-byte pepper (`NOWISEE_OTP_PEPPER`) |
 | Comparison | `crypto.timingSafeEqual`, never `===` |
+| TTL | 10 minutes; one live challenge per session; one-use |
+| Attempts | Five failed verifies delete the challenge |
 | Email | Lowercased and trimmed on write, unique index |
-| Failure reason | One `invalid-credentials` outcome for both "no such email" and "wrong password" |
-| Concurrency | Cap simultaneous hashes (a small queue) |
+| Verify input | Strip spaces/punctuation, lowercase, then require `[a-z]{3}[0-9]{3}` |
+| Mail body | Speaks pieces and compact form: `k f m 4 7 2` / `(that is kfm472)` |
+| Failure reason | One `invalid-credentials` for a bad/unknown code, an expired challenge, and closed registration of an unknown email |
+| Throttle | 1 request / 30s per session; 5 / hour per email; 10 / hour per session. Over limit → `throttled` |
+| Enumeration | `requestSignIn` returns `{ ok: true }` for a well-formed email that is not throttled, including unknown addresses when registration is closed (no mail is sent then) |
 
-The concurrency cap is not optional bookkeeping: at 128 MiB and ~250 ms each, a few dozen simultaneous sign-in attempts are a memory and CPU exhaustion attack on their own. Rate limiting proper is deferred (§13), but the cap ships with the hashing because the hashing is what creates the exposure.
+**Registration is open by default.** Owner decision, August 2026: this product is not advertised, so anyone who finds it may register. There is no invite code. `allowRegistration` on the host (default `true`) can close it later without a schema change. Closed registration plus an unknown email: no mail, no challenge, verify fails with `invalid-credentials`. First successful verify of a new address creates the user — email is verified by construction.
 
-**Registration is open by default.** Owner decision, August 2026: this product is not advertised, so anyone who finds it may register. There is no invite code. `allowRegistration` on the host (default `true`) can close it later without a schema change; closed registration returns `registration-closed`. Rate limiting and email verification remain deferred (§13).
+`requestSignIn` does not rotate the session cookie. Only `verifySignIn` does.
 
 ### Secret input mode — landed
 
-`secret` on `kind: "input"` makes Display render `type="password"` and honest `autocomplete` tokens (`username`, `current-password`, `new-password`). It is a flag on the existing kind, **not** a new `NodeKind` (unknown kinds stay undefined until response validation — [`PREPAREDNESS.md`](PREPAREDNESS.md)). Input **leave** is unchanged: Done → `enter`, Cancel → `back`, no Escape exit.
+`secret` on `kind: "input"` makes Display render `type="password"` and honest `autocomplete` tokens (`username`, `current-password`, `new-password`). It is a flag on the existing kind, **not** a new `NodeKind` (unknown kinds stay undefined until response validation — [`PREPAREDNESS.md`](PREPAREDNESS.md)). Login does not use it: the sign-in code is a normal text input. Input **leave** is unchanged: Done → `enter`, Cancel → `back`, no Escape exit.
 
 ---
 
@@ -349,7 +358,7 @@ The tempting shortcut is to mint an anonymous *user id* and let it flow through 
 
 An app that wants to be useful before sign-up scopes to `sessionId` and migrates deliberately at sign-in, owning its own merge rule. An app that needs an account checks `userId` and falls back to §10. `sessionId` is server-side only: it must never appear in a node id, a label, or a URL.
 
-Email and password hash belong to the identity service (§6), not to an app's schema — the host must resolve cookie → user on every request without reaching into app tables. What the Account app may keep against `sessionId` is *in-progress* flow state, such as the email typed on the previous screen, which is the problem anonymous sessions were needed to solve: it cannot live in a node label (visible, spoken, cached, and in the stack), a node id (client-controlled, ends up in the URL), or `NodePayload.data` (warm payloads do not round-trip; stack entries carry only `nodeId`, `label`, `location`).
+Email and sign-in challenges belong to the identity service (§6), not to an app's schema — the host must resolve cookie → user on every request without reaching into app tables. What the Account app may keep against `sessionId` is *in-progress* flow state, such as the email typed on the previous screen, which is the problem anonymous sessions were needed to solve: it cannot live in a node label (visible, spoken, cached, and in the stack), a node id (client-controlled, ends up in the URL), or `NodePayload.data` (warm payloads do not round-trip; stack entries carry only `nodeId`, `label`, `location`).
 
 At sign-in, attach the `userId` and **rotate the token** (§7). Keeping the same session row across that upgrade is what makes migrating `sessionId`-scoped data trivial; the fixation rule governs the token the browser holds, not the row behind it.
 
@@ -357,14 +366,14 @@ Note the privacy consequence to decide alongside this: every visitor now receive
 
 ### 11.3 How sign-in establishes the session — decided
 
-**Owner decision, August 2026.** The Account app receives `ctx.identity`, the capability from §6. `await ctx.identity.signIn(email, password)` returns an `AuthOutcome`, the app renders it, and the HTTP layer sets the cookie on that response because the outcome carried a new token.
+**Owner decision, August 2026.** The Account app receives `ctx.identity`, the capability from §6. `await ctx.identity.requestSignIn(email)` sends (or dummy-accepts) a code. `await ctx.identity.verifySignIn(code)` returns an `AuthOutcome`, the app renders it, and the HTTP layer sets the cookie on that response because the outcome carried a new token.
 
-Why a capability rather than a declarative field like `clipboardText`: the app must **render the outcome** — "signed in" or "that password did not match" — in the same response, and a declarative field is only read *after* the app has already answered. The app needs the result before it can build its node.
+Why a capability rather than a declarative field like `clipboardText`: the app must **render the outcome** — "we sent a code", "signed in", or "that code did not match" — in the same response, and a declarative field is only read *after* the app has already answered. The app needs the result before it can build its node.
 
-**How the HTTP layer learns a token was issued.** The host constructs `ctx.identity` **per request**, bound to that request's `sessionId` and to a pending-cookie slot the HTTP layer owns. Whenever the service issues or clears a token — anonymous creation, sign-in rotation, sign-out — it records that in the slot. After the app returns, successfully or not, the HTTP layer reads the slot and emits at most one `Set-Cookie`. Building the capability per request also means an app cannot stash it for later and cannot act for a different session.
+**How the HTTP layer learns a token was issued.** The host constructs `ctx.identity` **per request**, bound to that request's `sessionId` and to a pending-cookie slot the HTTP layer owns. Whenever the service issues or clears a token — anonymous creation, sign-in rotation, sign-out — it records that in the slot. After the app returns, successfully or not, the HTTP layer reads the slot and emits at most one `Set-Cookie`. Building the capability per request also means an app cannot stash it for later and cannot act for a different session. `requestSignIn` does not write the slot.
 
 - This does not break the app boundary. The plain-data rule governs payloads; `PlatformContext` already sanctions method-bearing capabilities (`clipboard.writeText`). Because the call is already async, a future worker or sandbox host turns it into a message round-trip with no contract change.
-- The app never sees a password hash, never writes the `sessions` table, and never names a `userId` it was not handed. Credentials in, structured outcome out.
+- The app never sees a code hash, never writes the `sessions` table, and never names a `userId` it was not handed. Email or code in, structured outcome out.
 - **Only apps the host allows receive `ctx.identity`** (today: the Account app). A third-party app must never be able to mint a session — this is the one capability that would be catastrophic to hand out by default.
 - Sign-out is the same capability, and it is what performs the row deletion §7 requires.
 
@@ -375,9 +384,10 @@ Why a capability rather than a declarative field like `clipboardText`: the app m
 Identity-relevant rules (the Account app implements them; they are not Account-only accidents):
 
 - Typed email is stored against `ctx.sessionId` in that app’s flow table (never in a node id, label, or URL).
-- Authenticate tries `register`, then `signIn` on `email-taken`. Failed auth is one unsuccessful message. Failure `pop`s so the stack still has a single password input.
+- Email Done calls `requestSignIn`. A well-formed request lands on “We sent a sign-in code…”. Throttled and invalid requests are distinct Account sentences that `pop` toward the email input.
+- Code Done calls `verifySignIn`. Failed auth is one unsuccessful message. Failure `pop`s so the stack still has a single code input.
 - Status nodes return `location: null`. Sign-out is an action to a status node whose enter/back are `app` edges to Home, which clears the client cache.
-- The password arrives in `extras.inputText` on that action call. The host never logs `/api` request bodies.
+- The code arrives in `extras.inputText` on that action call. The host never logs `/api` request bodies.
 
 ---
 
@@ -391,7 +401,7 @@ Identity-relevant rules (the Account app implements them; they are not Account-o
 | Pragmas | `foreign_keys = ON`, a `busy_timeout` |
 | Schema changes | A numbered migration runner per database — a `migrations` table plus ordered files, applied in a transaction when *that* file is opened. Not scattered `CREATE TABLE IF NOT EXISTS` |
 | Backups | Required before real user data. "A file on one machine with a disk" is also a file you can lose |
-| Ownership | `users` and `sessions` belong to the **identity service** (§6) on the **host** file. `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core per-app repository. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
+| Ownership | `users`, `sessions`, `login_challenges`, and `login_throttles` belong to the **identity service** (§6) on the **host** file. `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core per-app repository. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
 
 ---
 
@@ -401,12 +411,13 @@ Recorded so these are decisions rather than oversights. None of them change the 
 
 | Deferred | Why it is safe for now | What makes it urgent |
 |----------|------------------------|----------------------|
-| **Rate limiting / brute-force protection** on sign-in | Registration is open but the product is unadvertised; the §8 concurrency cap covers the memory-exhaustion half | Public discovery or abuse. Per-account throttling belongs to the identity service, per-IP to the HTTP layer. **CAPTCHA is not an option for this audience** |
+| **Rate limiting on sign-in codes** | **Landed** for challenges (§8). Per-IP limits at the HTTP layer remain deferred | Public discovery still makes per-IP useful. **CAPTCHA is not an option for this audience** |
 | **Request body size limit** on `/api` | **Landed** — 1 MiB in `server/readBody.ts` | — |
 | **`Cache-Control: no-store` on `/api` responses** | **Landed** on the session HTTP pipeline | — |
 | **Status channel** (busy vs dead-end vs failure) | Already a known gap in [`PREPAREDNESS.md`](PREPAREDNESS.md) | After §10, transport failure is the only silent case left — but it is still silent, and sign-in is when people notice |
-| **Password reset** | No reset flow means "contact the owner" for a small user base | It needs an email sender, which is a new dependency and a new cost. Budget it before sign-up is public |
-| **Email verification** | Same dependency as reset | Public sign-up, or anything that mails the user |
+| **Password reset** | **Superseded** — there is no password | — |
+| **Email verification** | **Superseded** — a successful code proves the address | — |
+| **Sign out everywhere** | Settings is still a placeholder | A later Settings action can delete every session row for that user |
 | **Account deletion and data export** | Notes exist but the user base is still private | Real users in a real jurisdiction |
 | **Server-held stacks** | Set aside: rapid keys stay local because of the client map + warm cache ([`PREPAREDNESS.md`](PREPAREDNESS.md)) | Untrusted third-party apps, or cross-device continuity |
 

@@ -8,7 +8,7 @@ Core never sees a database. There is no `ctx.db`, and there is no client `platfo
 
 | Kind | Example | Lives in | Owner | Scoped by |
 |------|---------|----------|-------|-----------|
-| **Identity** | email, password hash, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
+| **Identity** | email, sign-in challenges, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
 | **Secrets** | OAuth tokens | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
 | **App data** | verses, account flow, notes | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
 | **Large user files** | attachments (later) | Files next to that app's data, not the host db | That app (HTTP upload may pass through the host) | Owner on the metadata row |
@@ -41,7 +41,7 @@ Apps own their columns, indexes, and when they read or write. Migrations are num
 
 For user data, put the **owner in the query every time** — [`IDENTITY.md`](IDENTITY.md) §9. `ctx.userId` comes from the cookie only. A missing or other-user row is “not found.”
 
-Do not put passwords (identity), OAuth tokens (lockbox), or huge binaries (files) in an app database. Do not invent a host-wide key-value store. Each app owns its store interface, and the host does not inject stores.
+Do not put sign-in codes (identity), OAuth tokens (lockbox), or huge binaries (files) in an app database. Do not invent a host-wide key-value store. Each app owns its store interface, and the host does not inject stores.
 
 ## Secrets lockbox — landed
 

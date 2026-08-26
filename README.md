@@ -12,9 +12,11 @@ npm test
 npm run dev          # http://localhost:5173/  (Vite + same-origin /api)
 ```
 
-For production, `npm run build && npm start` serves `dist/` and `/api` together.
+For production, `npm run build && npm start` serves `dist/` and `/api` together. The public origin is **https://nowisee.app**.
 
-Copy [`.env.example`](.env.example) to `.env` if you need Gmail OAuth. Tests use in-memory SQLite and need no secrets. The running host grants Gmail lockbox and OAuth, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`.
+Copy [`.env.example`](.env.example) to `.env` for local Vite (`npm run dev` loads it). Tests use in-memory SQLite and need no secrets. The running host grants Gmail lockbox and OAuth, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Sign-in codes on a non-localhost origin also need Resend vars.
+
+**Production env:** Node does not read `.env` files. Put secrets in `/etc/nowisee/nowisee.env` (mode `640`, `root:nowisee`) from [`.env.production.example`](.env.production.example). The unit [`deploy/nowisee.service`](deploy/nowisee.service) loads that file with `EnvironmentFile=` — do not paste keys into the unit. OAuth redirect: `https://nowisee.app/oauth/callback`. If a reverse proxy terminates TLS, leave `NOWISEE_TLS_*` unset and keep `PORT=3000`.
 
 On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an input node, type in the field (Enter inserts a newline); **Done** commits and **Cancel** abandons. Tab and Escape are unbound.
 

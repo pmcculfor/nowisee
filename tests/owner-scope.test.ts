@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../server/db/index.ts";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
-import { SCRYPT_TEST } from "../server/identity/hash.ts";
-import { NODE } from "../src/apps/account/ids.ts";
 import type { AppModule, RefreshResult } from "../src/core/types.ts";
+import { capturingMailer, signInForTest } from "./helpers/signIn.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -18,10 +17,6 @@ function headers(cookie?: string): Record<string, string> {
     h.cookie = cookie;
   }
   return h;
-}
-
-function cookieFrom(setCookie: string | undefined): string | undefined {
-  return setCookie?.split(";")[0];
 }
 
 function vaultApp(): AppModule {
@@ -79,51 +74,17 @@ describe("owner-scoped stack ids", () => {
     ctxDb.exec(
       "CREATE TABLE vault_items (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, body TEXT NOT NULL)",
     );
+    const mailer = capturingMailer();
     h = createNowiseeHost({
       db: ctxDb,
       ephemeral: true,
-      scrypt: SCRYPT_TEST,
+      mailer,
       configuredOrigin: ORIGIN,
       extraApps: [vaultApp()],
     });
 
-    async function register(email: string): Promise<string> {
-      const opened = await handleSessionHttp(h, {
-        method: "POST",
-        url: "/api/apps/account/open",
-        headers: headers(),
-        body: { path: "/" },
-      });
-      const cookie = cookieFrom(opened.headers?.["Set-Cookie"])!;
-      await handleSessionHttp(h, {
-        method: "POST",
-        url: "/api/apps/account/refresh",
-        headers: headers(cookie),
-        body: {
-          stack: [
-            {
-              nodeId: NODE.passwordPrompt,
-              label: "Please enter your password on the next screen.",
-              location: null,
-            },
-          ],
-          extras: { action: true, inputText: email },
-        },
-      });
-      const done = await handleSessionHttp(h, {
-        method: "POST",
-        url: "/api/apps/account/refresh",
-        headers: headers(cookie),
-        body: {
-          stack: [{ nodeId: NODE.auth, label: "Signing in…", location: null }],
-          extras: { action: true, inputText: "password1" },
-        },
-      });
-      return cookieFrom(done.headers?.["Set-Cookie"]) ?? cookie;
-    }
-
-    const cookieA = await register("owner-a@example.com");
-    const cookieB = await register("owner-b@example.com");
+    const cookieA = (await signInForTest(h, mailer, "owner-a@example.com")).cookie;
+    await signInForTest(h, mailer, "owner-b@example.com");
 
     const users = ctxDb.all<{ id: string; email: string }>("SELECT id, email FROM users ORDER BY email");
     expect(users).toHaveLength(2);

@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, Plugin } from "vite";
 import { createNowiseeHost, type NowiseeHost } from "./host.ts";
-import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
@@ -21,7 +20,6 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
     host ??= createNowiseeHost({
       db: options.dbPath ?? process.env.NOWISEE_DB ?? "data/nowisee.db",
       ephemeral: false,
-      scrypt: SCRYPT_PRODUCTION,
       configuredOrigin: process.env.NOWISEE_ORIGIN,
     });
     return host;

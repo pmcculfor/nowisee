@@ -6,9 +6,13 @@
  * Environment:
  *   PORT                         listen port (default 3000)
  *   NOWISEE_DB                   host identity SQLite file (default data/nowisee.db)
- *   NOWISEE_ORIGIN               public origin for CSRF, e.g. https://example.com
+ *   NOWISEE_ORIGIN               public origin for CSRF, e.g. https://nowisee.app
  *   NOWISEE_LOCKBOX_KEY          32-byte AES key, base64 (required if lockbox/OAuth apps are granted)
  *   NOWISEE_LOCKBOX_KEY_ID       optional key id (default v1)
+ *   NOWISEE_MAIL_DRIVER          console (localhost) or resend
+ *   NOWISEE_MAIL_FROM            From: header for Resend
+ *   NOWISEE_RESEND_API_KEY       Resend API key
+ *   NOWISEE_OTP_PEPPER           32-byte HMAC key, base64 (required for resend)
  *   NOWISEE_OAUTH_<APP>_CLIENT_ID / _CLIENT_SECRET  OAuth app credentials (not lockbox)
  *   NOWISEE_TLS_CERT             optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
  *   NOWISEE_TLS_KEY              optional PEM path
@@ -21,7 +25,6 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { createNowiseeHost } from "./host.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
-import { SCRYPT_PRODUCTION } from "./identity/hash.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
@@ -46,7 +49,6 @@ const MIME: Record<string, string> = {
 const host = createNowiseeHost({
   db: DB_PATH,
   ephemeral: false,
-  scrypt: SCRYPT_PRODUCTION,
   configuredOrigin: process.env.NOWISEE_ORIGIN,
 });
 

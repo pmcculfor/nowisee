@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SESSION_COOKIE_NAME } from "../server/cookie.ts";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
-import { SCRYPT_TEST } from "../server/identity/hash.ts";
 import {
   associatedData,
   open,
@@ -11,6 +9,7 @@ import {
 } from "../server/lockbox/crypto.ts";
 import { LockboxError, MAX_BLOB_BYTES } from "../server/lockbox/errors.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { capturingMailer, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -42,13 +41,16 @@ function emptyRefresh(appId: string): RefreshResult {
   };
 }
 
+let currentMailer: CapturingMailer;
+
 function makeHost(extra?: {
   extraApps?: AppModule[];
   lockboxAppIds?: string[];
   lockboxKeys?: LockboxKeyring;
 }): NowiseeHost {
+  currentMailer = capturingMailer();
   return createNowiseeHost({
-    scrypt: SCRYPT_TEST,
+    mailer: currentMailer,
     configuredOrigin: ORIGIN,
     extraApps: extra?.extraApps,
     lockboxAppIds: extra?.lockboxAppIds,
@@ -72,16 +74,7 @@ async function signIn(
   host: NowiseeHost,
   email = "ada@example.com",
 ): Promise<{ cookie: string; userId: string }> {
-  const anon = await host.identity.resolve(null);
-  const registered = await host.identity.register(anon.sessionId, email, "password12");
-  expect(registered.ok).toBe(true);
-  if (!registered.ok) {
-    throw new Error("register failed");
-  }
-  return {
-    cookie: `${SESSION_COOKIE_NAME}=${registered.issuedToken.value}`,
-    userId: registered.userId,
-  };
+  return signInForTest(host, currentMailer, email);
 }
 
 

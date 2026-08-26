@@ -194,7 +194,7 @@ function parseStack(
 
 /**
  * Full /api pipeline: CSRF, session cookie, ctx, at most one Set-Cookie.
- * Never logs the body — passwords arrive in extras.inputText.
+ * Never logs the body — emails and sign-in codes arrive in extras.inputText.
  */
 export async function handleSessionHttp(
   host: NowiseeHost,
