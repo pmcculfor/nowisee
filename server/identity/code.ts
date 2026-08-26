@@ -27,7 +27,7 @@ export function normalizeSignInCode(raw: string): string | null {
 
 export function signInCodeEmailText(code: string): string {
   const spoken = code.split("").join(" ");
-  return `Your Nowisee sign-in code is ${spoken}\n(that is ${code}). It expires in 10 minutes.\n`;
+  return `Your Now I See sign-in code is ${spoken}\n(that is ${code}). It expires in 10 minutes.\n`;
 }
 
 export function extractSignInCodeFromEmailText(text: string): string | null {

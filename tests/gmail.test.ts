@@ -161,7 +161,7 @@ describe("Gmail app graph", () => {
     );
     const opened = await withMail.open("/", {}, signedIn(oauth));
     expect(opened.node.id).toBe(messageNodeId("m1"));
-    expect(opened.node.label).toBe("Ada — Hello");
+    expect(opened.node.label).toBe("Hello. From Ada");
     expect(opened.navigationMap[messageNodeId("m1")]?.prev).toMatchObject({
       toNodeId: NODE.compose,
     });

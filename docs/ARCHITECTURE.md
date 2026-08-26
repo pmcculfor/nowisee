@@ -42,7 +42,7 @@ server/index.ts   production entry (SPA + /api)
 
 ### Environment
 
-See [`.env.example`](../.env.example) (local) and [`.env.production.example`](../.env.production.example) (https://nowisee.app). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service)).
+See [`.env.example`](../.env.example) (local) and [`.env.production.example`](../.env.production.example) (https://nowisee.app). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
 
 | Variable | Role |
 |----------|------|

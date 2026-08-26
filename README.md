@@ -12,7 +12,7 @@ npm test
 npm run dev          # http://localhost:5173/  (Vite + same-origin /api)
 ```
 
-For production, `npm run build && npm start` serves `dist/` and `/api` together. The public origin is **https://nowisee.app**.
+For production, `npm run build && npm start` serves `dist/` and `/api` together. The public origin is **https://nowisee.app**. Droplet pull/restart: [`deploy/README.md`](deploy/README.md).
 
 Copy [`.env.example`](.env.example) to `.env` for local Vite (`npm run dev` loads it). Tests use in-memory SQLite and need no secrets. The running host grants Gmail lockbox and OAuth, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Sign-in codes on a non-localhost origin also need Resend vars.
 
@@ -47,4 +47,5 @@ Each app’s graph, data, and corpus notes live next to that app (`src/apps/<id>
 | [`docs/FACEBOOK.md`](docs/FACEBOOK.md) | Research: Meta has no friends News Feed API |
 | [`docs/current_audit.md`](docs/current_audit.md) | Remaining non-doc work (unused code, bugs, security) |
 | [`docs/original_audit.md`](docs/original_audit.md) | Snapshot of the 24 Aug 2026 review |
+| [`deploy/README.md`](deploy/README.md) | DigitalOcean droplet: pull, build, restart |
 | [`spikes/`](spikes/) | Historical accessibility probes (not application code) |

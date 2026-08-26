@@ -37,12 +37,12 @@ describe("mailer", () => {
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
     const mailer = createResendMailer({
       apiKey: "re_test",
-      from: "Nowisee <login@nowisee.example>",
+      from: "Now I See <login@nowisee.example>",
       fetch: fetchImpl as unknown as typeof fetch,
     });
     await mailer.send({
       to: "ada@example.com",
-      subject: "Your Nowisee sign-in code",
+      subject: "Your Now I See sign-in code",
       text: "kfm472",
     });
     expect(fetchImpl).toHaveBeenCalledOnce();

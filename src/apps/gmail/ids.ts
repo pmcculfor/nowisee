@@ -44,7 +44,7 @@ export function parseChunkNodeId(
 export function subjectLabel(from: string, subject: string): string {
   const who = displayFrom(from);
   const sub = subject.trim() || "No subject";
-  return who ? `${who} — ${sub}` : sub;
+  return who ? `${sub}. From ${who}` : sub;
 }
 
 /** Visible name from a From header (`Name <a@b>` → Name). */

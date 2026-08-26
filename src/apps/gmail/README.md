@@ -18,9 +18,9 @@ The tip is **Connect Gmail.** `enter` is `kind: "external"` to Google’s author
 
 ## Connected
 
-Open `/` lands on the first inbox subject, or on **Compose** if the inbox is empty. The list is Disconnect, Compose, then up to 20 INBOX subjects (no wrap). Root `back` goes to Home.
+Open `/` lands on the first inbox message (subject, then who it was from), or on **Compose** if the inbox is empty. The list is Disconnect, Compose, then up to 20 INBOX messages (no wrap). Root `back` goes to Home.
 
-Enter on a subject **pushes** body chunk 1 (plain text, split by `splitText`). Chunks are siblings. `back` pops.
+Enter on a message **pushes** body chunk 1 (plain text, split by `splitText`). Chunks are siblings. `back` pops.
 
 Compose walks an instruction node, then input for To, Subject, and Body (`action` plus `passInputText` on each Done). Send stays on **Sent** or an error in place — there is **no stack teleport**. Cancel walks back without sending.
 

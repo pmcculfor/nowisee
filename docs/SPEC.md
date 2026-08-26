@@ -19,7 +19,7 @@ Typical sites force tabbing through chrome or exploring by touch, so users canno
 2. **Help** is a short tutorial of intents, lists, and typing. It is the first catalog item.
 3. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
 4. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
-5. **Gmail** connects a Google account and shows inbox subjects, body chunks, and compose/send. Tokens go through host OAuth/lockbox.
+5. **Gmail** connects a Google account and shows inbox messages (subject, then from), body chunks, and compose/send. Tokens go through host OAuth/lockbox.
 6. **Account** is sign in / register / sign out. Credentials live in the identity service, not in this app.
 
 Long-term there should be many apps, and possibly third-party apps and an in-product App Store. Core must never special-case product names. A new app is a module plus a pack row, not a core edit.

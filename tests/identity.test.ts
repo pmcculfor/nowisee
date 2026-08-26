@@ -76,6 +76,8 @@ describe("identity service", () => {
     const anon = await id.resolve(null);
     const requested = await id.requestSignIn(anon.sessionId, "Ada@Example.com");
     expect(requested).toEqual({ ok: true });
+    expect(mailer.messages[0]?.subject).toBe("Your Now I See sign-in code");
+    expect(mailer.messages[0]?.text).toMatch(/^Your Now I See sign-in code is /);
     const verified = await id.verifySignIn(anon.sessionId, mailer.lastCode());
     expect(verified.ok).toBe(true);
     if (!verified.ok) {

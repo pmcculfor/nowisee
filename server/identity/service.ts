@@ -19,7 +19,7 @@ const THROTTLE_BURST_MAX = 1;
 const THROTTLE_EMAIL_HOUR_MAX = 5;
 const THROTTLE_SESSION_HOUR_MAX = 10;
 const OTP_PEPPER_BYTES = 32;
-const SIGN_IN_MAIL_SUBJECT = "Your Nowisee sign-in code";
+const SIGN_IN_MAIL_SUBJECT = "Your Now I See sign-in code";
 
 export type IssuedToken = {
   readonly value: string;
