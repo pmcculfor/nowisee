@@ -3,6 +3,8 @@ dist/
 *.local
 .DS_Store
 coverage/
+.env
+.env.production
 public/data/kjv.raw.json
 # Host and app SQLite files at repo root. Not src/apps/bible/data.
 /data/

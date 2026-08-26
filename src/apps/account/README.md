@@ -6,9 +6,9 @@ Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts). Iden
 
 ## Signed out
 
-The tip is **Sign in or register**. `enter` goes to an email prompt, then an email input (`autocomplete=username`). Email Done (`action` plus `passInputText`) goes to a password prompt, then a password input (`secret`, `autocomplete=current-password`). Password Done (`action` plus `passInputText`) shows a warm **Signing in…** node, then either **You are signed in as …** (enter/back go to Home) or **Sign-in was unsuccessful.** (enter/back `pop` to the same password input).
+The tip is **Sign in or register**. `enter` goes to an email prompt, then an email input (`autocomplete=username`). Email Done (`action` plus `passInputText`) calls `requestSignIn` and lands on **We sent a sign-in code to that email. Enter it on the next screen.** (or a throttled / unsuccessful sentence that `pop`s). Then a plain code input (`autocomplete=off`, not `secret`). Code Done (`action` plus `passInputText`) shows a warm **Signing in…** node, then either **You are signed in as …** (enter/back go to Home) or **Sign-in was unsuccessful.** (enter/back `pop` to the same code input).
 
-Authenticate tries register, then sign-in when the email is already taken. Root `back` goes to Home.
+A new address that completes a code becomes the account. Root `back` goes to Home.
 
 ## Signed in
 
@@ -16,4 +16,4 @@ The tip is **Settings** (a placeholder with no enter). `next` is **Sign out**. S
 
 Home lists this app as **Account**, the same registered label as every other app, whether the user is signed in or out.
 
-Status nodes return `location: null`. The password arrives in `extras.inputText` on the action call. The host never logs `/api` request bodies.
+Status nodes return `location: null`. The code arrives in `extras.inputText` on the action call. The host never logs `/api` request bodies.

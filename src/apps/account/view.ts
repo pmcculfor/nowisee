@@ -12,7 +12,6 @@ import {
 import type {
   AppLocation,
   AppServerContext,
-  AuthOutcome,
   NavigationMap,
   NodePayload,
   RefreshExtras,
@@ -28,7 +27,8 @@ export type AccountViewDeps = {
 
 const START_LABEL = "Sign in or register";
 const EMAIL_PROMPT_LABEL = "Please enter your email on the next screen.";
-const PASSWORD_PROMPT_LABEL = "Please enter your password on the next screen.";
+const CODE_SENT_LABEL = "We sent a sign-in code to that email. Enter it on the next screen.";
+const CODE_THROTTLED_LABEL = "Please wait before requesting another sign-in code.";
 const SETTINGS_LABEL = "Settings. This screen is not available yet.";
 const SIGN_OUT_LABEL = "Sign out";
 const AUTH_WARM_LABEL = "Signing in…";
@@ -40,8 +40,8 @@ const SIGNED_OUT_IDS = [
   NODE.start,
   NODE.emailPrompt,
   NODE.email,
-  NODE.passwordPrompt,
-  NODE.password,
+  NODE.codePrompt,
+  NODE.code,
   NODE.auth,
 ] as const;
 
@@ -57,11 +57,11 @@ export async function openAccount(
     }
     return signedInView(deps, NODE.settings, ctx);
   }
-  if (path === "/password/input") {
-    return signedOutView(deps, NODE.password, ctx);
+  if (path === "/code/input") {
+    return signedOutView(deps, NODE.code, ctx);
   }
-  if (path === "/password") {
-    return signedOutView(deps, NODE.passwordPrompt, ctx);
+  if (path === "/code") {
+    return signedOutView(deps, NODE.codePrompt, ctx);
   }
   if (path === "/email/input") {
     return signedOutView(deps, NODE.email, ctx);
@@ -120,9 +120,20 @@ async function applyAction(
   const sessionId = ctx?.sessionId;
   const identity = ctx?.identity;
 
-  if (tipId === NODE.passwordPrompt && sessionId) {
-    deps.flow.setEmail(sessionId, extras.inputText ?? "");
-    return signedOutView(deps, NODE.passwordPrompt, ctx);
+  if (tipId === NODE.codePrompt && sessionId) {
+    if (!identity) {
+      return codePromptStatusView(AUTH_FAILED_LABEL);
+    }
+    const email = extras.inputText ?? "";
+    deps.flow.setEmail(sessionId, email);
+    const outcome = await identity.requestSignIn(email);
+    if (!outcome.ok && outcome.reason === "throttled") {
+      return codePromptStatusView(CODE_THROTTLED_LABEL);
+    }
+    if (!outcome.ok) {
+      return codePromptStatusView(AUTH_FAILED_LABEL);
+    }
+    return signedOutView(deps, NODE.codePrompt, ctx);
   }
 
   if (tipId === NODE.auth) {
@@ -130,8 +141,7 @@ async function applyAction(
       return authStatusView(deps, "Sign-in is not available.", false);
     }
     const email = deps.flow.getEmail(sessionId) ?? "";
-    const password = extras.inputText ?? "";
-    const outcome = await authenticate(identity, email, password);
+    const outcome = await identity.verifySignIn(extras.inputText ?? "");
     if (outcome.ok) {
       deps.flow.clear(sessionId);
       return authStatusView(deps, `You are signed in as ${email.trim().toLowerCase()}.`, true);
@@ -153,21 +163,6 @@ async function applyAction(
   return signedOutView(deps, NODE.start, ctx);
 }
 
-async function authenticate(
-  identity: NonNullable<AppServerContext["identity"]>,
-  email: string,
-  password: string,
-): Promise<AuthOutcome> {
-  const registered = await identity.register(email, password);
-  if (registered.ok) {
-    return registered;
-  }
-  if (registered.reason === "email-taken") {
-    return identity.signIn(email, password);
-  }
-  return registered;
-}
-
 function signedOutView(
   deps: AccountViewDeps,
   tipId: string,
@@ -181,13 +176,12 @@ function signedOutView(
     kind: "input",
     autocomplete: "username",
   };
-  const passwordPrompt: NodePayload = { id: NODE.passwordPrompt, label: PASSWORD_PROMPT_LABEL };
-  const password: NodePayload = {
-    id: NODE.password,
+  const codePrompt: NodePayload = { id: NODE.codePrompt, label: CODE_SENT_LABEL };
+  const code: NodePayload = {
+    id: NODE.code,
     label: "",
     kind: "input",
-    secret: true,
-    autocomplete: "current-password",
+    autocomplete: "off",
   };
   const auth: NodePayload = { id: NODE.auth, label: AUTH_WARM_LABEL };
 
@@ -195,8 +189,8 @@ function signedOutView(
     [NODE.start, start],
     [NODE.emailPrompt, emailPrompt],
     [NODE.email, email],
-    [NODE.passwordPrompt, passwordPrompt],
-    [NODE.password, password],
+    [NODE.codePrompt, codePrompt],
+    [NODE.code, code],
     [NODE.auth, auth],
   ]);
   const tip = payloads.get(tipId) ?? start;
@@ -209,21 +203,21 @@ function signedOutView(
       [NODE.emailPrompt]: {
         enter: edgeNode(NODE.email, "push"),
       },
-      [NODE.passwordPrompt]: {
-        enter: edgeNode(NODE.password, "push"),
+      [NODE.codePrompt]: {
+        enter: edgeNode(NODE.code, "push"),
       },
     },
     rootBackToHome(NODE.start, deps.rootAppId, ACCOUNT_APP_ID),
     {
       [NODE.emailPrompt]: { back: edgePop() },
-      [NODE.passwordPrompt]: { back: edgePop() },
+      [NODE.codePrompt]: { back: edgePop() },
     },
     inputEdges(NODE.email, {
-      commitTo: NODE.passwordPrompt,
+      commitTo: NODE.codePrompt,
       backTo: "pop",
       action: true,
     }),
-    inputEdges(NODE.password, {
+    inputEdges(NODE.code, {
       commitTo: NODE.auth,
       backTo: "pop",
       action: true,
@@ -237,7 +231,7 @@ function signedOutView(
 
   return {
     navigationMap,
-    warm: [start, emailPrompt, email, passwordPrompt, password, auth],
+    warm: [start, emailPrompt, email, codePrompt, code, auth],
     node: tip,
     location: locationFor(tip.id),
   };
@@ -284,18 +278,38 @@ function signedInView(
   };
 }
 
+function codePromptStatusView(label: string): RefreshResult {
+  const node: NodePayload = { id: NODE.codePrompt, label };
+  const email: NodePayload = {
+    id: NODE.email,
+    label: "",
+    kind: "input",
+    autocomplete: "username",
+  };
+  return {
+    navigationMap: buildMap({
+      [NODE.codePrompt]: {
+        enter: edgePop(),
+        back: edgePop(),
+      },
+    }),
+    warm: [node, email],
+    node,
+    location: null,
+  };
+}
+
 function authStatusView(
   deps: AccountViewDeps,
   label: string,
   signedIn: boolean,
 ): RefreshResult {
   const node: NodePayload = { id: NODE.auth, label };
-  const password: NodePayload = {
-    id: NODE.password,
+  const code: NodePayload = {
+    id: NODE.code,
     label: "",
     kind: "input",
-    secret: true,
-    autocomplete: "current-password",
+    autocomplete: "off",
   };
   let navigationMap: NavigationMap;
   if (signedIn) {
@@ -315,7 +329,7 @@ function authStatusView(
   }
   return {
     navigationMap,
-    warm: [node, password],
+    warm: [node, code],
     node,
     location: null,
   };
@@ -344,10 +358,10 @@ function locationFor(tipId: string): AppLocation | null {
       return { appId: ACCOUNT_APP_ID, path: "/email" };
     case NODE.email:
       return { appId: ACCOUNT_APP_ID, path: "/email/input" };
-    case NODE.passwordPrompt:
-      return { appId: ACCOUNT_APP_ID, path: "/password" };
-    case NODE.password:
-      return { appId: ACCOUNT_APP_ID, path: "/password/input" };
+    case NODE.codePrompt:
+      return { appId: ACCOUNT_APP_ID, path: "/code" };
+    case NODE.code:
+      return { appId: ACCOUNT_APP_ID, path: "/code/input" };
     case NODE.settings:
       return { appId: ACCOUNT_APP_ID, path: "/" };
     case NODE.signOut:

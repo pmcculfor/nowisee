@@ -175,17 +175,21 @@ export interface RefreshResult {
  * Structured outcome from the host identity capability.
  * The Account app owns the words the user hears; this type never carries prose.
  */
+export type RequestSignInOutcome =
+  | { ok: true }
+  | { ok: false; reason: "invalid-credentials" | "throttled" };
+
 export type AuthOutcome =
   | { ok: true; userId: string }
-  | { ok: false; reason: "invalid-credentials" | "email-taken" | "weak-password" | "registration-closed" };
+  | { ok: false; reason: "invalid-credentials" };
 
 /**
  * Host-granted capability to establish and end a Nowisee session.
  * Only apps the host allows receive this (today: Account). Never present in the browser.
  */
 export interface IdentityCapability {
-  register(email: string, password: string): Promise<AuthOutcome>;
-  signIn(email: string, password: string): Promise<AuthOutcome>;
+  requestSignIn(email: string): Promise<RequestSignInOutcome>;
+  verifySignIn(code: string): Promise<AuthOutcome>;
   signOut(): Promise<void>;
 }
 

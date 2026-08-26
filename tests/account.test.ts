@@ -1,20 +1,27 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
-import { SCRYPT_TEST } from "../server/identity/hash.ts";
 import { NODE } from "../src/apps/account/ids.ts";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { capturingMailer, type CapturingMailer } from "./helpers/signIn.ts";
 
 const ORIGIN = "http://localhost:5173";
 
-function makeHost(extra?: { extraApps?: AppModule[]; identityAppIds?: string[] }): NowiseeHost {
-  return createNowiseeHost({
-    scrypt: SCRYPT_TEST,
-    configuredOrigin: ORIGIN,
-    extraApps: extra?.extraApps,
-    identityAppIds: extra?.identityAppIds,
-  });
+function makeHost(extra?: {
+  extraApps?: AppModule[];
+  identityAppIds?: string[];
+}): { host: NowiseeHost; mailer: CapturingMailer } {
+  const mailer = capturingMailer();
+  return {
+    mailer,
+    host: createNowiseeHost({
+      mailer,
+      configuredOrigin: ORIGIN,
+      extraApps: extra?.extraApps,
+      identityAppIds: extra?.identityAppIds,
+    }),
+  };
 }
 
 function headers(cookie?: string): Record<string, string> {
@@ -40,7 +47,8 @@ describe("Account app", () => {
   });
 
   it("signed-out open starts on Sign in or register; signed-in open starts on Settings", async () => {
-    h = makeHost();
+    const made = makeHost();
+    h = made.host;
     const opened = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -59,10 +67,11 @@ describe("Account app", () => {
     expect(body.warm.find((n) => n.id === NODE.emailPrompt)?.label).toBe(
       "Please enter your email on the next screen.",
     );
-    expect(body.warm.find((n) => n.id === NODE.passwordPrompt)?.label).toBe(
-      "Please enter your password on the next screen.",
+    expect(body.warm.find((n) => n.id === NODE.codePrompt)?.label).toBe(
+      "We sent a sign-in code to that email. Enter it on the next screen.",
     );
-    expect(body.warm.find((n) => n.id === NODE.password)?.secret).toBe(true);
+    expect(body.warm.find((n) => n.id === NODE.code)?.secret).toBeUndefined();
+    expect(body.warm.find((n) => n.id === NODE.code)?.kind).toBe("input");
     expect(body.warm.find((n) => n.id === NODE.email)?.autocomplete).toBe("username");
 
     const cookie = cookieFrom(opened.headers?.["Set-Cookie"]);
@@ -73,8 +82,8 @@ describe("Account app", () => {
       body: {
         stack: [
           {
-            nodeId: NODE.passwordPrompt,
-            label: "Please enter your password on the next screen.",
+            nodeId: NODE.codePrompt,
+            label: "We sent a sign-in code to that email. Enter it on the next screen.",
             location: null,
           },
         ],
@@ -95,14 +104,14 @@ describe("Account app", () => {
           },
           { nodeId: NODE.email, label: "", location: null },
           {
-            nodeId: NODE.passwordPrompt,
-            label: "Please enter your password on the next screen.",
+            nodeId: NODE.codePrompt,
+            label: "We sent a sign-in code to that email. Enter it on the next screen.",
             location: null,
           },
-          { nodeId: NODE.password, label: "", location: null },
+          { nodeId: NODE.code, label: "", location: null },
           { nodeId: NODE.auth, label: "Signing in…", location: null },
         ],
-        extras: { action: true, inputText: "password1" },
+        extras: { action: true, inputText: made.mailer.lastCode() },
       },
     });
     const signedBody = signedIn.body as RefreshResult;
@@ -127,7 +136,8 @@ describe("Account app", () => {
   });
 
   it("sign-in action sets exactly one Set-Cookie with a rotated token", async () => {
-    h = makeHost();
+    const made = makeHost();
+    h = made.host;
     const start = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -142,8 +152,8 @@ describe("Account app", () => {
       body: {
         stack: [
           {
-            nodeId: NODE.passwordPrompt,
-            label: "Please enter your password on the next screen.",
+            nodeId: NODE.codePrompt,
+            label: "We sent a sign-in code to that email. Enter it on the next screen.",
             location: null,
           },
         ],
@@ -156,7 +166,7 @@ describe("Account app", () => {
       headers: headers(anon),
       body: {
         stack: [{ nodeId: NODE.auth, label: "Signing in…", location: null }],
-        extras: { action: true, inputText: "password1" },
+        extras: { action: true, inputText: made.mailer.lastCode() },
       },
     });
     expect(action.status).toBe(200);
@@ -168,8 +178,9 @@ describe("Account app", () => {
     expect(body.node.label).toContain("You are signed in as pat@example.com.");
   });
 
-  it("a short password is unsuccessful sign-in, and back pops to the existing password node", async () => {
-    h = makeHost();
+  it("a wrong code is unsuccessful sign-in, and back pops to the existing code node", async () => {
+    const made = makeHost();
+    h = made.host;
     const start = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -184,8 +195,8 @@ describe("Account app", () => {
       body: {
         stack: [
           {
-            nodeId: NODE.passwordPrompt,
-            label: "Please enter your password on the next screen.",
+            nodeId: NODE.codePrompt,
+            label: "We sent a sign-in code to that email. Enter it on the next screen.",
             location: null,
           },
         ],
@@ -198,18 +209,63 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         stack: [
-          { nodeId: NODE.password, label: "", location: null },
+          { nodeId: NODE.code, label: "", location: null },
           { nodeId: NODE.auth, label: "Signing in…", location: null },
         ],
-        extras: { action: true, inputText: "short" },
+        extras: { action: true, inputText: "zzz000" },
       },
     });
     const body = failed.body as RefreshResult;
     expect(body.node.label).toBe("Sign-in was unsuccessful.");
-    expect(body.node.label).not.toContain("too short");
     expect(body.navigationMap[NODE.auth]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
     expect(body.navigationMap[NODE.auth]?.enter).toEqual({ kind: "node", stackBehavior: "pop" });
     expect(body.navigationMap[NODE.auth]?.back).not.toHaveProperty("toNodeId");
+  });
+
+  it("a throttled code request pops back to email", async () => {
+    const made = makeHost();
+    h = made.host;
+    const start = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/account/open",
+      headers: headers(),
+      body: { path: "/" },
+    });
+    const cookie = cookieFrom(start.headers?.["Set-Cookie"]);
+    await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/account/refresh",
+      headers: headers(cookie),
+      body: {
+        stack: [
+          {
+            nodeId: NODE.codePrompt,
+            label: "We sent a sign-in code to that email. Enter it on the next screen.",
+            location: null,
+          },
+        ],
+        extras: { action: true, inputText: "wait@example.com" },
+      },
+    });
+    const throttled = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/account/refresh",
+      headers: headers(cookie),
+      body: {
+        stack: [
+          {
+            nodeId: NODE.codePrompt,
+            label: "We sent a sign-in code to that email. Enter it on the next screen.",
+            location: null,
+          },
+        ],
+        extras: { action: true, inputText: "wait@example.com" },
+      },
+    });
+    const body = throttled.body as RefreshResult;
+    expect(body.node.label).toBe("Please wait before requesting another sign-in code.");
+    expect(body.navigationMap[NODE.codePrompt]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
+    expect(body.navigationMap[NODE.codePrompt]?.enter).toEqual({ kind: "node", stackBehavior: "pop" });
   });
 
   it("does not grant ctx.identity to a non-allowed app", async () => {
@@ -236,7 +292,7 @@ describe("Account app", () => {
         };
       },
     };
-    h = makeHost({ extraApps: [probe], identityAppIds: ["account"] });
+    h = makeHost({ extraApps: [probe], identityAppIds: ["account"] }).host;
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/probe/open",
@@ -251,7 +307,7 @@ describe("Account app", () => {
   });
 
   it("Home lists Account by its registered label when signed out", async () => {
-    h = makeHost();
+    h = makeHost().host;
     const opened = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
@@ -269,7 +325,7 @@ describe("Account app", () => {
   });
 
   it("Bible still works with an anonymous session", async () => {
-    h = makeHost();
+    h = makeHost().host;
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/bible/open",

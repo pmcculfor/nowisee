@@ -1,14 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { SESSION_COOKIE_NAME } from "../server/cookie.ts";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
-import { SCRYPT_TEST } from "../server/identity/hash.ts";
 import type { LockboxKeyring } from "../server/lockbox/crypto.ts";
 import { handleOAuthHttp } from "../server/oauth/http.ts";
 import { mapOAuthSecrets } from "../server/oauth/secrets.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { capturingMailer, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -52,20 +51,13 @@ function headers(cookie?: string): Record<string, string> {
   return h;
 }
 
+let currentMailer: CapturingMailer;
+
 async function signIn(
   host: NowiseeHost,
   email: string,
 ): Promise<{ cookie: string; userId: string }> {
-  const anon = await host.identity.resolve(null);
-  const registered = await host.identity.register(anon.sessionId, email, "password12");
-  expect(registered.ok).toBe(true);
-  if (!registered.ok) {
-    throw new Error("register failed");
-  }
-  return {
-    cookie: `${SESSION_COOKIE_NAME}=${registered.issuedToken.value}`,
-    userId: registered.userId,
-  };
+  return signInForTest(host, currentMailer, email);
 }
 
 type MockIdp = {
@@ -179,8 +171,9 @@ describe("oauth broker", () => {
       seen[id] = [];
       return probe(id, seen[id]!);
     });
+    currentMailer = capturingMailer();
     h = createNowiseeHost({
-      scrypt: SCRYPT_TEST,
+      mailer: currentMailer,
       configuredOrigin: ORIGIN,
       extraApps,
       lockboxKeys: testKeyring(),

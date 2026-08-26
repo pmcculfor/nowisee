@@ -42,17 +42,21 @@ server/index.ts   production entry (SPA + /api)
 
 ### Environment
 
-See [`.env.example`](../.env.example). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty.
+See [`.env.example`](../.env.example) (local) and [`.env.production.example`](../.env.production.example) (https://nowisee.app). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service)).
 
 | Variable | Role |
 |----------|------|
 | `PORT` | Listen port (default `3000`) |
 | `NOWISEE_DB` | Host SQLite file (default `data/nowisee.db`) |
-| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI |
+| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Production: `https://nowisee.app` |
 | `NOWISEE_LOCKBOX_KEY` | 32-byte AES key, base64. Required if lockbox/OAuth apps are granted |
 | `NOWISEE_LOCKBOX_KEY_ID` | Optional key id (default `v1`) |
 | `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
 | `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY` | Optional PEM paths; both set enables HTTPS |
+| `NOWISEE_MAIL_DRIVER` | `console` (localhost default) or `resend` |
+| `NOWISEE_MAIL_FROM` | From: header when using Resend |
+| `NOWISEE_RESEND_API_KEY` | Resend API key |
+| `NOWISEE_OTP_PEPPER` | 32-byte HMAC key, base64. Required for Resend |
 
 ---
 
