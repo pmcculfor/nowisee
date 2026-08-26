@@ -18,7 +18,6 @@ import type {
   BookmarkRecord,
   CommentarySection,
   CommentaryWork,
-  RecencyOwner,
   SearchHit,
 } from "./types.ts";
 

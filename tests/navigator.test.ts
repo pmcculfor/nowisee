@@ -9,7 +9,7 @@ import { PlatformCapabilities } from "../src/core/platform.ts";
 import { AppRegistry } from "../src/core/registry.ts";
 import { Router } from "../src/core/router.ts";
 import { Stack } from "../src/core/stack.ts";
-import type { AppLocation, AppModule } from "../src/core/types.ts";
+import type { AppLocation, AppModule, RefreshResult } from "../src/core/types.ts";
 import { createFakeApp, createRootApp } from "./helpers/fakeApp.ts";
 
 function visibleText(root: HTMLElement): string {
@@ -37,6 +37,7 @@ async function intent(nav: Navigator, name: Parameters<Navigator["onIntent"]>[0]
 function harness(args?: {
   gate?: () => Promise<void>;
   clipboard?: null | { writeText: (t: string) => Promise<void> };
+  resolveApp?: (appId: string) => AppModule | null;
 }) {
   const root = document.createElement("div");
   document.body.appendChild(root);
@@ -80,6 +81,7 @@ function harness(args?: {
       addressLog.push(loc);
       router.setAddressBar(loc);
     },
+    resolveApp: args?.resolveApp,
     handOffExternal: (href) => {
       externalLog.push(href);
     },
@@ -125,6 +127,24 @@ describe("Navigator + Router contracts", () => {
     expect(h.map.lookup("root", "next")?.kind).toBe("node");
     expect(h.addressLog.at(-1)).toEqual({ appId: "fake", path: "/" });
     expect(h.getHash()).toBe("#/fake");
+  });
+
+  it("unknown appId without resolveApp opens the root app", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "missing", path: "/" });
+    expect(h.navigator.getCurrentAppId()).toBe("home");
+    expect(visibleText(h.root)).toBe("Home");
+  });
+
+  it("resolveApp supplies a module the registry does not have", async () => {
+    const lazy = createFakeApp({ id: "lazy", label: "Lazy", rootAppId: "home" });
+    const h = harness({
+      resolveApp: (id) => (id === "lazy" ? lazy.app : null),
+    });
+    await h.navigator.openLocation({ appId: "lazy", path: "/" });
+    expect(h.navigator.getCurrentAppId()).toBe("lazy");
+    expect(visibleText(h.root)).toBe("Root");
+    expect(h.registry.get("lazy")).toBeNull();
   });
 
   it("push / replace / pop; pop omits toNodeId", async () => {
@@ -276,6 +296,49 @@ describe("Navigator + Router contracts", () => {
 
     // Put x in warm so we take warm-hit path then failing refresh
     // Actually warm has only root — next to x is warm miss + failing refresh
+    navigator.onIntent("next");
+    await flush();
+    expect(navigator.isBlocked()).toBe(false);
+    expect(visibleText(root)).toBe("OK");
+  });
+
+  it("malformed RefreshResult is treated as failure and keeps last display", async () => {
+    const registry = new AppRegistry();
+    registry.register(createRootApp("home"));
+    const bad: AppModule = {
+      id: "fail",
+      label: "Fail",
+      open: () => ({
+        navigationMap: {
+          root: {
+            next: { kind: "node", toNodeId: "x", stackBehavior: "replace" },
+          },
+        },
+        warm: [{ id: "root", label: "OK" }],
+        node: { id: "root", label: "OK" },
+        location: { appId: "fail", path: "/" },
+      }),
+      refresh: () => ({}) as RefreshResult,
+    };
+    registry.register(bad);
+
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+    const navigator = new Navigator({
+      config: { rootAppId: "home" },
+      registry,
+      display,
+      platform: new PlatformCapabilities({ clipboard: null }),
+      map: new NavigationMapStore(),
+      cache: new NodeCache(),
+      stack: new Stack(),
+      setAddressBar: () => undefined,
+    });
+
+    await navigator.openLocation({ appId: "fail", path: "/" });
+    expect(visibleText(root)).toBe("OK");
+
     navigator.onIntent("next");
     await flush();
     expect(navigator.isBlocked()).toBe(false);

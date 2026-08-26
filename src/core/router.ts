@@ -2,8 +2,12 @@ import type { AppLocation } from "./types.ts";
 
 export interface RouterOptions {
   readonly rootAppId: string;
-  /** Return true when the id is a registered app. */
-  readonly isKnownApp: (appId: string) => boolean;
+  /**
+   * True when this segment may be an app id. Defaults to {@link isAppId}.
+   * Not a catalog — the server decides whether that id exists.
+   * Tests may pass a smaller set. Corrupt / non-id hashes still fall back to root.
+   */
+  readonly isKnownApp?: (appId: string) => boolean;
   /** Called when the browser hash changes externally (Back/Forward, edited URL). */
   readonly onLocation: (location: AppLocation) => void;
   /**
@@ -26,6 +30,15 @@ export function isCanonicalPath(path: string): boolean {
 }
 
 /**
+ * Syntactic app id: lowercase letter, then lowercase letters, digits, or hyphens.
+ * Router uses this so a well-formed `#/some-app` is parsed even if the client
+ * has never opened it. The server 404s unknown ids; the client does not keep a catalog.
+ */
+export function isAppId(id: string): boolean {
+  return /^[a-z][a-z0-9-]*$/.test(id);
+}
+
+/**
  * Pure URL boundary: browser hash ↔ AppLocation.
  * Owns no stack, cache, map, blocked flag, or display.
  * The only module that produces `#/...` strings.
@@ -45,7 +58,7 @@ export class Router {
 
   constructor(options: RouterOptions) {
     this.rootAppId = options.rootAppId;
-    this.isKnownApp = options.isKnownApp;
+    this.isKnownApp = options.isKnownApp ?? isAppId;
     this.onLocation = options.onLocation;
     this.locationApi = options.location ?? defaultLocationApi();
     this.eventTarget = options.eventTarget ?? defaultEventTarget();
@@ -60,7 +73,8 @@ export class Router {
 
   /**
    * Parse a hash or full href into an AppLocation.
-   * Unknown / corrupt values resolve to the root app (do not crash).
+   * Syntactically invalid ids and corrupt hashes resolve to the root app (do not crash).
+   * A well-formed id is kept even if this client has never opened that app.
    * Always returns a location — never null.
    */
   parse(href: string): AppLocation {

@@ -4,6 +4,7 @@ import type { NodeCache } from "./nodeCache.ts";
 import type { PlatformCapabilities } from "./platform.ts";
 import type { AppRegistry } from "./registry.ts";
 import { isCanonicalPath } from "./router.ts";
+import { isRefreshResult } from "./refreshResult.ts";
 import type { Stack } from "./stack.ts";
 import type {
   AppLocation,
@@ -29,6 +30,12 @@ export interface NavigatorOptions {
   readonly stack: Stack;
   /** Address-bar writes go through Router.setAddressBar — never mint `#` here. */
   readonly setAddressBar: (location: AppLocation) => void;
+  /**
+   * Supply an AppModule when the registry has no entry for this id.
+   * Bootstrap uses this to mint a generic RPC stub; the server is the catalog.
+   * When omitted, a missing id still falls back to `config.rootAppId`.
+   */
+  readonly resolveApp?: (appId: string) => AppModule | null;
   /** `kind: "external"` hand-off. Injected for tests. */
   readonly handOffExternal?: (href: string) => void;
 }
@@ -54,6 +61,7 @@ export class Navigator {
   private readonly cache: NodeCache;
   private readonly stack: Stack;
   private readonly setAddressBar: (location: AppLocation) => void;
+  private readonly resolveApp: ((appId: string) => AppModule | null) | undefined;
   private readonly handOffExternal: (href: string) => void;
 
   private blocked = false;
@@ -83,6 +91,7 @@ export class Navigator {
     this.cache = options.cache;
     this.stack = options.stack;
     this.setAddressBar = options.setAddressBar;
+    this.resolveApp = options.resolveApp;
     this.handOffExternal =
       options.handOffExternal ??
       ((href: string) => {
@@ -159,7 +168,7 @@ export class Navigator {
   ): Promise<void> {
     let appId = location.appId;
     let path = location.path;
-    let app = this.registry.get(appId);
+    let app = this.registry.get(appId) ?? this.resolveApp?.(appId) ?? null;
     if (!app) {
       appId = this.config.rootAppId;
       app = this.registry.get(appId);
@@ -349,6 +358,9 @@ export class Navigator {
 
     try {
       const result = await args.invoke(callExtras);
+      if (!isRefreshResult(result)) {
+        throw new Error("Navigator: malformed RefreshResult");
+      }
       const settled = await this.fulfillClipboardText(result, args.isAction);
       if (args.token !== this.transitionToken) {
         return; // stale — copy may already have run

@@ -1,4 +1,3 @@
-import { HELP_APP_ID, HELP_APP_LABEL } from "../apps/help/ids.ts";
 import { createRemoteApp } from "../apps/remote.ts";
 import { createFetchRpc, type AppRpc } from "../apps/rpc.ts";
 import { Display } from "../core/display.ts";
@@ -11,7 +10,7 @@ import { PlatformCapabilities } from "../core/platform.ts";
 import { AppRegistry } from "../core/registry.ts";
 import { Router } from "../core/router.ts";
 import { Stack } from "../core/stack.ts";
-import type { NavIntent, ShellConfig } from "../core/types.ts";
+import type { AppModule, NavIntent, ShellConfig } from "../core/types.ts";
 
 export type ShellHandle = {
   readonly navigator: Navigator;
@@ -32,7 +31,8 @@ export type StartShellOptions = {
 
 /**
  * Bootstrap the shell. Core never names a product app — `rootAppId` comes from config.
- * Home, Help, Bible, Notes, Gmail, and Account are remote stubs.
+ * The client does not keep an app catalog: a generic stub POSTs using the app id
+ * from the URL or a `kind: "app"` edge. Home lists apps from the server directory.
  */
 export function startShell(
   mount: HTMLElement,
@@ -45,12 +45,16 @@ export function startShell(
 
   const rpc = options.rpc ?? createFetchRpc();
   const registry = new AppRegistry();
-  registry.register(createRemoteApp({ id: "home", label: "Home", rpc }));
-  registry.register(createRemoteApp({ id: HELP_APP_ID, label: HELP_APP_LABEL, rpc }));
-  registry.register(createRemoteApp({ id: "bible", label: "Bible", rpc }));
-  registry.register(createRemoteApp({ id: "notes", label: "Notes", rpc }));
-  registry.register(createRemoteApp({ id: "gmail", label: "Gmail", rpc }));
-  registry.register(createRemoteApp({ id: "account", label: "Account", rpc }));
+
+  function resolveApp(id: string): AppModule {
+    const existing = registry.get(id);
+    if (existing) {
+      return existing;
+    }
+    const stub = createRemoteApp({ id, rpc });
+    registry.register(stub);
+    return stub;
+  }
 
   mount.replaceChildren();
   const surface = document.createElement("div");
@@ -81,11 +85,11 @@ export function startShell(
     setAddressBar: (location) => {
       router.setAddressBar(location);
     },
+    resolveApp,
   });
 
   router = new Router({
     rootAppId: config.rootAppId,
-    isKnownApp: (id) => registry.get(id) !== null,
     onLocation: (location) => {
       void navigator.openLocation(location);
     },

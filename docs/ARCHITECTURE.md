@@ -13,7 +13,7 @@ This file covers contracts, packaging, and the stack. Product locks are in [`SPE
 | Client | Vanilla TypeScript + Vite | One text/input surface; no UI framework |
 | App host | TypeScript on Node, small `/api` router (no Express) | Same language and `RefreshResult` types as the apps |
 | Where apps run | First-party `open` / `refresh` on the server | Proof of the intended split; large corpora stay off the client bundle |
-| Client apps | Generic `createRemoteApp` stubs | Not a second copy of each app |
+| Client apps | Generic `createRemoteApp` stub, minted by app id | Not a phone book of first-party apps |
 | Database | SQLite via `node:sqlite` (`server/sqlite.ts`) | Host identity in `data/nowisee.db`; each app opens `data/apps/*.db`. `:memory:` in tests |
 | URL style | Hash routes behind `AppLocation` | Switching to History API later touches Router only |
 | Copy | `clipboardText` on the result; Navigator writes | Apps must not think they own the clipboard |
@@ -26,7 +26,7 @@ src/core/         shell (navigator, display, …)
 src/app-kit/      optional helpers apps import
 src/apps/         AppModules (imported by the server host)
 src/apps/remote.ts  client RPC stub
-src/shell/        registers remote stubs, mounts display, wires keyboard
+src/shell/        lazy generic stub by app id, mounts display, wires keyboard
 server/           HTTP, host identity SQLite, identity service, first-party pack list
 server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
 server/index.ts   production entry (SPA + /api)
@@ -123,11 +123,11 @@ This is a discipline, not a sandbox.
 | `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities |
 | `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk, signed-out, split text) |
 | `src/apps/` | First-party `AppModule`s. Graph/docs next to each app |
-| `src/shell/` | Bootstrap: config, register remote stubs, mount display, wire keyboard |
+| `src/shell/` | Bootstrap: config, lazy generic RPC stub, mount display, wire keyboard |
 
 **Smell test:** if a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app — not in core. If every session would break unless Navigator runs it, it belongs in core.
 
-To add an app today, implement `AppModule`, add a pack row in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts), and register a matching remote stub in [`src/shell/bootstrap.ts`](../src/shell/bootstrap.ts). Home lists whatever the server registry exposes via `ctx.directory`.
+To add an app, implement `AppModule` and add a pack row in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts). The client POSTs `/api/apps/:id/…` using that id; it does not keep a matching stub list. Home lists whatever the server registry exposes via `ctx.directory`.
 
 ---
 

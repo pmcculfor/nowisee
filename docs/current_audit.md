@@ -31,7 +31,6 @@ The owner-approved documentation work from [`original_audit.md`](original_audit.
 A few leftover nits are intentional:
 
 - IDENTITY’s signed-out table still names Bible / Notes / Mail / Home as **examples** of different app policies, not as core locks.
-- `tests/packaging.test.ts` still forbids the string `kjv.json` in bootstrap. That is a code test, not a documentation lock.
 
 ---
 
@@ -62,7 +61,6 @@ These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST 
 | Item | Notes |
 |------|--------|
 | Account Settings node | Intentional stub |
-| Client stubs in `bootstrap.ts` vs `FIRST_PARTY_APPS` | Must match by hand |
 | Spike copy under `public/spikes/` | For GitHub Pages |
 
 ---
@@ -71,18 +69,16 @@ These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST 
 
 These are not bugs. They are worth doing when you are already in that file.
 
-1. **Two app catalogs.** `server/firstPartyApps.ts` and `src/shell/bootstrap.ts` both list apps. Proposed fix: a Vite-safe `{id, label}` list the client loops, plus a test that the host pack’s started ids/labels match. Not done this pass.
-2. **Bible view dispatcher.** `buildBibleView`, `payloadFor`, `versionFor`, and `locationFor` all switch on `ParsedNode`. A single `kind → { addLevel, payload, version, location }` table would match how the catalogs already work. Not done this pass (explained; awaiting a decision).
+1. **Two app catalogs.** Done: the client no longer lists first-party apps. A generic stub POSTs `/api/apps/:id/…`; Home lists `ctx.directory` from the host pack.
+2. **Bible view dispatcher.** Done: `view/kinds.ts` is one `kind → { addLevel, payload, version, location }` table.
 3. **Gmail `view.ts`** (~580 lines). Leave as one file for now; split later if it grows.
 4. **`collectNeighborhood` unused.** Keep as a seam; apps may use it later.
-5. **No `RefreshResult` guard.** `createFetchRpc` casts JSON and `applyResult` assumes the shape. A cheap type guard before apply would help. Full validation waits for third-party apps ([`PREPAREDNESS.md`](PREPAREDNESS.md)). Not done this pass (explained; awaiting a decision).
-6. **Display is a DOM class.** Leave for now. Extract the three-method port before a native client.
-7. **Account register-then-sign-in.** Leave for now. A later emailed sign-in code would replace passwords.
-8. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
-9. **Packaging tests are substring checks.** They do not assert Vite’s client graph. Not done this pass (explained; awaiting a decision).
-10. **Host `isEphemeral`.** A `Db` object is always treated as ephemeral (a tests-only footgun). Not done this pass (explained; awaiting a decision).
+5. **Display is a DOM class.** Leave for now. Extract the three-method port before a native client.
+6. **Account register-then-sign-in.** Leave for now. A later emailed sign-in code would replace passwords.
+7. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
+8. **Host `ephemeral`.** Done: `createNowiseeHost({ ephemeral })` is an explicit flag (default `true`). Production passes `false`. Do not infer from `typeof db`.
 
-Done this pass: Notes/Gmail tests use `:memory:` SQLite (one store implementation); commentary listing reads the `commentaries` table; `defaultVersionId()` returns `null` when `versions` is empty (empty-data node, no `"kjv"` string).
+Done this pass: Notes/Gmail tests use `:memory:` SQLite (one store implementation); commentary listing reads the `commentaries` table; `defaultVersionId()` returns `null` when `versions` is empty (empty-data node, no `"kjv"` string). Navigator rejects a malformed `RefreshResult` before apply. The packaging substring tests are gone. Client stubs are generic (no phone book). Bible view is one kind table. Host `ephemeral` is an explicit flag.
 
 The status channel (busy, dead-end, and failure all silent) is deferred, not an elegance item — see [`PREPAREDNESS.md`](PREPAREDNESS.md). It is the deferred item that most affects real users.
 
@@ -134,7 +130,6 @@ This is not an order you have to follow — just the highest-leverage leftovers.
 1. Warm-miss refresh failure: roll back the stack.
 2. OAuth callback: do not mint a session without `Set-Cookie`.
 3. Catch `serveStatic` `decodeURIComponent` throws.
-4. One app catalog for host and client stubs.
-5. Rate-limit identity mutations, and always set `NOWISEE_ORIGIN` in deploy.
+4. Rate-limit identity mutations, and always set `NOWISEE_ORIGIN` in deploy.
 
 Leave until a named milestone: `requestRefresh`, the status channel, the Display port, a Facebook app, a third-party sandbox, and lockbox multi-key rotation.

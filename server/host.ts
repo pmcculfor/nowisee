@@ -25,6 +25,12 @@ export type AppHostOptions = {
   readonly accountAppId?: string;
   /** Host identity database, or a file path. Default `:memory:`. */
   readonly db?: Db | string;
+  /**
+   * When true (the default), pack apps open `:memory:` and lockbox/OAuth grants
+   * stay empty unless the caller passes them. Production must pass `false`.
+   * Do not infer this from whether `db` is a handle or a path.
+   */
+  readonly ephemeral?: boolean;
   readonly allowRegistration?: boolean;
   readonly identityAppIds?: readonly string[];
   readonly lockboxAppIds?: readonly string[];
@@ -88,7 +94,7 @@ export type NowiseeHost = {
 export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const rootAppId = options.rootAppId ?? "home";
   const accountAppId = options.accountAppId ?? "account";
-  const ephemeral = isEphemeral(options.db);
+  const ephemeral = options.ephemeral ?? true;
   const db = resolveDb(options.db);
 
   const identity = createIdentityService({
@@ -292,13 +298,6 @@ function resolveDb(db: Db | string | undefined): Db {
     return db;
   }
   return openDatabase({ path: typeof db === "string" ? db : ":memory:" });
-}
-
-function isEphemeral(hostDb: Db | string | undefined): boolean {
-  if (hostDb && typeof hostDb === "object") {
-    return true;
-  }
-  return hostDb === undefined || hostDb === ":memory:";
 }
 
 function toRefreshExtras(extras: WireExtras): RefreshExtras {

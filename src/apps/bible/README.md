@@ -24,7 +24,7 @@ Import sources under `raw/` that the importer reads are committed. Zips, USFM, a
 
 ## Catalogs and sequences
 
-Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name individual works.
+Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name individual works. [`view/kinds.ts`](view/kinds.ts) is one table keyed by `ParsedNode` kind (`addLevel`, `payload`, `version`, `location`) so a new node kind is a row, not four `switch`es.
 
 - `CanonBook` — USFM id, sort, testament **string**, label, aliases (URL names).
 - `VersionRecord` — `id`, `label`, `sortOrder`, `license` (a seam for licensed translations; unused for gating).
@@ -80,5 +80,6 @@ Licensed translations (`license` field), navigable commentary xrefs (TSK refs ar
 | `types.ts` / `store.ts` | SQLite behind `BibleStore` |
 | `search.ts` | Tokenize |
 | `import.ts` | `ensureCatalog` |
-| `view/*` | Graph |
+| `view/kinds.ts` | `ParsedNode` kind → version, location, payload, neighborhood |
+| `view/*` | Graph builders the table calls |
 | `index.ts` | `AppModule`; passes `ctx` |

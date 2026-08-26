@@ -29,7 +29,7 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 | Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/). Graph: [`src/apps/notes/README.md`](../src/apps/notes/README.md) |
 | Gmail | `data/apps/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/). Tokens via `ctx.oauth` only. Graph: [`src/apps/gmail/README.md`](../src/apps/gmail/README.md) |
 
-Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account, Bible, Notes, and Gmail memory files so tests do not write `data/`.
+Tests pass `:memory:` for each file that the test needs. `createNowiseeHost` defaults to `ephemeral: true`, which tells each pack's `start` to open `:memory:` (via `packStorePath` in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts)) so tests do not write `data/`. Production (`server/index.ts`, Vite plugin) passes `ephemeral: false`. The flag is intentional — do not infer it from whether `db` is a path string or a `Db` handle. The host still never injects a database into an app; each pack chooses a path and the app opens it.
 
 `ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). It never carries a database.
 

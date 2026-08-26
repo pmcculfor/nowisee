@@ -1,9 +1,10 @@
 import type { AppDescriptor, AppModule } from "./types.ts";
 
 /**
- * Registers AppModule instances at bootstrap.
+ * Holds AppModule instances for the current process.
+ * Client: lazy RPC stubs keyed by app id (not a product catalog).
+ * Host: real modules from the pack list; Home reads descriptors through `ctx.directory`.
  * `get` is core-internal only — never hand the registry (or a module) to an app.
- * Home reads descriptors through `ctx.directory`, not this object.
  */
 export class AppRegistry {
   private readonly modules = new Map<string, AppModule>();
