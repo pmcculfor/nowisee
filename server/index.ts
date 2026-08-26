@@ -45,6 +45,7 @@ const MIME: Record<string, string> = {
 
 const host = createNowiseeHost({
   db: DB_PATH,
+  ephemeral: false,
   scrypt: SCRYPT_PRODUCTION,
   configuredOrigin: process.env.NOWISEE_ORIGIN,
 });

@@ -2,13 +2,13 @@
 
 Downloaded 2026-08-24 into [`raw/`](raw/). **Import sources are committed** (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`) so a production clone can seed `data/apps/bible.db`. Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups with `node scripts/download-bible-sources.mjs`.
 
-Do **not** import e-Sword `.bblx`/`.cmtx` blobs (encrypted). Do **not** extend `scripts/prepare-kjv.mjs` brace-stripping. Prefer verse-aligned files below.
+Do **not** import e-Sword `.bblx`/`.cmtx` blobs (encrypted). Prefer verse-aligned files below.
 
 ## Bibles (66 Protestant books, 31,102 verses each)
 
 All from [eBible.org](https://ebible.org/Scriptures/) (public domain). **Use `_vpl.txt` for import** — one line per verse, `BOOK CHAPTER:VERSE text`, no Strong’s markup. USFM is kept as the tagged original (KJV USFM has `\w word|strong="H1234"\w*`; VPL already flattened that without deleting words).
 
-KJV supplied words appear as `[was]`, `[it was]`, etc. Keep the words; do not strip the brackets with a greedy regex — that is the bug in `prepare-kjv.mjs` / the current `kjv.json` (Genesis 1:2 lost “was”, 1:4 lost “it was”).
+KJV supplied words appear as `[was]`, `[it was]`, etc. Keep the words; strip the brackets only. Do not strip the brackets with a greedy regex (that deleted “was” from Genesis 1:2 and “it was” from 1:4).
 
 | Id | Work | eBible id | Files |
 |----|------|-----------|--------|
@@ -53,6 +53,5 @@ Two copies; prefer the plaintext table for import:
 
 ## What we are not using
 
-- Existing `kjv.json` + `prepare-kjv.mjs` `{...}` stripper (drops words).
 - e-Sword `.bblx` / `.cmtx` modules (deleted; encrypted).
 - Extra translations or commentaries not listed above.

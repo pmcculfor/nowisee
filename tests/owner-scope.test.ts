@@ -81,6 +81,7 @@ describe("owner-scoped stack ids", () => {
     );
     h = createNowiseeHost({
       db: ctxDb,
+      ephemeral: true,
       scrypt: SCRYPT_TEST,
       configuredOrigin: ORIGIN,
       extraApps: [vaultApp()],

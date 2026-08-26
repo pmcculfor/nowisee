@@ -20,6 +20,7 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
   function getHost(): NowiseeHost {
     host ??= createNowiseeHost({
       db: options.dbPath ?? process.env.NOWISEE_DB ?? "data/nowisee.db",
+      ephemeral: false,
       scrypt: SCRYPT_PRODUCTION,
       configuredOrigin: process.env.NOWISEE_ORIGIN,
     });

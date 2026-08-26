@@ -24,11 +24,11 @@ Import sources under `raw/` that the importer reads are committed. Zips, USFM, a
 
 ## Catalogs and sequences
 
-Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name individual works.
+Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name individual works. [`view/kinds.ts`](view/kinds.ts) is one table keyed by `ParsedNode` kind (`addLevel`, `payload`, `version`, `location`) so a new node kind is a row, not four `switch`es.
 
 - `CanonBook` — USFM id, sort, testament **string**, label, aliases (URL names).
 - `VersionRecord` — `id`, `label`, `sortOrder`, `license` (a seam for licensed translations; unused for gating).
-- `CommentaryRecord` — `id`, `label`, `sortOrder`, `format`.
+- `CommentaryRecord` — import catalog (`id`, `label`, `sortOrder`, `format`, source path). The graph lists rows from the `commentaries` table, most recently used first.
 - `RootItem[]` — testament headings, bookmarks, search, versions.
 - `VerseOption[]` — versions, commentary, bookmark, copy.
 
@@ -50,13 +50,13 @@ Reading-tree descend and `back` use `replace` (testament ↔ book ↔ chapter �
 - **Version:** root and verse-menu lists walk `VersionRecord`s, most recently used first. Verse-menu Versions lands on the first pick, the same as root Version. Enter is `action: true` plus a same-app `app` edge (which resets the stack). Prefs write only when `ctx.userId` is set. Recency writes for the signed-in user or the session. A missing verse in the target version clamps to the last verse of that chapter.
 - **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words, canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. The query id is session-scoped; hits re-run on refresh.
 - **Bookmarks:** `ctx.userId` only. Signed-out enter is a sign-in node (enter → Account). Never store session-id rows. The verse-menu Bookmark option toggles (“Bookmarked” / “Bookmark removed”).
-- **Commentary:** a catalog list of works, most recently used first. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific inclusive range covering this verse. Chunks do not wrap. TSK xrefs are stored and flattened into the section label.
+- **Commentary:** works listed from the `commentaries` table, most recently used first. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific inclusive range covering this verse. Chunks do not wrap. TSK xrefs are stored and flattened into the section label.
 
 Warm nearby books, chapters, and verses as appropriate.
 
 ## Schema
 
-Migrations live in [`db/migrations/`](db/migrations/). `002_reader.sql` dropped 001 placeholders (the product is in development; existing rows need not be preserved).
+Migrations live in [`db/migrations/001_reader.sql`](db/migrations/001_reader.sql). One file: the product is in development, so existing rows need not be preserved. Delete `data/apps/bible.db` after a schema change.
 
 - `canon_books`, `books` (per version), `verses`, `verse_words` (inverted index; no FTS5)
 - `reader_prefs` (`user_id` → `active_version_id`)
@@ -80,5 +80,6 @@ Licensed translations (`license` field), navigable commentary xrefs (TSK refs ar
 | `types.ts` / `store.ts` | SQLite behind `BibleStore` |
 | `search.ts` | Tokenize |
 | `import.ts` | `ensureCatalog` |
-| `view/*` | Graph |
+| `view/kinds.ts` | `ParsedNode` kind → version, location, payload, neighborhood |
+| `view/*` | Graph builders the table calls |
 | `index.ts` | `AppModule`; passes `ctx` |

@@ -16,45 +16,6 @@ const EMPTY_DRAFT: ComposeDraft = {
   sendResult: null,
 };
 
-export type MemoryGmailStoreOptions = {
-  readonly inbox?: Readonly<Record<string, readonly InboxMessage[]>>;
-  readonly drafts?: Readonly<Record<string, ComposeDraft>>;
-};
-
-export function createMemoryGmailStore(options: MemoryGmailStoreOptions = {}): GmailStore {
-  const inbox = new Map<string, InboxMessage[]>();
-  const drafts = new Map<string, ComposeDraft>();
-  for (const [owner, messages] of Object.entries(options.inbox ?? {})) {
-    inbox.set(owner, [...messages]);
-  }
-  for (const [owner, draft] of Object.entries(options.drafts ?? {})) {
-    drafts.set(owner, draft);
-  }
-
-  return {
-    async listInbox(ownerId) {
-      return inbox.get(ownerId) ?? [];
-    },
-    async replaceInbox(ownerId, messages) {
-      inbox.set(ownerId, [...messages]);
-    },
-    async getCached(ownerId, messageId) {
-      return inbox.get(ownerId)?.find((m) => m.id === messageId) ?? null;
-    },
-    async getDraft(ownerId) {
-      return drafts.get(ownerId) ?? EMPTY_DRAFT;
-    },
-    async saveDraft(ownerId, patch) {
-      const next: ComposeDraft = { ...(drafts.get(ownerId) ?? EMPTY_DRAFT), ...patch };
-      drafts.set(ownerId, next);
-      return next;
-    },
-    async clearDraft(ownerId) {
-      drafts.delete(ownerId);
-    },
-  };
-}
-
 export function createSqliteGmailStore(db: Db): GmailStore {
   return {
     async listInbox(ownerId) {

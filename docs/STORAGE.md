@@ -23,13 +23,13 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 
 | Database | Default path | Migrations / detail |
 |----------|----------------|---------------------|
-| Host (identity, lockbox, OAuth state) | `data/nowisee.db` | [`001_identity.sql`](../server/db/migrations/001_identity.sql), [`002_lockbox.sql`](../server/db/migrations/002_lockbox.sql) |
+| Host (identity, lockbox, OAuth state) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql) |
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
 | Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/). Graph: [`src/apps/notes/README.md`](../src/apps/notes/README.md) |
 | Gmail | `data/apps/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/). Tokens via `ctx.oauth` only. Graph: [`src/apps/gmail/README.md`](../src/apps/gmail/README.md) |
 
-Tests pass `:memory:` for each file that the test needs. `createNowiseeHost({ db: ":memory:" })` (the default) also gives Account, Bible, Notes, and Gmail memory files so tests do not write `data/`.
+Tests pass `:memory:` for each file that the test needs. `createNowiseeHost` defaults to `ephemeral: true`, which tells each pack's `start` to open `:memory:` (via `packStorePath` in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts)) so tests do not write `data/`. Production (`server/index.ts`, Vite plugin) passes `ephemeral: false`. The flag is intentional — do not infer it from whether `db` is a path string or a `Db` handle. The host still never injects a database into an app; each pack chooses a path and the app opens it.
 
 `ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). It never carries a database.
 
@@ -37,7 +37,7 @@ Schema, import, and graph live next to each app. The client bundle must not cont
 
 ## App-owned schemas
 
-Apps own their columns, indexes, and when they read or write. Migrations are numbered files next to that app; never edit an applied file.
+Apps own their columns, indexes, and when they read or write. Migrations are numbered files next to that app. In development, squash into one current schema rather than stacking files whose only job is preserving old rows. After a squash, delete the local `data/` files.
 
 For user data, put the **owner in the query every time** — [`IDENTITY.md`](IDENTITY.md) §9. `ctx.userId` comes from the cookie only. A missing or other-user row is “not found.”
 

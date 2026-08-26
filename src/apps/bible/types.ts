@@ -1,4 +1,4 @@
-import type { CommentaryRecord, RecencyWorkKind, VersionLicense, VersionRecord } from "./catalog.ts";
+import type { RecencyWorkKind, VersionLicense, VersionRecord } from "./catalog.ts";
 
 export type RecencyOwner = {
   readonly kind: "user" | "session";
@@ -50,6 +50,12 @@ export type CommentarySection = {
   readonly xrefs: readonly string[];
 };
 
+export type CommentaryWork = {
+  readonly id: string;
+  readonly label: string;
+  readonly sortOrder: number;
+};
+
 export type SearchHit = CanonRef;
 
 export type BibleSeedVerse = {
@@ -78,25 +84,22 @@ export type BibleSeed = {
 };
 
 export interface BibleStore {
-  defaultVersionId(): string;
+  defaultVersionId(): string | null;
   getVersion(id: string): BibleVersion | undefined;
   listVersions(owner?: RecencyOwner | null): readonly BibleVersion[];
   getActiveVersionId(userId: string): string | null;
   setActiveVersionId(userId: string, versionId: string): void;
   touchRecency(owner: RecencyOwner, workKind: RecencyWorkKind, workId: string): void;
-  listTestaments(versionId: string): readonly string[];
   listBooks(versionId: string, testament: string): readonly BibleBook[];
   getBook(versionId: string, bookIdOrAlias: string): BibleBook | undefined;
-  verseCount(versionId: string, bookId: string, chapter: number): number;
   lastVerse(versionId: string, bookId: string, chapter: number): number;
   getVerse(ref: BibleRef): BibleVerse | undefined;
   listVerses(versionId: string, bookId: string, chapter: number): readonly BibleVerse[];
-  chapterVerseMax(bookId: string, chapter: number): number;
   isBookmarked(userId: string, ref: CanonRef): boolean;
   listBookmarks(userId: string): readonly BookmarkRecord[];
   toggleBookmark(userId: string, ref: CanonRef): "added" | "removed";
-  listCommentaries(owner?: RecencyOwner | null): readonly CommentaryRecord[];
-  getCommentary(id: string): CommentaryRecord | undefined;
+  listCommentaries(owner?: RecencyOwner | null): readonly CommentaryWork[];
+  getCommentary(id: string): CommentaryWork | undefined;
   findSection(commentaryId: string, ref: CanonRef): CommentarySection | undefined;
   createSearchQuery(sessionId: string, query: string): string;
   getSearchQuery(queryId: string, sessionId: string): string | null;

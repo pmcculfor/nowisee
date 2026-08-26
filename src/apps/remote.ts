@@ -3,16 +3,18 @@ import { toWireExtras, type AppRpc } from "./rpc.ts";
 
 export type RemoteAppOptions = {
   readonly id: string;
-  readonly label: string;
+  /** Spoken catalog labels come from the server. Defaults to `id`. */
+  readonly label?: string;
   readonly rpc: AppRpc;
 };
 
 /**
  * Client-side AppModule that forwards open/refresh to an AppRpc.
- * Same stub for every server app — not Bible-specific.
+ * Same stub for every server app — not a per-app phone book.
  */
 export function createRemoteApp(options: RemoteAppOptions): AppModule {
-  const { id, label, rpc } = options;
+  const { id, rpc } = options;
+  const label = options.label ?? id;
   return {
     id,
     label,

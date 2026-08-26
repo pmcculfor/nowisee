@@ -2,7 +2,7 @@
 
 Notes is an ordinary server `AppModule`. Persistence is `NotesStore` on this app’s SQLite file (`data/apps/notes.db`). Every store method takes `ownerId` (`ctx.userId`); the host does not inject the store. See [`docs/STORAGE.md`](../../../docs/STORAGE.md).
 
-Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts). Tests: [`tests/notes.test.ts`](../../../tests/notes.test.ts).
+Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts). Tests: [`tests/notes.test.ts`](../../../tests/notes.test.ts) (in-memory SQLite, same store as production).
 
 ## Signed out
 

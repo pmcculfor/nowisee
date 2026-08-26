@@ -93,7 +93,7 @@ First-party mail is the first consumer (`ctx.oauth`).
 
 - **App corpora (landed):** each app seeds its own SQLite file. The host does not import those files. Example: Bible — [`src/apps/bible/README.md`](../src/apps/bible/README.md).
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
-- **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`002_lockbox.sql`](../server/db/migrations/002_lockbox.sql)).
+- **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`001_host.sql`](../server/db/migrations/001_host.sql)).
 - Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy.
 
 ---
@@ -103,7 +103,7 @@ First-party mail is the first consumer (`ctx.oauth`).
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
 1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
-2. **Database.** `server/db/` — host identity (`001_identity.sql`) plus lockbox / OAuth state (`002_lockbox.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Each app opens its own file.
+2. **Database.** `server/db/` — host identity, lockbox, and OAuth state (`001_host.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Each app opens its own file.
 3. **Identity service.** `server/identity/` — credentials, scrypt, sessions, `resolve` / `register` / `signIn` / `signOut` / `changePassword`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.

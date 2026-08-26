@@ -1,63 +1,30 @@
 import { buildMap, edgePop, rootBackToHome, type MapFragment } from "../../../app-kit/index.ts";
 import type {
-  AppLocation,
   AppServerContext,
   NodePayload,
   RefreshExtras,
   RefreshResult,
 } from "../../../core/types.ts";
-import { testamentLabel } from "../catalog.ts";
-import { bookPathSegment } from "../canon.ts";
 import {
   bookmarkStatusId,
-  bookmarksEmptyId,
-  bookmarksId,
-  bookId as bookNodeId,
-  chapterId,
-  commentaryChunkId,
-  commentaryWorkId,
-  commentaryListId,
-  copyStatusId,
-  optionId,
   parseNodeId,
   searchEmptyId,
-  searchId,
-  searchInputId,
-  searchWorkingId,
-  signInId,
-  testamentId,
-  verseVersionPickId,
-  versionPickId,
-  versionsHeadingId,
   verseNodeId,
-  type ParsedNode,
 } from "../ids.ts";
 import type { CanonRef } from "../types.ts";
-import { addBookLevel, addChapterLevel, addRootLevel } from "./root.ts";
-import { addBookmarksEmpty } from "./bookmarks.ts";
-import { addCommentaryWorks, commentaryChunkLabel } from "./commentary.ts";
-import { idleCopyStatus, resolveCopyStatus } from "./copy.ts";
+import { resolveCopyStatus } from "./copy.ts";
 import {
   activeVersion,
   addNode,
-  displayedVerse,
   touchRecency,
-  verseLocation,
   viewSession,
   type BibleViewDeps,
   type ViewSession,
 } from "./helpers.ts";
+import { KIND } from "./kinds.ts";
 import { emptyId, parseBiblePath } from "./path.ts";
-import { addSearchInput, emptySearchLabel, searchHits } from "./search.ts";
-import { addSignIn, signInResult } from "./signin.ts";
-import {
-  addOptionLevel,
-  addRootVersionList,
-  addVerseLevel,
-  addVerseVersionList,
-  optionNodeLabel,
-  versePayload,
-} from "./verse.ts";
+import { emptySearchLabel, searchHits } from "./search.ts";
+import { signInResult } from "./signin.ts";
 
 export type { BibleViewDeps };
 
@@ -140,6 +107,9 @@ function applyBookmarkToggle(session: ViewSession, ref: CanonRef): RefreshResult
 function applySearch(session: ViewSession): RefreshResult {
   const query = session.extras.inputText ?? "";
   const version = activeVersion(session);
+  if (!version) {
+    return emptyBibleView(session);
+  }
   if (!session.sessionId) {
     const id = searchEmptyId("none");
     const label = emptySearchLabel(query);
@@ -175,224 +145,26 @@ export function buildBibleView(session: ViewSession, tipId: string): RefreshResu
     return buildBibleView(session, parseBiblePath(session, "/"));
   }
 
-  const version = versionFor(session, parsed);
-  const payloads = new Map<string, NodePayload>();
-  const fragments: MapFragment[] = [];
-
-  switch (parsed.kind) {
-    case "testament":
-      addRootLevel(session, payloads, fragments, version, parsed.testament);
-      break;
-    case "bookmarks":
-    case "search":
-    case "versions-heading":
-      addRootLevel(session, payloads, fragments, version);
-      break;
-    case "bookmarks-empty":
-      addBookmarksEmpty(payloads, fragments);
-      break;
-    case "search-input":
-      addSearchInput(payloads, fragments);
-      break;
-    case "search-working":
-      addNode(payloads, { id: searchWorkingId(), label: "Searching…" });
-      fragments.push({ [searchWorkingId()]: { back: edgePop() } });
-      break;
-    case "search-empty":
-      addSearchEmpty(session, payloads, fragments, parsed.queryId);
-      break;
-    case "version-pick":
-      addRootVersionList(session, payloads, fragments);
-      break;
-    case "signin":
-      addSignIn(session, payloads, fragments);
-      break;
-    case "book":
-      addBookLevel(session, payloads, fragments, parsed.version, parsed.bookId);
-      break;
-    case "chapter":
-      addChapterLevel(session, payloads, fragments, parsed.version, parsed.bookId, parsed.chapter);
-      break;
-    case "verse": {
-      const ref = displayedVerse(session.deps.store, version, parsed.ref);
-      addVerseLevel(session, payloads, fragments, parsed.seq, ref);
-      break;
-    }
-    case "option":
-      addOptionLevel(session, payloads, fragments, parsed.version, parsed.ref);
-      break;
-    case "copy-status":
-      return idleCopyStatus(parsed.version, parsed.ref);
-    case "bookmark-status":
-      return bookmarkIdle(session, parsed.ref);
-    case "verse-version-pick":
-      addVerseVersionList(session, payloads, fragments, parsed.version, parsed.ref);
-      break;
-    case "commentary-list":
-    case "commentary-work":
-    case "commentary-chunk":
-      addCommentaryWorks(session, payloads, fragments, parsed.version, parsed.ref);
-      break;
+  const row = KIND[parsed.kind];
+  const version = row.version(session, parsed);
+  if (!version) {
+    return emptyBibleView(session);
+  }
+  if (row.directView) {
+    return row.directView(session, parsed, version);
   }
 
-  const tip = payloads.get(tipId) ?? payloadFor(session, parsed, version);
+  const payloads = new Map<string, NodePayload>();
+  const fragments: MapFragment[] = [];
+  row.addLevel?.(session, payloads, fragments, parsed, version);
+  const tip = payloads.get(tipId) ?? row.payload(session, parsed, version);
   addNode(payloads, tip);
   return {
     navigationMap: buildMap(...fragments),
     warm: [...payloads.values()],
     node: tip,
-    location: locationFor(session, parsed, version),
+    location: row.location(session, parsed, version),
   };
-}
-
-function addSearchEmpty(
-  session: ViewSession,
-  payloads: Map<string, NodePayload>,
-  fragments: MapFragment[],
-  queryId: string,
-): void {
-  const query = session.sessionId
-    ? (session.deps.store.getSearchQuery(queryId, session.sessionId) ?? "")
-    : "";
-  const id = searchEmptyId(queryId);
-  addNode(payloads, { id, label: emptySearchLabel(query) });
-  fragments.push({ [id]: { back: edgePop() } });
-}
-
-function bookmarkIdle(session: ViewSession, ref: CanonRef): RefreshResult {
-  const statusId = bookmarkStatusId(ref);
-  const bookmarked = session.userId ? session.deps.store.isBookmarked(session.userId, ref) : false;
-  const label = bookmarked ? "Bookmarked" : "Bookmark removed";
-  return {
-    navigationMap: { [statusId]: { back: edgePop() } },
-    warm: [{ id: statusId, label }],
-    node: { id: statusId, label },
-    location: null,
-  };
-}
-
-function payloadFor(session: ViewSession, parsed: ParsedNode, version: string): NodePayload {
-  switch (parsed.kind) {
-    case "testament":
-      return { id: testamentId(parsed.version, parsed.testament), label: testamentLabel(parsed.testament) };
-    case "bookmarks":
-      return { id: bookmarksId(), label: "Bookmarks" };
-    case "bookmarks-empty":
-      return { id: bookmarksEmptyId(), label: "No bookmarks yet." };
-    case "search":
-      return { id: searchId(), label: "Search" };
-    case "search-input":
-      return { id: searchInputId(), label: "", kind: "input" };
-    case "search-working":
-      return { id: searchWorkingId(), label: "Searching…" };
-    case "search-empty":
-      return { id: searchEmptyId(parsed.queryId), label: "No verses matched." };
-    case "versions-heading":
-      return { id: versionsHeadingId(), label: "Version" };
-    case "version-pick":
-      return {
-        id: versionPickId(parsed.versionId),
-        label: session.deps.store.getVersion(parsed.versionId)?.label ?? parsed.versionId,
-      };
-    case "signin":
-      return { id: signInId(), label: "Sign in to bookmark." };
-    case "book":
-      return {
-        id: bookNodeId(parsed.version, parsed.bookId),
-        label: session.deps.store.getBook(parsed.version, parsed.bookId)?.name ?? parsed.bookId,
-      };
-    case "chapter":
-      return { id: chapterId(parsed.version, parsed.bookId, parsed.chapter), label: `${parsed.chapter} (chapter)` };
-    case "verse":
-      return versePayload(session, parsed.seq, displayedVerse(session.deps.store, version, parsed.ref));
-    case "option":
-      return {
-        id: optionId(parsed.version, parsed.ref, parsed.option),
-        label: optionNodeLabel(session, parsed.ref, parsed.option),
-      };
-    case "copy-status":
-      return { id: copyStatusId(parsed.version, parsed.ref), label: "Copied" };
-    case "bookmark-status":
-      return { id: bookmarkStatusId(parsed.ref), label: "Bookmarked" };
-    case "verse-version-pick":
-      return {
-        id: verseVersionPickId(parsed.version, parsed.ref, parsed.targetVersionId),
-        label: session.deps.store.getVersion(parsed.targetVersionId)?.label ?? parsed.targetVersionId,
-      };
-    case "commentary-list":
-      return { id: commentaryListId(parsed.version, parsed.ref), label: "Commentary" };
-    case "commentary-work":
-      return {
-        id: commentaryWorkId(parsed.version, parsed.ref, parsed.commentaryId),
-        label: session.deps.store.getCommentary(parsed.commentaryId)?.label ?? parsed.commentaryId,
-      };
-    case "commentary-chunk": {
-      return {
-        id: commentaryChunkId(parsed.version, parsed.ref, parsed.commentaryId, parsed.index),
-        label: commentaryChunkLabel(session, parsed.ref, parsed.commentaryId, parsed.index),
-      };
-    }
-  }
-}
-
-function versionFor(session: ViewSession, parsed: ParsedNode): string {
-  switch (parsed.kind) {
-    case "testament":
-    case "book":
-    case "chapter":
-      return parsed.version;
-    case "verse":
-      return parsed.ref.version || activeVersion(session);
-    case "option":
-    case "copy-status":
-    case "verse-version-pick":
-    case "commentary-list":
-    case "commentary-work":
-    case "commentary-chunk":
-      return parsed.version;
-    default:
-      return activeVersion(session);
-  }
-}
-
-function locationFor(session: ViewSession, parsed: ParsedNode, version: string): AppLocation | null {
-  const appId = session.deps.appId;
-  switch (parsed.kind) {
-    case "testament":
-    case "versions-heading":
-    case "version-pick":
-      return { appId, path: `/${version}` };
-    case "bookmarks":
-    case "bookmarks-empty":
-      return { appId, path: "/bookmarks" };
-    case "search":
-    case "search-input":
-    case "search-working":
-    case "search-empty":
-      return { appId, path: "/search" };
-    case "signin":
-      return null;
-    case "book":
-      return { appId, path: `/${parsed.version}/${bookPathSegment(parsed.bookId)}` };
-    case "chapter":
-      return {
-        appId,
-        path: `/${parsed.version}/${bookPathSegment(parsed.bookId)}/${parsed.chapter}`,
-      };
-    case "verse": {
-      const ref = displayedVerse(session.deps.store, version, parsed.ref);
-      return verseLocation(appId, ref.version, ref);
-    }
-    case "option":
-    case "verse-version-pick":
-    case "commentary-list":
-    case "commentary-work":
-    case "commentary-chunk":
-      return verseLocation(appId, parsed.version, parsed.ref);
-    case "copy-status":
-    case "bookmark-status":
-      return null;
-  }
 }
 
 function emptyBibleView(session: ViewSession): RefreshResult {

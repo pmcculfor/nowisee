@@ -1,14 +1,5 @@
--- Reader tables for versions, search, bookmarks, and range commentaries.
--- In development: drop 001 placeholders. Existing rows need not be preserved.
-
-DROP TABLE IF EXISTS search_hits;
-DROP TABLE IF EXISTS search_queries;
-DROP TABLE IF EXISTS commentary_notes;
-DROP TABLE IF EXISTS bookmarks;
-DROP TABLE IF EXISTS verses;
-DROP TABLE IF EXISTS books;
-DROP TABLE IF EXISTS versions;
-DROP TABLE IF EXISTS commentaries;
+-- Bible corpus and reader tables.
+-- One file: the product is in development; existing rows need not be preserved.
 
 CREATE TABLE canon_books (
   id TEXT PRIMARY KEY,
@@ -62,6 +53,17 @@ CREATE TABLE reader_prefs (
   user_id TEXT PRIMARY KEY,
   active_version_id TEXT NOT NULL REFERENCES versions (id)
 );
+
+CREATE TABLE reader_recency (
+  owner_kind TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  work_kind TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  used_at INTEGER NOT NULL,
+  PRIMARY KEY (owner_kind, owner_id, work_kind, work_id)
+);
+
+CREATE INDEX reader_recency_list ON reader_recency (owner_kind, owner_id, work_kind, used_at DESC);
 
 CREATE TABLE bookmarks (
   user_id TEXT NOT NULL,

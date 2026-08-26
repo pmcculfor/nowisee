@@ -31,7 +31,7 @@ export function viewSession(
   };
 }
 
-export function activeVersion(session: ViewSession, pathVersion?: string | null): string {
+export function activeVersion(session: ViewSession, pathVersion?: string | null): string | null {
   const store = session.deps.store;
   if (pathVersion && store.getVersion(pathVersion)) {
     return pathVersion;

@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { Router } from "../src/core/router.ts";
+import { isAppId, Router } from "../src/core/router.ts";
 import type { AppLocation } from "../src/core/types.ts";
 
 describe("Router", () => {
-  const known = new Set(["home", "fake", "bible"]);
-
   function makeRouter(onLocation: (loc: AppLocation) => void = () => undefined) {
     let hash = "#/";
     return new Router({
       rootAppId: "home",
-      isKnownApp: (id) => known.has(id),
       onLocation,
       location: {
         getHash: () => hash,
@@ -27,19 +24,29 @@ describe("Router", () => {
     expect(router.parse("#/home")).toEqual({ appId: "home", path: "/" });
   });
 
-  it("parses app paths", () => {
+  it("parses app paths without a client catalog", () => {
     const router = makeRouter();
     expect(router.parse("#/bible/kjv/Matthew/5/8")).toEqual({
       appId: "bible",
       path: "/kjv/Matthew/5/8",
     });
     expect(router.parse("#/fake")).toEqual({ appId: "fake", path: "/" });
+    expect(router.parse("#/nope")).toEqual({ appId: "nope", path: "/" });
   });
 
-  it("unknown or corrupt href resolves to root", () => {
+  it("corrupt or syntactically invalid href resolves to root", () => {
     const router = makeRouter();
-    expect(router.parse("#/nope")).toEqual({ appId: "home", path: "/" });
     expect(router.parse("%%%")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("#/NOPE")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("#/nope!")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("#/9bad")).toEqual({ appId: "home", path: "/" });
+  });
+
+  it("isAppId is the default well-formed check", () => {
+    expect(isAppId("bible")).toBe(true);
+    expect(isAppId("my-app")).toBe(true);
+    expect(isAppId("")).toBe(false);
+    expect(isAppId("Bible")).toBe(false);
   });
 
   it("hrefFor rejects a path that does not start with /", () => {
@@ -71,7 +78,6 @@ describe("Router", () => {
     let hash = "#/";
     const router = new Router({
       rootAppId: "home",
-      isKnownApp: (id) => known.has(id),
       onLocation: (loc) => {
         seen.push(loc);
       },
@@ -96,7 +102,6 @@ describe("Router", () => {
     let hash = "#/";
     const router = new Router({
       rootAppId: "home",
-      isKnownApp: (id) => known.has(id),
       onLocation: (loc) => {
         seen.push(loc);
       },

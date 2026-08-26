@@ -1,9 +1,5 @@
-import { getCanonBook, resolveBookToken, testamentLabel as catalogTestamentLabel } from "./catalog.ts";
+import { getCanonBook, resolveBookToken } from "./catalog.ts";
 import type { BibleRef, CanonRef } from "./types.ts";
-
-export function testamentLabel(id: string): string {
-  return catalogTestamentLabel(id);
-}
 
 export function formatRef(bookLabel: string, ref: CanonRef | BibleRef): string {
   return `${bookLabel} ${ref.chapter}:${ref.verse}`;

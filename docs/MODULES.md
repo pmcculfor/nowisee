@@ -86,21 +86,21 @@ The source file is canonical. The narrative lives in [`ARCHITECTURE.md`](ARCHITE
 
 ### Responsibilities
 
-- Register `AppModule` instances at bootstrap.
+- Hold `AppModule` instances for this process (host: pack at start; client: lazy RPC stubs).
 - `get(id) → AppModule | null` — **core-internal only**; never handed to an app.
-- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home reads this through `ctx.directory`, never the registry object.
+- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home reads this through `ctx.directory`, never the client registry.
 
 ### Edge cases
 
 | Case | Behavior |
 |------|----------|
-| `get` unknown id | Return null; Navigator falls back to `config.rootAppId` |
-| Double-register same id | **Reject** (throw / fail bootstrap); do not silently replace |
+| `get` unknown id | Return null. Navigator may ask `resolveApp`, then fall back to `config.rootAppId` |
+| Double-register same id | **Reject** (throw); do not silently replace |
 
 ### Non-goals
 
-- Lazy loading third-party apps at runtime (later).
-- Per-user enabled flags (later).
+- Being a product catalog. The host pack and `ctx.directory` own installed apps; hiding apps per user is a directory/Home concern.
+- Loading third-party *server* modules on demand (the host still starts the pack at process start).
 
 ---
 
@@ -133,7 +133,8 @@ Paths on `AppLocation` are canonical: non-empty, starting with `/`. `parse` reco
 
 | Case | Behavior |
 |------|----------|
-| Unknown appId | Resolve to `config.rootAppId`; do not crash |
+| Well-formed app id (`isAppId`) | Keep that id; the server decides whether it exists |
+| Syntactically invalid app id | Resolve to `config.rootAppId`; do not crash |
 | Corrupt or non-matching href | Resolve to `config.rootAppId` |
 | `hrefFor` round-trip | `parse(hrefFor(loc))` must equal `loc` for any location core emits |
 | Address bar written by core | Must not re-enter `openLocation` via `hashchange` |
@@ -283,7 +284,7 @@ onIntent(intent):
     // on result (if token is newest): apply; blocked = false
 ```
 
-`openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. Unknown `appId` still resolves to `config.rootAppId` with path `/`. A known app with a non-canonical path is a silent no-op.
+`openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. If the registry has no module, Navigator asks optional `resolveApp` (bootstrap mints a generic RPC stub). If that is missing or returns null, the id still resolves to `config.rootAppId` with path `/`. A known app with a non-canonical path is a silent no-op.
 
 **Local move vs refresh authority:** After a warm hit, display `payload.label` immediately, then refresh may replace the tip with `result.node` (same id or a stale-repair fallback). Core adopts `result.node.id` as the tip id, since subsequent map lookups key off it. Do not teleport to an unrelated workflow destination.
 
@@ -514,9 +515,10 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 ### Responsibilities
 
 - Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
-- Construct registry; register a remote stub (`createRemoteApp`) for each first-party app.
+- Construct an empty registry. Inject `resolveApp` so Navigator can mint a generic `createRemoteApp` stub for whatever id the URL or an `app` edge names. Do **not** pre-register a product list.
 - Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
+- Router uses `isAppId` (syntax), not the client registry, to accept a hash segment.
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
 - Do **not** call `display.focus()` again after open resolves — `showText` / `showInput` already focused; a second focus restarts VoiceOver.
 

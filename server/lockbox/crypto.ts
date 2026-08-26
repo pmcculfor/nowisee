@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { LockboxError } from "./errors.ts";
 
 const ALGORITHM = "aes-256-gcm";
 const NONCE_LENGTH = 12;
@@ -89,7 +90,7 @@ export class DecryptFailedError extends Error {
 function requireKey(keyring: LockboxKeyring, id: string): Uint8Array {
   const key = keyring.keys[id];
   if (!key || key.byteLength !== KEY_LENGTH) {
-    throw new Error(`Unknown or invalid lockbox key id: ${id}`);
+    throw new LockboxError("missing-key", `Unknown or invalid lockbox key id: ${id}`);
   }
   return key;
 }

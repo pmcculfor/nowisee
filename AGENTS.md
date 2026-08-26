@@ -124,7 +124,7 @@ The product is a frontend SPA (Vanilla TypeScript + Vite) plus a same-origin app
 
 - **Dev server:** `npm run dev` serves at `http://localhost:5173/`. POST `/api/apps/:id/open` and `/refresh` are served in-process with CSRF, sessions, and SQLite.
 - **Production:** `npm run build && npm start` — `server/index.ts` serves `dist/` and `/api` together. OAuth redirect is `{NOWISEE_ORIGIN}/oauth/callback`. Env vars: [`.env.example`](.env.example).
-- **Tests:** `npm test` (Vitest, node environment). `tests/navigator.test.ts` intentionally logs `Navigator: refresh/open failed Error: boom` to stderr while exercising the failure path — that stderr line is expected and does **not** mean the suite failed.
+- **Tests:** `npm test` (Vitest, node environment). `tests/navigator.test.ts` intentionally logs `Navigator: refresh/open failed` to stderr while exercising failure and malformed-result paths — those lines are expected and do **not** mean the suite failed.
 - **Lint / typecheck:** there is no ESLint/Prettier. `npm run build` runs `tsc -p tsconfig.app.json --noEmit` and `tsc -p tsconfig.node.json --noEmit`, then `vite build`. A "chunks are larger than 500 kB" warning, if it still appears, is not an error. Large corpora stay on the server; see each app’s README for how that app seeds.
 - **Do not drive the running app in a browser.** The owner prefers agents verify with `npm test` (and, if needed, HTTP against `/api`). Browser automation is slow. Humans may still use a browser locally.
 
