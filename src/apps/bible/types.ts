@@ -84,14 +84,11 @@ export interface BibleStore {
   getActiveVersionId(userId: string): string | null;
   setActiveVersionId(userId: string, versionId: string): void;
   touchRecency(owner: RecencyOwner, workKind: RecencyWorkKind, workId: string): void;
-  listTestaments(versionId: string): readonly string[];
   listBooks(versionId: string, testament: string): readonly BibleBook[];
   getBook(versionId: string, bookIdOrAlias: string): BibleBook | undefined;
-  verseCount(versionId: string, bookId: string, chapter: number): number;
   lastVerse(versionId: string, bookId: string, chapter: number): number;
   getVerse(ref: BibleRef): BibleVerse | undefined;
   listVerses(versionId: string, bookId: string, chapter: number): readonly BibleVerse[];
-  chapterVerseMax(bookId: string, chapter: number): number;
   isBookmarked(userId: string, ref: CanonRef): boolean;
   listBookmarks(userId: string): readonly BookmarkRecord[];
   toggleBookmark(userId: string, ref: CanonRef): "added" | "removed";

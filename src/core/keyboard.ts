@@ -91,7 +91,7 @@ export interface KeyboardOptions {
  * Does not know which intents an app map contains.
  */
 export class Keyboard {
-  private bindings: readonly KeyBinding[];
+  private readonly bindings: readonly KeyBinding[];
   private readonly host: KeyboardHost;
   private readonly target: EventTarget;
   private readonly onKeyDown: (event: Event) => void;
@@ -104,10 +104,6 @@ export class Keyboard {
     this.onKeyDown = (event: Event) => {
       this.handleKeyDown(event as KeyboardEvent);
     };
-  }
-
-  setBindings(bindings: readonly KeyBinding[]): void {
-    this.bindings = bindings;
   }
 
   attach(): void {

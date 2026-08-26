@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
 import {
   COMMENTARY_RECORDS,
-  ROOT_ITEMS,
   getCanonBook,
   resolveBookToken,
   verseOrd,
@@ -31,7 +30,7 @@ export const DEFAULT_BIBLE_DB_PATH = "data/apps/bible.db";
 export function openBibleDatabase(path: string = DEFAULT_BIBLE_DB_PATH): Db {
   return openSqlite({
     path,
-    migrations: { dir: MIGRATIONS_DIR, files: ["001_corpus.sql", "002_reader.sql", "003_recency.sql"] },
+    migrations: { dir: MIGRATIONS_DIR, files: ["001_reader.sql"] },
   });
 }
 
@@ -89,27 +88,6 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         versionId,
       );
     },
-    listTestaments(versionId) {
-      const rows = db.all<{ testament: string }>(
-        `SELECT DISTINCT c.testament AS testament
-         FROM books b
-         JOIN canon_books c ON c.id = b.book_id
-         WHERE b.version_id = ?`,
-        versionId,
-      );
-      const present = new Set(rows.map((r) => r.testament));
-      const ordered: string[] = [];
-      for (const item of ROOT_ITEMS) {
-        if (item.type === "testament" && present.has(item.testament)) {
-          ordered.push(item.testament);
-          present.delete(item.testament);
-        }
-      }
-      for (const extra of present) {
-        ordered.push(extra);
-      }
-      return ordered;
-    },
     listBooks(versionId, testament) {
       const rows = db.all<{
         version_id: string;
@@ -154,15 +132,6 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       );
       return row ? toBook(row) : undefined;
     },
-    verseCount(versionId, bookId, chapter) {
-      const row = db.get<{ n: number }>(
-        "SELECT COUNT(*) AS n FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ?",
-        versionId,
-        bookId,
-        chapter,
-      );
-      return row?.n ?? 0;
-    },
     lastVerse(versionId, bookId, chapter) {
       const row = db.get<{ n: number }>(
         "SELECT COALESCE(MAX(verse), 0) AS n FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ?",
@@ -201,14 +170,6 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         verse: r.verse,
         text: r.text,
       }));
-    },
-    chapterVerseMax(bookId, chapter) {
-      const row = db.get<{ n: number }>(
-        "SELECT COALESCE(MAX(verse), 0) AS n FROM verses WHERE book_id = ? AND chapter = ?",
-        bookId,
-        chapter,
-      );
-      return row?.n ?? 0;
     },
     isBookmarked(userId, ref) {
       return Boolean(

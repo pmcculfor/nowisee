@@ -45,9 +45,6 @@ export function collectNeighborhood(opts: CollectNeighborhoodOptions): {
     if (payload && !warmIds.has(payload.id)) {
       warm.push(payload);
       warmIds.add(payload.id);
-      if (warmIds.size >= opts.maxNodes) {
-        // Still record edges from this node if we just admitted it; then stop expanding.
-      }
     }
 
     const edges = opts.neighbors(item.id);

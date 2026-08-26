@@ -4,7 +4,7 @@
 
 This file tracks what is still open after the documentation pass. It is not a third SPEC. The 24 Aug review is saved as [`original_audit.md`](original_audit.md).
 
-Tests and the live app were **not** re-run for this update. Unused-code, bug, and security items are carried forward from that original review unless a note says otherwise.
+Unused-code cleanup on 25 Aug 2026: dead Bible/host leftovers, squashed migrations, lockbox `missing-key` wired. `npm test` 211 passed. Remaining unused-code, bug, and security items are carried forward from the original review unless a note says otherwise.
 
 ---
 
@@ -30,7 +30,6 @@ The owner-approved documentation work from [`original_audit.md`](original_audit.
 
 A few leftover nits are intentional:
 
-- [`SOURCES.md`](../src/apps/bible/data/SOURCES.md) still warns not to extend `prepare-kjv.mjs`. That warning belongs with the corpus, not in AGENTS.
 - IDENTITY’s signed-out table still names Bible / Notes / Mail / Home as **examples** of different app policies, not as core locks.
 - `tests/packaging.test.ts` still forbids the string `kjv.json` in bootstrap. That is a code test, not a documentation lock.
 
@@ -38,19 +37,7 @@ A few leftover nits are intentional:
 
 ## 2. Unused code and data
 
-These items come from original §4. They are safe to delete only with the listed caveat. None of this was done in the docs pass.
-
-### Dead runtime path
-
-| Item | Where | Notes |
-|------|--------|--------|
-| `kjv.json` | `src/apps/bible/data/kjv.json` | The importer never reads it. Delete it together with `scripts/prepare-kjv.mjs`. |
-| `scripts/prepare-kjv.mjs` | `scripts/` | Brace-strip pipeline; corrupts supplied words. Not in `package.json`. |
-| `displayedRef` | `src/apps/bible/ids.ts` | Exported, never imported |
-| `canon.ts` `testamentLabel` | Bible | Re-export; callers import from `catalog.ts` |
-| `BibleStore.listTestaments` / `verseCount` / `chapterVerseMax` | store | No product-graph caller. Wire `listTestaments` or delete. |
-| Empty `if` in `collectNeighborhood` | `src/app-kit/neighborhood.ts` | Harmless leftover |
-| `LockboxErrorCode "missing-key"` | `server/lockbox/errors.ts` | Nothing throws it |
+These items come from original §4. They are safe to delete only with the listed caveat.
 
 ### Used by tests only
 
@@ -59,7 +46,6 @@ These items come from original §4. They are safe to delete only with the listed
 | `NotesStore.get` | View never calls | Owner-isolation |
 | `GmailStore.getCached` | Inbox uses `listInbox` | Owner-isolation |
 | `IdentityService.changePassword` | Not on the capability; no Account screen | `tests/identity.test.ts` |
-| `Keyboard.setBindings` | Bindings at construct | Unused even in tests |
 | `Display.focus` | Must not be called after open (VoiceOver) | Unused as recovery API |
 | `handleAppHttp` | Production uses `handleSessionHttp` | `tests/app-host.test.ts` — keep test-only |
 | `createAppHost` | Production uses `createNowiseeHost` | Shell / app-host tests |
@@ -69,7 +55,7 @@ Either keep the store getters as a complete API or have the views use them. `cha
 
 ### Seams (do not delete as dead)
 
-These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST /oauth/:appId/events`; the Version `license` field; `commentary_xrefs` loaded and not shown; the Keyboard remapping API. The `001`+`002` smash could also squash into one migration (in development there is no compatibility tax).
+These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST /oauth/:appId/events`; the Version `license` field; `commentary_xrefs` loaded and not shown; Keyboard constructor bindings (user remapping later reconstructs Keyboard or adds a setter); lockbox `missing-key` (thrown when a blob’s `keyId` is not in the env ring — multi-key rotation still deferred).
 
 ### Orphan / duplicate
 
@@ -91,15 +77,14 @@ These are not bugs. They are worth doing when you are already in that file.
 3. **Gmail `view.ts`** (~580 lines). Split it the way Bible was split (`connect` / `inbox` / `compose` plus a dispatcher).
 4. **Notes/Gmail dual memory + SQLite stores.** Prefer `:memory:` SQLite in tests (Bible’s pattern) so the two implementations cannot drift.
 5. **Commentaries list vs DB.** The catalog owns listing, but the `commentaries` table is filled and unused for the list. Pick one owner.
-6. **`listTestaments` vs `ROOT_ITEMS`.** The UI hardcodes OT and NT; the store method is unused.
-7. **`collectNeighborhood` unused.** Use it, or stop advertising it in MODULES.
-8. **No `RefreshResult` guard.** `createFetchRpc` casts JSON and `applyResult` assumes the shape. A cheap type guard before apply would help. Full validation waits for third-party apps ([`PREPAREDNESS.md`](PREPAREDNESS.md)).
-9. **Display is a DOM class.** Extract the three-method port before a native client.
-10. **Account register-then-sign-in.** A typo of a new email creates an account. That is a product choice; confirm it if you ever want a separate Register path.
-11. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
-12. **Packaging tests are substring checks.** They do not assert Vite’s client graph.
-13. **Host `isEphemeral`.** A `Db` object is always treated as ephemeral (a tests-only footgun).
-14. **Hardcoded `"kjv"` fallback** in `defaultVersionId()`. Last-ditch if `versions` is empty.
+6. **`collectNeighborhood` unused.** Use it, or stop advertising it in MODULES.
+7. **No `RefreshResult` guard.** `createFetchRpc` casts JSON and `applyResult` assumes the shape. A cheap type guard before apply would help. Full validation waits for third-party apps ([`PREPAREDNESS.md`](PREPAREDNESS.md)).
+8. **Display is a DOM class.** Extract the three-method port before a native client.
+9. **Account register-then-sign-in.** A typo of a new email creates an account. That is a product choice; confirm it if you ever want a separate Register path.
+10. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
+11. **Packaging tests are substring checks.** They do not assert Vite’s client graph.
+12. **Host `isEphemeral`.** A `Db` object is always treated as ephemeral (a tests-only footgun).
+13. **Hardcoded `"kjv"` fallback** in `defaultVersionId()`. Last-ditch if `versions` is empty.
 
 The status channel (busy, dead-end, and failure all silent) is deferred, not an elegance item — see [`PREPAREDNESS.md`](PREPAREDNESS.md). It is the deferred item that most affects real users.
 
@@ -151,8 +136,7 @@ This is not an order you have to follow — just the highest-leverage leftovers.
 1. Warm-miss refresh failure: roll back the stack.
 2. OAuth callback: do not mint a session without `Set-Cookie`.
 3. Catch `serveStatic` `decodeURIComponent` throws.
-4. Delete `kjv.json` and `prepare-kjv.mjs` together.
-5. One app catalog for host and client stubs.
-6. Rate-limit identity mutations, and always set `NOWISEE_ORIGIN` in deploy.
+4. One app catalog for host and client stubs.
+5. Rate-limit identity mutations, and always set `NOWISEE_ORIGIN` in deploy.
 
 Leave until a named milestone: `requestRefresh`, the status channel, the Display port, a Facebook app, a third-party sandbox, and lockbox multi-key rotation.

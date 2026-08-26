@@ -102,6 +102,20 @@ describe("lockbox", () => {
     );
   });
 
+  it("throws missing-key when the blob's key is not in the ring", () => {
+    const v1 = testKeyring();
+    const aad = associatedData("user-a", "probe", "personal");
+    const blob = seal(v1, new TextEncoder().encode("secret-token"), aad);
+    const v2: LockboxKeyring = { currentId: "v2", keys: { v2: new Uint8Array(32).fill(9) } };
+    try {
+      open(v2, blob, aad);
+      expect.unreachable("expected missing-key");
+    } catch (err) {
+      expect(err).toBeInstanceOf(LockboxError);
+      expect((err as LockboxError).code).toBe("missing-key");
+    }
+  });
+
   it("isolates other users and other apps; Notes is not granted", async () => {
     const seen: AppServerContext[] = [];
     const notesSeen: AppServerContext[] = [];

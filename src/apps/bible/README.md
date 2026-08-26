@@ -56,7 +56,7 @@ Warm nearby books, chapters, and verses as appropriate.
 
 ## Schema
 
-Migrations live in [`db/migrations/`](db/migrations/). `002_reader.sql` dropped 001 placeholders (the product is in development; existing rows need not be preserved).
+Migrations live in [`db/migrations/001_reader.sql`](db/migrations/001_reader.sql). One file: the product is in development, so existing rows need not be preserved. Delete `data/apps/bible.db` after a schema change.
 
 - `canon_books`, `books` (per version), `verses`, `verse_words` (inverted index; no FTS5)
 - `reader_prefs` (`user_id` → `active_version_id`)

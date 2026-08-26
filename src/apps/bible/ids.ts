@@ -264,7 +264,3 @@ function bibleRef(version: string, bookId: string, chapter: string, verse: strin
 function canonRef(bookId: string, chapter: string, verse: string): CanonRef {
   return { bookId, chapter: Number(chapter), verse: Number(verse) };
 }
-
-export function displayedRef(version: string, ref: CanonRef): BibleRef {
-  return { version, bookId: ref.bookId, chapter: ref.chapter, verse: ref.verse };
-}
