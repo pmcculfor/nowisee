@@ -72,6 +72,25 @@ describe("siblingListEdges", () => {
     expect(frag.c?.next).toEqual(edgeNode("a", "replace"));
   });
 
+  it("around emits a window; prev/next still address the full list", () => {
+    const frag = siblingListEdges(["a", "b", "c", "d", "e"], { around: { index: 2, radius: 1 } });
+    expect(Object.keys(frag).sort()).toEqual(["b", "c", "d"]);
+    expect(frag.b).toEqual({
+      prev: edgeNode("a", "replace"),
+      next: edgeNode("c", "replace"),
+    });
+    expect(frag.d).toEqual({
+      prev: edgeNode("c", "replace"),
+      next: edgeNode("e", "replace"),
+    });
+    expect(frag.a).toBeUndefined();
+    expect(frag.e).toBeUndefined();
+  });
+
+  it("around with an out-of-range index emits nothing", () => {
+    expect(siblingListEdges(["a", "b"], { around: { index: 2, radius: 1 } })).toEqual({});
+  });
+
   it("single-item list has no prev/next even with wrap", () => {
     expect(siblingListEdges(["only"], { wrap: true })).toEqual({ only: {} });
   });

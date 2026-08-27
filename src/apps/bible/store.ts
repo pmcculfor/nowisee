@@ -276,15 +276,24 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         xrefs: xrefs.map((x) => x.refs),
       } satisfies CommentarySection;
     },
-    createSearchQuery(sessionId, query) {
+    createSearchQuery(sessionId, query, hits) {
       const id = crypto.randomUUID();
-      db.run(
-        "INSERT INTO search_queries (id, session_id, query, created_at) VALUES (?, ?, ?, ?)",
-        id,
-        sessionId,
-        query,
-        Date.now(),
+      const insertHit = db.prepare(
+        "INSERT INTO search_hits (query_id, position, book_id, chapter, verse) VALUES (?, ?, ?, ?, ?)",
       );
+      db.transaction(() => {
+        db.run(
+          "INSERT INTO search_queries (id, session_id, query, created_at) VALUES (?, ?, ?, ?)",
+          id,
+          sessionId,
+          query,
+          Date.now(),
+        );
+        for (let i = 0; i < hits.length; i++) {
+          const hit = hits[i]!;
+          insertHit.run(id, i, hit.bookId, hit.chapter, hit.verse);
+        }
+      });
       return id;
     },
     getSearchQuery(queryId, sessionId) {
@@ -294,6 +303,17 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         sessionId,
       );
       return row?.query ?? null;
+    },
+    listSearchHits(queryId, sessionId) {
+      return db.all<SearchHit>(
+        `SELECT h.book_id AS bookId, h.chapter, h.verse
+         FROM search_hits h
+         INNER JOIN search_queries q ON q.id = h.query_id
+         WHERE h.query_id = ? AND q.session_id = ?
+         ORDER BY h.position ASC`,
+        queryId,
+        sessionId,
+      );
     },
     searchVerses(versionId, tokens, cap) {
       const unique = tokenize(tokens.join(" "));

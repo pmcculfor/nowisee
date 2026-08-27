@@ -49,14 +49,17 @@ export type RecencyWorkKind = "version" | "commentary";
 
 export type SearchPolicy = {
   readonly maxHits: number;
+  /** Search-hit prev/next window returned in warm + map. Not a core prefetch radius. */
+  readonly siblingRadius: number;
 };
 
 export type VerseSequence =
   | { readonly type: "chapter"; readonly versionId: string; readonly bookId: string; readonly chapter: number }
+  | { readonly type: "context"; readonly versionId: string; readonly bookId: string; readonly chapter: number }
   | { readonly type: "bookmarks" }
   | { readonly type: "search"; readonly queryId: string };
 
-export const SEARCH_POLICY: SearchPolicy = { maxHits: 1000 };
+export const SEARCH_POLICY: SearchPolicy = { maxHits: 1000, siblingRadius: 24 };
 
 export const TESTAMENT_LABELS: Readonly<Record<string, string>> = {
   OT: "Old Testament",

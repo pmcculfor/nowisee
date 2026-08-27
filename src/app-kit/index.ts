@@ -12,7 +12,7 @@ export {
   type EdgeFlags,
 } from "./edges.ts";
 
-export { buildMap, siblingListEdges, type MapFragment } from "./lists.ts";
+export { buildMap, siblingListEdges, type MapFragment, type SiblingListOptions } from "./lists.ts";
 
 export { inputEdges, type InputEdgesOptions } from "./input.ts";
 

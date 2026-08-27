@@ -53,6 +53,8 @@ export function verseNodeId(seq: VerseSequence, ref: CanonRef): string {
   switch (seq.type) {
     case "chapter":
       return `bible:v:${seq.versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
+    case "context":
+      return `bible:vx:${seq.versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
     case "bookmarks":
       return `bible:bm:${ref.bookId}:${ref.chapter}:${ref.verse}`;
     case "search":
@@ -176,6 +178,16 @@ export function parseNodeId(id: string): ParsedNode | null {
     return {
       kind: "verse",
       seq: { type: "chapter", versionId: ref.version, bookId: ref.bookId, chapter: ref.chapter },
+      ref,
+    };
+  }
+
+  const vx = new RegExp(`^bible:vx:${REF}$`).exec(id);
+  if (vx) {
+    const ref = bibleRef(vx[1]!, vx[2]!, vx[3]!, vx[4]!);
+    return {
+      kind: "verse",
+      seq: { type: "context", versionId: ref.version, bookId: ref.bookId, chapter: ref.chapter },
       ref,
     };
   }

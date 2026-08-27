@@ -491,7 +491,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 |--------|---------|
 | `edgeNode / edgePop / edgeApp / edgeExternal` | Construct `NavEdge` values; `edgePop` omits `toNodeId` |
 | `edgeAction(toNodeId)` | `enter` edge with `action: true` — the one-line button press |
-| `siblingListEdges(ids, opts)` | `prev` / `next` `replace` edges; `wrap?: boolean` |
+| `siblingListEdges(ids, opts)` | `prev` / `next` `replace` edges; `wrap?: boolean`; `around?: { index, radius }` windows the emitted rows |
 | `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) commits; `back` abandons (`backTo` is a node id or `"pop"`) |
 | `rootBackToHome(rootId, rootAppId, fromAppId)` | `back` app edge to that app's Home catalog row (`/app/:fromAppId`) |
 | `edgeToHome(rootAppId, fromAppId)` / `homeCatalogPath(appId)` | Same Home row address |
