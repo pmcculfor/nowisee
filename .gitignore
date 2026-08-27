@@ -21,3 +21,5 @@ src/apps/bible/data/raw/bibles/*_vpl/*.htm
 src/apps/bible/data/raw/bibles/*_vpl/*.html
 src/apps/bible/data/raw/bibles/*_vpl/*.css
 src/apps/bible/data/raw/commentaries/available_commentaries.json
+**/xcuserdata/
+ios/DerivedData/

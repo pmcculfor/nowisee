@@ -27,6 +27,7 @@ src/core/       client shell (navigator, display, keyboard, …)
 src/app-kit/    optional helpers apps import
 src/apps/       Home, Help, Bible, Notes, Gmail, Account (server AppModules)
 src/shell/      browser bootstrap — remote stubs only
+ios/            WKWebView + Direct Touch overlay (build on a Mac; see ios/README.md)
 server/         HTTP, CSRF, identity, lockbox, OAuth; packs first-party apps
 tests/          Vitest, node environment
 ```

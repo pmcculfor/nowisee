@@ -420,6 +420,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
 - Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done or fire on explore-by-touch.
+- **Not mounted** when the iOS WKWebView host is present (`webkit.messageHandlers.nowisee`); the native overlay is the intent host then.
 
 | Edge | Intent |
 |------|--------|
@@ -433,6 +434,30 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - Visible chrome or sighted affordances (pads are intentionally transparent).
 - Knowing which intents an app map contains.
 - Replacing Keyboard on desktop; both paths coexist.
+
+---
+
+## 9c. Native WKWebView host
+
+**Path:** `src/shell/nativeBridge.ts` (page), `ios/` (Swift overlay)
+
+The iPhone app is a visible `WKWebView` of the production origin plus a transparent Direct Touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
+
+The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
+
+### Page → native
+
+`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done.
+
+### Native → page
+
+`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back")`. Other strings are ignored.
+
+### Non-goals
+
+- A Display port or native text renderer (deferred until device spikes fail).
+- Teaching apps about swipes or User-Agent.
+- A second login path; the WebView keeps the session cookie.
 
 ---
 
