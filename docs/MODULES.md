@@ -441,7 +441,9 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 **Path:** `src/shell/nativeBridge.ts` (page), `ios/` (Swift overlay)
 
-The iPhone app is a visible `WKWebView` of the production origin plus a transparent Direct Touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
+The iPhone app is a visible `WKWebView` of the production origin plus a transparent touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
+
+The overlay is **not** an accessibility element and does not post VoiceOver announcements. VoiceOver reads the WKWebView the same way as Safari (Display remount + focus). Native must not also announce, or iOS double-speaks.
 
 The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
 

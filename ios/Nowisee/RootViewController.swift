@@ -11,7 +11,6 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
   private let errorStack = UIStackView()
   private let scriptProxy = WeakScriptMessageHandler()
 
-  private var announcedLabel: String?
   private var onAppOrigin = true
 
   deinit {
@@ -93,9 +92,8 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     }
     let dict = message.body as? [String: Any]
     let mode = dict?["mode"] as? String ?? "text"
-    let label = dict?["label"] as? String ?? ""
     DispatchQueue.main.async { [weak self] in
-      self?.applySurface(mode: mode, label: label)
+      self?.applySurface(mode: mode)
     }
   }
 
@@ -116,21 +114,10 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     showLoadError(error)
   }
 
-  private func applySurface(mode: String, label: String) {
+  private func applySurface(mode: String) {
     refreshOriginFlag()
     let input = mode == "input"
-    let navigationOn = onAppOrigin && !input
-    overlay.setNavigationEnabled(navigationOn)
-    webView.accessibilityElementsHidden = navigationOn
-    guard navigationOn else {
-      announcedLabel = nil
-      return
-    }
-    overlay.accessibilityLabel = label
-    if !label.isEmpty, label != announcedLabel {
-      announcedLabel = label
-      UIAccessibility.post(notification: .announcement, argument: label)
-    }
+    overlay.setNavigationEnabled(onAppOrigin && !input)
   }
 
   private func refreshOriginFlag() {
@@ -138,7 +125,6 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     onAppOrigin = host == nil || host == NowiseeOrigin.host
     if !onAppOrigin {
       overlay.setNavigationEnabled(false)
-      webView.accessibilityElementsHidden = false
     }
   }
 

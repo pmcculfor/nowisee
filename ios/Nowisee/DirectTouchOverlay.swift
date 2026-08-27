@@ -4,8 +4,8 @@ protocol DirectTouchOverlayDelegate: AnyObject {
   func overlayDidFire(_ intent: NavIntent)
 }
 
-/// Transparent Direct Touch layer. VoiceOver reads `accessibilityLabel`; swipes
-/// become intents. Hidden on input nodes so the WKWebView form is reachable.
+/// Transparent touch layer over the WKWebView. Not an accessibility element —
+/// VoiceOver reads the page; this view only captures pans.
 final class DirectTouchOverlay: UIView {
   weak var delegate: DirectTouchOverlayDelegate?
 
@@ -15,18 +15,20 @@ final class DirectTouchOverlay: UIView {
   }
 
   private var axis: Axis?
-  private var ticksFired = 0
-  private var verticalSign: CGFloat = 0
-  private let lockDistance: CGFloat = 24
-  private let horizontalCommitFraction: CGFloat = 0.15
+  private var scrolling = false
+  private var lastTickY: CGFloat = 0
+  private let decideDistance: CGFloat = 12
+  private let horizontalCommitFraction: CGFloat = 0.08
+  private let horizontalMinPoints: CGFloat = 36
+  /// Allow quite diagonal enter/back: horizontal need only beat 40% of vertical.
+  private let horizontalVsVertical: CGFloat = 0.4
 
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear
     isOpaque = false
-    isAccessibilityElement = true
-    accessibilityTraits.insert(.allowsDirectInteraction)
-    accessibilityLabel = "Nowisee"
+    isAccessibilityElement = false
+    accessibilityElementsHidden = true
 
     let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
     pan.maximumNumberOfTouches = 1
@@ -41,7 +43,6 @@ final class DirectTouchOverlay: UIView {
   func setNavigationEnabled(_ enabled: Bool) {
     isHidden = !enabled
     isUserInteractionEnabled = enabled
-    isAccessibilityElement = enabled
   }
 
   @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -54,42 +55,66 @@ final class DirectTouchOverlay: UIView {
     switch gesture.state {
     case .began:
       axis = nil
-      ticksFired = 0
-      verticalSign = 0
+      scrolling = false
+      lastTickY = 0
     case .changed:
-      if axis == nil {
-        if hypot(translation.x, translation.y) < lockDistance {
-          return
-        }
-        axis = abs(translation.y) >= abs(translation.x) ? .vertical : .horizontal
-      }
-      guard axis == .vertical else {
+      if scrolling {
+        emitVerticalTicks(translationY: translation.y, height: bounds.height)
         return
       }
-      let sign: CGFloat = translation.y >= 0 ? 1 : -1
-      if sign != verticalSign {
-        verticalSign = sign
-        ticksFired = 0
+      if abs(translation.y) >= bounds.height * ScrubTicks.firstFraction {
+        scrolling = true
+        axis = .vertical
+        lastTickY = translation.y
+        delegate?.overlayDidFire(translation.y >= 0 ? .next : .prev)
+        return
       }
-      let ticks = ScrubTicks.count(distanceFraction: translation.y / bounds.height)
-      while ticksFired < ticks {
-        ticksFired += 1
-        delegate?.overlayDidFire(sign > 0 ? .next : .prev)
-      }
-    case .ended, .cancelled:
-      if axis == .horizontal {
-        let threshold = max(bounds.width * horizontalCommitFraction, 60)
-        if translation.x >= threshold {
-          delegate?.overlayDidFire(.enter)
-        } else if translation.x <= -threshold {
-          delegate?.overlayDidFire(.back)
+      if axis == nil, hypot(translation.x, translation.y) >= decideDistance {
+        if abs(translation.x) >= abs(translation.y) * horizontalVsVertical {
+          axis = .horizontal
         }
       }
+    case .ended, .cancelled:
+      if !scrolling {
+        commitHorizontalIfNeeded(translation: translation, width: bounds.width)
+      }
       axis = nil
-      ticksFired = 0
-      verticalSign = 0
+      scrolling = false
+      lastTickY = 0
     default:
       break
+    }
+  }
+
+  private func emitVerticalTicks(translationY: CGFloat, height: CGFloat) {
+    let step = height * ScrubTicks.stepFraction
+    guard step > 0 else {
+      return
+    }
+    let delta = translationY - lastTickY
+    let steps = Int(delta / step)
+    guard steps != 0 else {
+      return
+    }
+    lastTickY += CGFloat(steps) * step
+    let intent: NavIntent = steps > 0 ? .next : .prev
+    for _ in 0..<abs(steps) {
+      delegate?.overlayDidFire(intent)
+    }
+  }
+
+  private func commitHorizontalIfNeeded(translation: CGPoint, width: CGFloat) {
+    let threshold = max(width * horizontalCommitFraction, horizontalMinPoints)
+    let horizontalEnough = abs(translation.x) >= threshold
+    let notMostlyVertical = abs(translation.x) >= abs(translation.y) * horizontalVsVertical
+    let treatAsHorizontal = axis == .horizontal || (axis == nil && horizontalEnough && notMostlyVertical)
+    guard treatAsHorizontal, horizontalEnough else {
+      return
+    }
+    if translation.x > 0 {
+      delegate?.overlayDidFire(.enter)
+    } else {
+      delegate?.overlayDidFire(.back)
     }
   }
 }

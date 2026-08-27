@@ -17,14 +17,16 @@ The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 P
 
 | Gesture | Intent |
 | ------- | ------ |
-| Swipe right | `enter` |
-| Swipe left | `back` |
-| Pan down | `next` — first tick at 25% of overlay height, then every extra 10% |
-| Pan up | `prev` — same distance rule |
+| Swipe right | `enter` — short, fairly diagonal is enough |
+| Swipe left | `back` — same |
+| Pan down | `next` — first tick at 12% of overlay height, then every 5% |
+| Pan up | `prev` — same |
+
+Once the first vertical tick has fired, further movement is only measured on Y: 5% up is another `prev`, 5% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items.
 
 On **input** nodes the overlay hides. VoiceOver uses the web field and Cancel/Done. Off-site pages (OAuth) also hide the overlay.
 
-VoiceOver reads the overlay’s accessibility label (copied from the page), not the HTML behind it.
+The overlay is touch-only. VoiceOver reads the page behind it (the same remount + focus the site already uses). Native does not post a second announcement.
 
 ## Local site instead of production
 
