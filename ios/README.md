@@ -19,10 +19,10 @@ The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 P
 | ------- | ------ |
 | Swipe right | `enter` — short, fairly diagonal is enough |
 | Swipe left | `back` — same |
-| Pan down | `next` — first tick at 12% of overlay height, then every 5% |
+| Pan down | `next` — first tick at 8% of overlay height, another 8% to enter fast scrub, then every 4% |
 | Pan up | `prev` — same |
 
-Once the first vertical tick has fired, further movement is only measured on Y: 5% up is another `prev`, 5% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items.
+Once the first vertical tick has fired, further movement is only measured on Y. A second tick needs another 8%; after that, 4% up is another `prev` and 4% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items.
 
 On **input** nodes the overlay hides. VoiceOver uses the web field and Cancel/Done. Off-site pages (OAuth) also hide the overlay.
 

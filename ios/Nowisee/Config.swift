@@ -15,7 +15,9 @@ enum NavIntent: String {
 
 enum ScrubTicks {
   /// First prev/next tick, as a fraction of overlay height.
-  static let firstFraction: CGFloat = 0.12
-  /// After the first tick, each further 5% of height (either direction) is one tick.
-  static let stepFraction: CGFloat = 0.05
+  static let firstFraction: CGFloat = 0.08
+  /// Extra travel after the first tick before faster scrubbing.
+  static let secondGapFraction: CGFloat = 0.08
+  /// After the second tick, each further 4% of height (either direction) is one tick.
+  static let fastStepFraction: CGFloat = 0.04
 }

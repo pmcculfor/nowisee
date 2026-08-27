@@ -16,6 +16,7 @@ final class DirectTouchOverlay: UIView {
 
   private var axis: Axis?
   private var scrolling = false
+  private var fastScrolling = false
   private var lastTickY: CGFloat = 0
   private let decideDistance: CGFloat = 12
   private let horizontalCommitFraction: CGFloat = 0.08
@@ -63,6 +64,7 @@ final class DirectTouchOverlay: UIView {
     case .began:
       axis = nil
       scrolling = false
+      fastScrolling = false
       lastTickY = 0
     case .changed:
       if scrolling {
@@ -87,6 +89,7 @@ final class DirectTouchOverlay: UIView {
       }
       axis = nil
       scrolling = false
+      fastScrolling = false
       lastTickY = 0
     default:
       break
@@ -94,7 +97,17 @@ final class DirectTouchOverlay: UIView {
   }
 
   private func emitVerticalTicks(translationY: CGFloat, height: CGFloat) {
-    let step = height * ScrubTicks.stepFraction
+    if !fastScrolling {
+      let gap = height * ScrubTicks.secondGapFraction
+      guard gap > 0, abs(translationY - lastTickY) >= gap else {
+        return
+      }
+      let sign: CGFloat = translationY >= lastTickY ? 1 : -1
+      lastTickY += sign * gap
+      delegate?.overlayDidFire(sign > 0 ? .next : .prev)
+      fastScrolling = true
+    }
+    let step = height * ScrubTicks.fastStepFraction
     guard step > 0 else {
       return
     }
