@@ -36,18 +36,37 @@ function write(
   row[intent] = edge;
 }
 
+export type SiblingListOptions = {
+  readonly wrap?: boolean;
+  /**
+   * Emit map rows only for ids within `radius` of `index`.
+   * Prev/next still address the full `ids` list (including the neighbor
+   * just outside the window).
+   */
+  readonly around?: { readonly index: number; readonly radius: number };
+};
+
 /**
  * Build prev/next replace edges for a sibling list.
  * When `wrap` is false (default), ends omit the outward edge (silent no-op).
  */
 export function siblingListEdges(
   ids: readonly string[],
-  opts: { readonly wrap?: boolean } = {},
+  opts: SiblingListOptions = {},
 ): MapFragment {
   const wrap = opts.wrap === true;
+  const around = opts.around;
+  if (
+    around &&
+    (around.radius < 0 || around.index < 0 || around.index >= ids.length)
+  ) {
+    return {};
+  }
+  const start = around ? Math.max(0, around.index - around.radius) : 0;
+  const end = around ? Math.min(ids.length, around.index + around.radius + 1) : ids.length;
   const fragment: Record<string, Partial<Record<NavIntent, NavEdge>>> = {};
 
-  for (let i = 0; i < ids.length; i++) {
+  for (let i = start; i < end; i++) {
     const id = ids[i]!;
     const edges: Partial<Record<NavIntent, NavEdge>> = {};
 

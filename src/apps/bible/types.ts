@@ -101,8 +101,9 @@ export interface BibleStore {
   listCommentaries(owner?: RecencyOwner | null): readonly CommentaryWork[];
   getCommentary(id: string): CommentaryWork | undefined;
   findSection(commentaryId: string, ref: CanonRef): CommentarySection | undefined;
-  createSearchQuery(sessionId: string, query: string): string;
+  createSearchQuery(sessionId: string, query: string, hits: readonly SearchHit[]): string;
   getSearchQuery(queryId: string, sessionId: string): string | null;
+  listSearchHits(queryId: string, sessionId: string): readonly SearchHit[];
   searchVerses(versionId: string, tokens: readonly string[], cap: number): readonly SearchHit[];
   close(): void;
 }

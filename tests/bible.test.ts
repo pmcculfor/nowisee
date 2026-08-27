@@ -27,7 +27,7 @@ import {
   versionPickId,
   versionsHeadingId,
 } from "../src/apps/bible/ids.ts";
-import type { BibleRef, CanonRef } from "../src/apps/bible/types.ts";
+import type { BibleRef, BibleSeed, CanonRef } from "../src/apps/bible/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { fixtureBible } from "./helpers/kjvFixture.ts";
 
@@ -55,6 +55,20 @@ function bible() {
   app?.close();
   app = startBibleApp({ rootAppId: "home", dbPath: ":memory:", seed: fixtureBible });
   return app;
+}
+
+function bibleWithSeed(seed: BibleSeed) {
+  app?.close();
+  app = startBibleApp({ rootAppId: "home", dbPath: ":memory:", seed });
+  return app;
+}
+
+function searchQueryId(nodeId: string): string {
+  const match = /^bible:q:([^:]+):/.exec(nodeId);
+  if (!match) {
+    throw new Error(`expected a search verse id, got ${nodeId}`);
+  }
+  return match[1]!;
 }
 
 afterEach(() => {
@@ -249,6 +263,45 @@ describe("Bible app", () => {
     expect(hits.node.label).toBe(
       "Matthew 5:3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
     );
+    const contextId = verseNodeId(
+      { type: "context", versionId: VERSION, bookId: "MAT", chapter: 5 },
+      canon("MAT", 5, 3),
+    );
+    expect(hits.navigationMap[hits.node.id]?.enter).toEqual({
+      kind: "node",
+      toNodeId: contextId,
+      stackBehavior: "push",
+    });
+
+    const context = await refresh(instance, [
+      { nodeId: hits.node.id, label: hits.node.label, location: null },
+      { nodeId: contextId, label: "x", location: null },
+    ]);
+    expect(context.node.label).toBe(
+      "(Context) 3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
+    );
+    expect(context.navigationMap[contextId]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
+    expect(context.navigationMap[contextId]?.enter).toEqual({
+      kind: "node",
+      toNodeId: optionId(VERSION, canon("MAT", 5, 3), "versions"),
+      stackBehavior: "push",
+    });
+    expect(context.navigationMap[contextId]?.prev).toEqual({
+      kind: "node",
+      toNodeId: verseNodeId(
+        { type: "context", versionId: VERSION, bookId: "MAT", chapter: 5 },
+        canon("MAT", 5, 2),
+      ),
+      stackBehavior: "replace",
+    });
+    expect(context.navigationMap[contextId]?.next).toEqual({
+      kind: "node",
+      toNodeId: verseNodeId(
+        { type: "context", versionId: VERSION, bookId: "MAT", chapter: 5 },
+        canon("MAT", 5, 4),
+      ),
+      stackBehavior: "replace",
+    });
 
     const none = await refresh(
       instance,
@@ -265,6 +318,37 @@ describe("Bible app", () => {
       ctx,
     );
     expect(blank.node.label).toBe("Enter a search.");
+  });
+
+  it("search warms a sibling window, not every hit", async () => {
+    const verses = Array.from({ length: 50 }, (_, i) => ({
+      versionId: VERSION,
+      bookId: "PSA",
+      chapter: 1,
+      verse: i + 1,
+      text: `Needleword verse ${i + 1}.`,
+    }));
+    const instance = bibleWithSeed({ verses });
+    const ctx = signedOut();
+    const hits = await refresh(
+      instance,
+      [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
+      { action: true, inputText: "needleword" },
+      ctx,
+    );
+    const queryId = searchQueryId(hits.node.id);
+    const searchVerseIds = hits.warm.filter((n) => n.id.startsWith(`bible:q:${queryId}:PSA:`));
+    expect(searchVerseIds).toHaveLength(SEARCH_POLICY.siblingRadius + 1);
+    expect(searchVerseIds.some((n) => n.id.endsWith(":PSA:1:50"))).toBe(false);
+
+    const v25 = verseNodeId({ type: "search", queryId }, canon("PSA", 1, 25));
+    const v26 = verseNodeId({ type: "search", queryId }, canon("PSA", 1, 26));
+    expect(hits.navigationMap[v25]?.next).toEqual({
+      kind: "node",
+      toNodeId: v26,
+      stackBehavior: "replace",
+    });
+    expect(hits.navigationMap[v26]).toBeUndefined();
   });
 
   it("commentary range is shared and split into chunks", async () => {
@@ -555,6 +639,9 @@ describe("Bible store", () => {
     expect(asv?.text).toContain("heavens and the earth");
     const hits = store.searchVerses("kjv", ["blessed"], 1);
     expect(hits).toHaveLength(1);
+    const queryId = store.createSearchQuery("s1", "blessed", hits);
+    expect(store.listSearchHits(queryId, "s1")).toEqual(hits);
+    expect(store.listSearchHits(queryId, "other")).toEqual([]);
     store.touchRecency({ kind: "session", id: "s1" }, "version", "ylt");
     expect(store.listVersions({ kind: "session", id: "s1" }).map((v) => v.id)[0]).toBe("ylt");
     expect(store.listVersions({ kind: "session", id: "s2" }).map((v) => v.id)[0]).toBe("kjv");

@@ -32,7 +32,7 @@ Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name
 - `RootItem[]` — testament headings, bookmarks, search, versions.
 - `VerseOption[]` — versions, commentary, bookmark, copy.
 
-There is one verse renderer and three sibling policies (`VerseSequence`): chapter (wrap), bookmarks (no wrap), and search (no wrap). Sequence is encoded in the node id. Option nodes share a canonical ref.
+There is one verse renderer and four sibling policies (`VerseSequence`): chapter (wrap), context (wrap, pop back), bookmarks (no wrap), and search (no wrap, neighborhood warm). Sequence is encoded in the node id. Option nodes share a canonical ref.
 
 **Active version:** a signed-in user reads `reader_prefs` keyed by `userId`. A signed-out user uses the URL if present, otherwise the first version by sort. There is no session-pref table. Reading URLs include the version. Bookmark and search **display** use the active version; the bookmark **key** is a canon ref without version.
 
@@ -40,19 +40,19 @@ There is one verse renderer and three sibling policies (`VerseSequence`): chapte
 
 Root (Old Testament, New Testament, Bookmarks, Search, Version) leads to book → chapter → verse → options.
 
-Book lists, chapter lists, and chapter-sequence verses wrap. Bookmark and search hits do not. Verse `next` / `prev` in a chapter stay in that chapter.
+Book lists, chapter lists, and chapter-sequence verses wrap. Context-sequence verses wrap in that chapter the same way. Bookmark and search hits do not. Verse `next` / `prev` in a chapter stay in that chapter.
 
-Chapter labels are `N (chapter)` (number first). Chapter-sequence verses are `N. text`. Bookmark and search hits are `Book C:V. text`. Copy is `Version. Book C:V. text`.
+Chapter labels are `N (chapter)` (number first). Chapter-sequence verses are `N. text`. Search enter lands on a context-sequence verse `(Context) N. text` so prev/next walk that chapter. Bookmark and search hits are `Book C:V. text`. Copy is `Version. Book C:V. text`.
 
-Reading-tree descend and `back` use `replace` (testament ↔ book ↔ chapter ↔ verse), so a URL-opened verse walks chapter → book → testament the same way in-session reading does. Bookmark and search verses `back` pop. Options `push`. Root `back` is an `app` edge to Home.
+Reading-tree descend and `back` use `replace` (testament ↔ book ↔ chapter ↔ verse), so a URL-opened verse walks chapter → book → testament the same way in-session reading does. Bookmark and search verses `back` pop. Context verses (from search) `back` pop to the hit. Options `push`. Root `back` is an `app` edge to Home.
 
 - **Copy:** `action: true` on enter from Copy; a “Copying…” status, then `clipboardText` plus “Copied”. Core writes the clipboard. `prev` / `next` over Copy do nothing.
 - **Version:** root and verse-menu lists walk `VersionRecord`s, most recently used first. Verse-menu Versions lands on the first pick, the same as root Version. Enter is `action: true` plus a same-app `app` edge (which resets the stack). Prefs write only when `ctx.userId` is set. Recency writes for the signed-in user or the session. A missing verse in the target version clamps to the last verse of that chapter.
-- **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words, canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. The query id is session-scoped; hits re-run on refresh.
+- **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words, canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. The query id is session-scoped; hit refs are stored with the query (not re-run on each refresh). Refresh warms `SearchPolicy.siblingRadius` neighbors, not the whole list. Enter on a hit pushes a context-sequence verse of the same ref; enter again is the verse menu.
 - **Bookmarks:** `ctx.userId` only. Signed-out enter is a sign-in node (enter → Account). Never store session-id rows. The verse-menu Bookmark option toggles (“Bookmarked” / “Bookmark removed”).
 - **Commentary:** works listed from the `commentaries` table, most recently used first. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific inclusive range covering this verse. Chunks do not wrap. TSK xrefs are stored and flattened into the section label.
 
-Warm nearby books, chapters, and verses as appropriate.
+Warm nearby books, chapters, and verses as appropriate. Search hits warm a sibling window, not every result.
 
 ## Schema
 
@@ -63,7 +63,7 @@ Migrations live in [`db/migrations/001_reader.sql`](db/migrations/001_reader.sql
 - `reader_recency` — recently used versions and commentaries; owner is the signed-in user or the session
 - `bookmarks` (`user_id`, book, chapter, verse) — no version
 - `commentaries`, range-keyed `commentary_sections`, `commentary_coverage`, `commentary_xrefs`
-- `search_queries` (session-scoped text; hits re-run)
+- `search_queries` (session-scoped text) plus `search_hits` (stored refs; not re-run on each refresh)
 
 `verse_ord` is book sort × 1e6 + chapter × 1e3 + verse. Commentaries are version-independent.
 

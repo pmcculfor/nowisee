@@ -15,6 +15,11 @@ export function verseNumberLabel(verse: number, text: string): string {
   return `${verse}. ${text}`;
 }
 
+/** Search-enter landing: same verse in chapter sequence, distinguished by prefix. */
+export function verseContextLabel(verse: number, text: string): string {
+  return `(Context) ${verseNumberLabel(verse, text)}`;
+}
+
 export function verseRefLabel(bookLabel: string, ref: CanonRef, text: string): string {
   return `${formatRef(bookLabel, ref)}. ${text}`;
 }

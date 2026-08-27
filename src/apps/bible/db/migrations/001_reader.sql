@@ -113,3 +113,14 @@ CREATE TABLE search_queries (
 );
 
 CREATE INDEX search_queries_session ON search_queries (session_id, created_at);
+
+CREATE TABLE search_hits (
+  query_id TEXT NOT NULL REFERENCES search_queries (id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  book_id TEXT NOT NULL,
+  chapter INTEGER NOT NULL,
+  verse INTEGER NOT NULL,
+  PRIMARY KEY (query_id, position)
+);
+
+CREATE INDEX search_hits_ref ON search_hits (query_id, book_id, chapter, verse);

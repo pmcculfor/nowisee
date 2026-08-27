@@ -8,7 +8,13 @@ import {
 } from "../../../app-kit/index.ts";
 import type { NodePayload } from "../../../core/types.ts";
 import { SEARCH_POLICY, VERSE_OPTIONS, optionLabel, type VerseSequence } from "../catalog.ts";
-import { bookPathSegment, chapterLabel, verseNumberLabel, verseRefLabel } from "../canon.ts";
+import {
+  bookPathSegment,
+  chapterLabel,
+  verseContextLabel,
+  verseNumberLabel,
+  verseRefLabel,
+} from "../canon.ts";
 import {
   bookmarkStatusId,
   chapterId,
@@ -21,7 +27,6 @@ import {
   verseVersionPickId,
   versionPickId,
 } from "../ids.ts";
-import { tokenize } from "../search.ts";
 import type { BibleRef, CanonRef } from "../types.ts";
 import {
   addNode,
@@ -43,25 +48,34 @@ export function addVerseLevel(
   const version = ref.version;
   const siblings = siblingRefs(session, seq, version);
   const ids = siblings.map((r) => verseNodeId(seq, r));
-  for (const sibling of siblings) {
-    addNode(payloads, versePayload(session, seq, sibling));
+  const focusIndex = siblings.findIndex((r) => sameCanon(r, ref));
+  const around =
+    seq.type === "search" && focusIndex >= 0
+      ? { index: focusIndex, radius: SEARCH_POLICY.siblingRadius }
+      : undefined;
+  const warmStart = around ? Math.max(0, around.index - around.radius) : 0;
+  const warmEnd = around ? Math.min(siblings.length, around.index + around.radius + 1) : siblings.length;
+  for (let i = warmStart; i < warmEnd; i++) {
+    addNode(payloads, versePayload(session, seq, siblings[i]!));
   }
-  fragments.push(siblingListEdges(ids, { wrap: seq.type === "chapter" }));
+  fragments.push(siblingListEdges(ids, { wrap: seq.type === "chapter" || seq.type === "context", around }));
 
   const tip = verseNodeId(seq, ref);
-  const firstOption = VERSE_OPTIONS[0];
+  const enter = verseEnter(seq, version, ref);
   fragments.push({
     [tip]: {
-      ...(firstOption
-        ? { enter: edgeNode(optionId(version, ref, firstOption.type), "push") }
-        : {}),
+      ...(enter ? { enter } : {}),
       back:
         seq.type === "chapter"
           ? edgeNode(chapterId(version, ref.bookId, ref.chapter), "replace")
           : edgePop(),
     },
   });
-  addOptionPayloads(session, payloads, version, ref);
+  if (seq.type === "search") {
+    addVerseLevel(session, payloads, fragments, contextSeq(ref), ref);
+  } else {
+    addOptionPayloads(session, payloads, version, ref);
+  }
   if (seq.type === "chapter") {
     addNode(payloads, {
       id: chapterId(version, ref.bookId, ref.chapter),
@@ -70,21 +84,32 @@ export function addVerseLevel(
   }
 }
 
+function verseEnter(seq: VerseSequence, version: string, ref: BibleRef) {
+  if (seq.type === "search") {
+    return edgeNode(verseNodeId(contextSeq(ref), ref), "push");
+  }
+  const firstOption = VERSE_OPTIONS[0];
+  return firstOption ? edgeNode(optionId(version, ref, firstOption.type), "push") : undefined;
+}
+
+function contextSeq(ref: BibleRef): VerseSequence {
+  return { type: "context", versionId: ref.version, bookId: ref.bookId, chapter: ref.chapter };
+}
+
+function sameCanon(a: CanonRef, b: CanonRef): boolean {
+  return a.bookId === b.bookId && a.chapter === b.chapter && a.verse === b.verse;
+}
+
 function siblingRefs(session: ViewSession, seq: VerseSequence, version: string): BibleRef[] {
   const store = session.deps.store;
-  if (seq.type === "chapter") {
+  if (seq.type === "chapter" || seq.type === "context") {
     return store.listVerses(seq.versionId, seq.bookId, seq.chapter).map((v) => v);
   }
   if (seq.type === "bookmarks" && session.userId) {
     return store.listBookmarks(session.userId).map((b) => displayedVerse(store, version, b));
   }
   if (seq.type === "search" && session.sessionId) {
-    const query = store.getSearchQuery(seq.queryId, session.sessionId);
-    if (!query) {
-      return [];
-    }
-    const tokens = tokenize(query);
-    return store.searchVerses(version, tokens, SEARCH_POLICY.maxHits).map((hit) =>
+    return store.listSearchHits(seq.queryId, session.sessionId).map((hit) =>
       displayedVerse(store, version, hit),
     );
   }
@@ -98,11 +123,16 @@ export function versePayload(
 ): NodePayload {
   const verse = session.deps.store.getVerse(ref);
   const text = verse?.text ?? "";
-  const label =
-    seq.type === "chapter"
-      ? verseNumberLabel(ref.verse, text)
-      : verseRefLabel(bookLabel(session.deps.store, ref.version, ref.bookId), ref, text);
-  return { id: verseNodeId(seq, ref), label };
+  if (seq.type === "chapter") {
+    return { id: verseNodeId(seq, ref), label: verseNumberLabel(ref.verse, text) };
+  }
+  if (seq.type === "context") {
+    return { id: verseNodeId(seq, ref), label: verseContextLabel(ref.verse, text) };
+  }
+  return {
+    id: verseNodeId(seq, ref),
+    label: verseRefLabel(bookLabel(session.deps.store, ref.version, ref.bookId), ref, text),
+  };
 }
 
 export function addOptionLevel(

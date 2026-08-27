@@ -120,8 +120,8 @@ function applySearch(session: ViewSession): RefreshResult {
       location: { appId: session.deps.appId, path: "/search" },
     };
   }
-  const queryId = session.deps.store.createSearchQuery(session.sessionId, query);
   const hits = searchHits(session, version, query);
+  const queryId = session.deps.store.createSearchQuery(session.sessionId, query, hits);
   if (hits.length === 0) {
     const id = searchEmptyId(queryId);
     const label = emptySearchLabel(query);
