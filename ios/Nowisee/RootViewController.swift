@@ -12,6 +12,8 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
   private let scriptProxy = WeakScriptMessageHandler()
 
   private var onAppOrigin = true
+  private var overlayOwnsVoiceOver = false
+  private var announcedLabel: String?
 
   deinit {
     webView?.configuration.userContentController.removeScriptMessageHandler(forName: "nowisee")
@@ -92,8 +94,9 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     }
     let dict = message.body as? [String: Any]
     let mode = dict?["mode"] as? String ?? "text"
+    let label = dict?["label"] as? String ?? ""
     DispatchQueue.main.async { [weak self] in
-      self?.applySurface(mode: mode)
+      self?.applySurface(mode: mode, label: label)
     }
   }
 
@@ -114,10 +117,45 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     showLoadError(error)
   }
 
-  private func applySurface(mode: String) {
+  private func applySurface(mode: String, label: String) {
     refreshOriginFlag()
-    let input = mode == "input"
-    overlay.setNavigationEnabled(onAppOrigin && !input)
+    let navigationOn = onAppOrigin && mode != "input"
+    overlay.setNavigationEnabled(navigationOn)
+    setWebHiddenFromVoiceOver(navigationOn)
+
+    if navigationOn {
+      guard !label.isEmpty else {
+        return
+      }
+      overlay.accessibilityLabel = label
+      if !overlayOwnsVoiceOver {
+        overlayOwnsVoiceOver = true
+        announcedLabel = label
+        DispatchQueue.main.async { [weak self] in
+          guard let self else { return }
+          UIAccessibility.post(notification: .screenChanged, argument: self.overlay)
+        }
+      } else if label != announcedLabel {
+        announcedLabel = label
+        UIAccessibility.post(notification: .announcement, argument: label)
+      }
+      return
+    }
+
+    let handingOff = overlayOwnsVoiceOver
+    overlayOwnsVoiceOver = false
+    announcedLabel = nil
+    if handingOff {
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        UIAccessibility.post(notification: .screenChanged, argument: self.webView)
+      }
+    }
+  }
+
+  private func setWebHiddenFromVoiceOver(_ hidden: Bool) {
+    webView.accessibilityElementsHidden = hidden
+    webView.scrollView.accessibilityElementsHidden = hidden
   }
 
   private func refreshOriginFlag() {
@@ -125,6 +163,8 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     onAppOrigin = host == nil || host == NowiseeOrigin.host
     if !onAppOrigin {
       overlay.setNavigationEnabled(false)
+      setWebHiddenFromVoiceOver(false)
+      overlayOwnsVoiceOver = false
     }
   }
 
@@ -136,6 +176,8 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     errorLabel.text = "Could not load Nowisee.\n\(error.localizedDescription)"
     errorStack.isHidden = false
     overlay.setNavigationEnabled(false)
+    setWebHiddenFromVoiceOver(false)
+    overlayOwnsVoiceOver = false
   }
 }
 

@@ -336,6 +336,7 @@ onIntent(intent):
 - `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
+- Optional `skipTextFocus`: the iOS wrapper uses this so VoiceOver is not moved onto the web surface while the Direct Touch overlay owns speech.
 - Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done).
 
 ### Edge cases
@@ -443,7 +444,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 The iPhone app is a visible `WKWebView` of the production origin plus a transparent touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
 
-The overlay is **not** an accessibility element and does not post VoiceOver announcements. VoiceOver reads the WKWebView the same way as Safari (Display remount + focus). Native must not also announce, or iOS double-speaks.
+The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. It speaks `accessibilityLabel` (and posts an announcement when the label changes). The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay). After an input node, VoiceOver focus is moved back onto the overlay with a screen-changed notification so the page behind it is not still focused.
 
 The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
 

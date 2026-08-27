@@ -72,6 +72,7 @@ export function startShell(
     onSurfaceChange: () => {
       nativeNotify?.();
     },
+    skipTextFocus: () => isNativeHostPresent(),
   });
   const map = new NavigationMapStore();
   const cache = new NodeCache();

@@ -195,4 +195,21 @@ describe("Display", () => {
     display.showInput("", { secret: true });
     expect(modes).toEqual(["text:Verse", "input:Password"]);
   });
+
+  it("skipTextFocus leaves the text surface unfocused", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const previous = document.activeElement;
+    const display = new Display(root, {
+      isBlocked: () => false,
+      onIntent: () => {},
+      skipTextFocus: () => true,
+    });
+
+    display.showText("Hello");
+    const surface = root.querySelector("[data-surface='text']");
+    expect(surface).not.toBeNull();
+    expect(document.activeElement).not.toBe(surface);
+    expect(document.activeElement).toBe(previous);
+  });
 });

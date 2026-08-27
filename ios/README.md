@@ -26,7 +26,7 @@ Once the first vertical tick has fired, further movement is only measured on Y: 
 
 On **input** nodes the overlay hides. VoiceOver uses the web field and Cancel/Done. Off-site pages (OAuth) also hide the overlay.
 
-The overlay is touch-only. VoiceOver reads the page behind it (the same remount + focus the site already uses). Native does not post a second announcement.
+On text nodes the overlay is a Direct Touch accessibility element (so VoiceOver does not steal swipes) and speaks the node label. The page behind it is hidden from VoiceOver. Leaving an input moves VoiceOver focus back to the overlay so the web surface is not left focused (that caused double-speak and a blue focus box).
 
 ## Local site instead of production
 

@@ -4,8 +4,8 @@ protocol DirectTouchOverlayDelegate: AnyObject {
   func overlayDidFire(_ intent: NavIntent)
 }
 
-/// Transparent touch layer over the WKWebView. Not an accessibility element —
-/// VoiceOver reads the page; this view only captures pans.
+/// Transparent Direct Touch layer. VoiceOver focuses this view (not the page)
+/// and speaks `accessibilityLabel`. Hidden on input so the WKWebView form is reachable.
 final class DirectTouchOverlay: UIView {
   weak var delegate: DirectTouchOverlayDelegate?
 
@@ -27,8 +27,10 @@ final class DirectTouchOverlay: UIView {
     super.init(frame: frame)
     backgroundColor = .clear
     isOpaque = false
-    isAccessibilityElement = false
-    accessibilityElementsHidden = true
+    isAccessibilityElement = true
+    accessibilityTraits.insert(.allowsDirectInteraction)
+    accessibilityViewIsModal = true
+    accessibilityLabel = "Nowisee"
 
     let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
     pan.maximumNumberOfTouches = 1
@@ -43,6 +45,11 @@ final class DirectTouchOverlay: UIView {
   func setNavigationEnabled(_ enabled: Bool) {
     isHidden = !enabled
     isUserInteractionEnabled = enabled
+    isAccessibilityElement = enabled
+    accessibilityViewIsModal = enabled
+    if enabled {
+      accessibilityTraits.insert(.allowsDirectInteraction)
+    }
   }
 
   @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {

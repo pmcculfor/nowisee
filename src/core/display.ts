@@ -29,6 +29,8 @@ export interface DisplayHost {
   onIntent(intent: NavIntent): void;
   /** Optional. Fired after mode/label change so another intent host can sync. */
   onSurfaceChange?(): void;
+  /** When true, `showText` does not focus — a native overlay owns VoiceOver. */
+  skipTextFocus?(): boolean;
 }
 
 export class Display {
@@ -71,7 +73,9 @@ export class Display {
     this.root.appendChild(el);
     this.textEl = el;
     this.setMode("text");
-    el.focus();
+    if (this.host?.skipTextFocus?.() !== true) {
+      el.focus();
+    }
   }
 
   showInput(initialText: string, options: ShowInputOptions = {}): void {
