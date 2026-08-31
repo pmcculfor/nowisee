@@ -56,7 +56,7 @@ let currentMailer: CapturingMailer;
 async function signIn(
   host: NowiseeHost,
   email: string,
-): Promise<{ cookie: string; userId: string }> {
+): Promise<{ cookie: string; userId: string; sessionId: string }> {
   return signInForTest(host, currentMailer, email);
 }
 
@@ -423,5 +423,23 @@ describe("oauth broker", () => {
       code: "needs-reconnect",
     });
     expect(await oauth2.status("personal")).toBe("missing");
+  });
+
+  it("expired callback cookie does not mint a session or Set-Cookie", async () => {
+    idp = await startMockIdp();
+    await hostFor(["probe"]);
+    const alice = await signIn(h, "alice@example.com");
+    const before = h.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM sessions")!.n;
+    h.db.run("UPDATE sessions SET expires_at = 0 WHERE id = ?", alice.sessionId);
+    const out = await handleOAuthHttp(h, {
+      method: "GET",
+      url: "/oauth/callback?code=ok&state=whatever",
+      headers: { cookie: alice.cookie },
+    });
+    expect(out.status).toBe(302);
+    expect(out.headers).not.toHaveProperty("Set-Cookie");
+    expect(h.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM sessions")!.n).toBeLessThanOrEqual(
+      before,
+    );
   });
 });

@@ -1,10 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
-import { createAppHost } from "../server/host.ts";
-import { handleAppHttp } from "../server/http.ts";
+import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
+import { handleSessionHttp } from "../server/http.ts";
+
+const ORIGIN = "http://localhost:5173";
 
 function host() {
   return createAppHost({ rootAppId: "home" });
+}
+
+function sessionHost(): NowiseeHost {
+  return createNowiseeHost({
+    rootAppId: "home",
+    configuredOrigin: ORIGIN,
+  });
+}
+
+function headers(): Record<string, string> {
+  return {
+    "content-type": "application/json",
+    origin: ORIGIN,
+    host: "localhost:5173",
+  };
 }
 
 describe("app host", () => {
@@ -49,10 +66,17 @@ describe("app host", () => {
 });
 
 describe("app HTTP", () => {
+  let h: NowiseeHost;
+  afterEach(() => {
+    h?.close();
+  });
+
   it("POST open round-trips JSON", async () => {
-    const out = await handleAppHttp(host(), {
+    h = sessionHost();
+    const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
+      headers: headers(),
       body: { path: "/" },
     });
     expect(out.status).toBe(200);
@@ -61,26 +85,32 @@ describe("app HTTP", () => {
   });
 
   it("unknown app is 404", async () => {
-    const out = await handleAppHttp(host(), {
+    h = sessionHost();
+    const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/mail/open",
+      headers: headers(),
       body: { path: "/" },
     });
     expect(out.status).toBe(404);
   });
 
   it("GET is 405", async () => {
-    const out = await handleAppHttp(host(), {
+    h = sessionHost();
+    const out = await handleSessionHttp(h, {
       method: "GET",
       url: "/api/apps/home/open",
+      headers: headers(),
     });
     expect(out.status).toBe(405);
   });
 
   it("rejects a malformed refresh stack", async () => {
-    const out = await handleAppHttp(host(), {
+    h = sessionHost();
+    const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/bible/refresh",
+      headers: headers(),
       body: { stack: "nope" },
     });
     expect(out.status).toBe(400);

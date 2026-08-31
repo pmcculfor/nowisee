@@ -1,10 +1,10 @@
 # Nowisee — current audit (remaining work)
 
-**Date:** 25 Aug 2026.
+**Date:** 30 Aug 2026.
 
 This file tracks what is still open after the documentation pass. It is not a third SPEC. The 24 Aug review is saved as [`original_audit.md`](original_audit.md).
 
-Unused-code cleanup on 25 Aug 2026: dead Bible/host leftovers, squashed migrations, lockbox `missing-key` wired. `npm test` 211 passed. Remaining unused-code, bug, and security items are carried forward from the original review unless a note says otherwise.
+Landed since the 25 Aug snapshot: first-party client stubs are generic; Bible view is one kind table; host `ephemeral` is an explicit flag; Navigator rejects a malformed `RefreshResult`; emailed sign-in codes replaced passwords (`adb3670`); user-facing product name is **Now I See** in Help, mail, and `NOWISEE_MAIL_FROM`. `Display.focus` and the CSRF-free `handleAppHttp` helper are gone. Static `decodeURIComponent` throws become 400; OAuth callback looks up sessions without minting; CSRF origin is only `NOWISEE_ORIGIN` (no Host fallback). Warm-miss refresh failure speaks recovery copy (`enter` retries, `back` restores).
 
 ---
 
@@ -31,30 +31,28 @@ The owner-approved documentation work from [`original_audit.md`](original_audit.
 A few leftover nits are intentional:
 
 - IDENTITY’s signed-out table still names Bible / Notes / Mail / Home as **examples** of different app policies, not as core locks.
+- Spoken and mailed product name is **Now I See**; the repo and docs still say Nowisee.
 
 ---
 
 ## 2. Unused code and data
 
-These items come from original §4. They are safe to delete only with the listed caveat.
+These items come from original §4. They are safe to delete only with the listed caveat. `IdentityService.changePassword` and `password_algo` are **gone** with emailed codes.
 
 ### Used by tests only
 
 | Item | Production | Tests |
 |------|------------|-------|
-| `NotesStore.get` | View never calls | Owner-isolation |
-| `GmailStore.getCached` | Inbox uses `listInbox` | Owner-isolation |
-| `IdentityService.changePassword` | Not on the capability; no Account screen | `tests/identity.test.ts` |
-| `Display.focus` | Must not be called after open (VoiceOver) | Unused as recovery API |
-| `handleAppHttp` | Production uses `handleSessionHttp` | `tests/app-host.test.ts` — keep test-only |
-| `createAppHost` | Production uses `createNowiseeHost` | Shell / app-host tests |
+| `NotesStore.get` | View uses `list` / `create` / `update` only | Owner-isolation and “did not save” assertions |
+| `GmailStore.getCached` | Inbox uses `listInbox` + client `cached` option | One owner-isolation assertion |
+| `createAppHost` | Production uses `createNowiseeHost` | Shell / app-host tests inject it as `AppRpc` |
 | `collectNeighborhood` | No app imports it | `tests/app-kit.test.ts` — seam, not dead |
 
-Either keep the store getters as a complete API or have the views use them. `changePassword` should get an Account screen or stay until that screen exists.
+`NotesStore.get` / `GmailStore.getCached` are complete-store methods the graphs never call. Keep them as a by-id lookup in the store API.
 
 ### Seams (do not delete as dead)
 
-These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST /oauth/:appId/events`; the Version `license` field; `commentary_xrefs` loaded and not shown; Keyboard constructor bindings (user remapping later reconstructs Keyboard or adds a setter); lockbox `missing-key` (thrown when a blob’s `keyId` is not in the env ring — multi-key rotation still deferred).
+These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST /oauth/:appId/events`; the Version `license` field; `commentary_xrefs` loaded and not shown in `commentaryLabel`; Keyboard constructor bindings (user remapping later reconstructs Keyboard or adds a setter); lockbox `missing-key` (thrown when a blob’s `keyId` is not in the env ring — multi-key rotation still deferred).
 
 ### Orphan / duplicate
 
@@ -74,11 +72,9 @@ These are not bugs. They are worth doing when you are already in that file.
 3. **Gmail `view.ts`** (~580 lines). Leave as one file for now; split later if it grows.
 4. **`collectNeighborhood` unused.** Keep as a seam; apps may use it later.
 5. **Display is a DOM class.** Leave for now. Extract the three-method port before a native client.
-6. **Account register-then-sign-in.** Leave for now. A later emailed sign-in code would replace passwords.
+6. **Account register-then-sign-in.** Done: emailed six-character codes (`adb3670`).
 7. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
 8. **Host `ephemeral`.** Done: `createNowiseeHost({ ephemeral })` is an explicit flag (default `true`). Production passes `false`. Do not infer from `typeof db`.
-
-Done this pass: Notes/Gmail tests use `:memory:` SQLite (one store implementation); commentary listing reads the `commentaries` table; `defaultVersionId()` returns `null` when `versions` is empty (empty-data node, no `"kjv"` string). Navigator rejects a malformed `RefreshResult` before apply. The packaging substring tests are gone. Client stubs are generic (no phone book). Bible view is one kind table. Host `ephemeral` is an explicit flag.
 
 The status channel (busy, dead-end, and failure all silent) is deferred, not an elegance item — see [`PREPAREDNESS.md`](PREPAREDNESS.md). It is the deferred item that most affects real users.
 
@@ -90,36 +86,29 @@ These are still open. They come from original §6.
 
 | Pri | Issue | Where | Fix direction |
 |-----|--------|--------|----------------|
-| High | Warm-miss + failed refresh leaves stack on the new id while map/display stay last-good. Further intents miss → silent no-op. Failure test does not assert tip id. | `Navigator.followNodeEdge` / `startCall` catch | Roll back stack (and cache pin) on failure, or refresh before committing the miss move |
-| Medium | `decodeURIComponent` on static paths can throw | `server/index.ts` `serveStatic` | Catch → 400 |
-| Medium | OAuth callback: expired cookie → `identity.resolve` mints a session and never `Set-Cookie` | `handleOAuthHttp` | Do not mint on the callback; look up without minting |
 | Low | API catch-all body `"Invalid JSON"` for any non-size error | `server/index.ts` / Vite `handleApi` | Distinct unexpected-failure label |
-| Low | Help / `index.html` say “Now I See.”; docs say Nowisee | Help welcome, title | Pick one |
 | Low | Commentary xrefs loaded, not shown in the label | Bible `commentaryLabel` | Append or stop loading |
 | Low | NavPads hidden only by CSS (`data-input-open`) | Display / pads | Pads should ignore input tips in code too |
 
-A few silences are specified, not regressions: failed open/refresh is `console.warn` only; a missing map edge is a silent no-op; Gmail new mail waits for the next intent because `requestRefresh` is not provided.
+A few silences are specified, not regressions: failed open and warm-hit revalidation stay last-good with `console.warn`; a missing map edge is a silent no-op; Gmail new mail waits for the next intent because `requestRefresh` is not provided. Warm-miss failure speaks recovery copy.
 
 ---
 
 ## 5. Security
 
-The trust model is sound: cookie → `userId`, CSRF, owner in queries, tokens not in `RefreshResult`. The residual gaps below come from original §7.
+The trust model is sound: cookie → `userId`, CSRF, owner in queries, tokens not in `RefreshResult`. The residual gaps below come from original §7. Password hashing / `HashGate` / `password_algo` are gone with emailed codes. `requestSignIn` is throttled (`login_throttles`); verify has a max attempt count.
 
 | Severity | Issue | Where |
 |----------|--------|--------|
-| Medium | No rate limit / lockout on register and sign-in. Scrypt + `HashGate(2)` still allows CPU/memory pressure via `/api` | identity + host HTTP |
-| Medium | CSRF origin falls back to `Host` + `X-Forwarded-Proto` when `NOWISEE_ORIGIN` is unset (spoofable behind a bad proxy). Production OAuth requires configured origin | `csrf.ts` |
-| Medium | `handleAppHttp` skips CSRF and cookies — test-only; do not bind to a public listener | `server/http.ts` |
-| Medium | OAuth callback mint-without-Set-Cookie (same as bug §4) | `oauth/http.ts` |
 | Low | `AppNotFoundError` 404 includes the app id | `server/errors.ts` |
 | Low | `external` hrefs not restricted to `http(s)` | Navigator |
 | Low | Lockbox env loads **one** key; schema has `keyId` but old keys cannot be loaded → rotation incomplete | `lockbox/crypto.ts` |
-| Low | `password_algo` column stored, never consulted | identity schema |
 | Low | Unauthenticated `POST /oauth/:appId/events`. No first-party handler (404). A future handler must authenticate inside the provider | `oauth/http.ts` |
 | Info | Gmail `gmail.modify` is broad (intentional for send) | `gmail/oauth.ts` |
-| Info | Register-then-sign-in can create accounts from email typos | Account |
+| Info | A new email that completes a code becomes an account (typos still create users when registration is open) | Account |
 | Info | Client `fetch` relies on same-origin cookie default | `rpc.ts` |
+
+Sign-in mail and per-session / per-email throttles landed with codes. There is still no IP lockout; that is the leftover of the old “no rate limit” row.
 
 ---
 
@@ -127,9 +116,7 @@ The trust model is sound: cookie → `userId`, CSRF, owner in queries, tokens no
 
 This is not an order you have to follow — just the highest-leverage leftovers.
 
-1. Warm-miss refresh failure: roll back the stack.
-2. OAuth callback: do not mint a session without `Set-Cookie`.
-3. Catch `serveStatic` `decodeURIComponent` throws.
-4. Rate-limit identity mutations, and always set `NOWISEE_ORIGIN` in deploy.
+1. Distinct unexpected-failure JSON from the `/api` catch-all (today every non-size error is `"Invalid JSON"`).
+2. NavPads should ignore input tips in code, not only via CSS.
 
 Leave until a named milestone: `requestRefresh`, the status channel, the Display port, a Facebook app, a third-party sandbox, and lockbox multi-key rotation.

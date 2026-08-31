@@ -58,4 +58,16 @@ describe("Stack", () => {
     expect(snap).toHaveLength(1);
     expect(stack.snapshot()).toHaveLength(2);
   });
+
+  it("restore replaces the stack with a snapshot copy", () => {
+    const stack = new Stack();
+    stack.push(entry("a"));
+    stack.push(entry("b"));
+    const snap = stack.snapshot();
+    stack.push(entry("c"));
+    stack.restore(snap);
+    expect(stack.snapshot().map((e) => e.nodeId)).toEqual(["a", "b"]);
+    stack.push(entry("d"));
+    expect(snap.map((e) => e.nodeId)).toEqual(["a", "b"]);
+  });
 });

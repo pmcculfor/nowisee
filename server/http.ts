@@ -1,16 +1,10 @@
-import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
+import type { WireExtras } from "../src/apps/rpc.ts";
 import type { StackEntry } from "../src/core/types.ts";
 import { readSessionToken, serializeSessionCookie } from "./cookie.ts";
 import { checkCsrf, expectedOriginFromRequest } from "./csrf.ts";
 import { AppNotFoundError } from "./errors.ts";
 import type { NowiseeHost } from "./host.ts";
 import type { CookieSlot } from "./identity/context.ts";
-
-export type AppHttpRequest = {
-  readonly method: string;
-  readonly url: string;
-  readonly body?: unknown;
-};
 
 export type AppHttpResponse = {
   readonly status: number;
@@ -23,7 +17,6 @@ export type SessionHttpRequest = {
   readonly url: string;
   readonly headers: HeadersLike;
   readonly body?: unknown;
-  readonly encrypted?: boolean;
 };
 
 export type HeadersLike = {
@@ -41,50 +34,6 @@ const REFRESH_RE = /^\/api\/apps\/([^/]+)\/refresh\/?$/;
 export function isAppApiUrl(url: string): boolean {
   const path = url.split("?")[0] ?? "";
   return OPEN_RE.test(path) || REFRESH_RE.test(path);
-}
-
-export async function handleAppHttp(
-  rpc: AppRpc,
-  req: AppHttpRequest,
-): Promise<AppHttpResponse> {
-  if (req.method !== "POST") {
-    return { status: 405, body: { error: "Method not allowed" } };
-  }
-
-  const path = (req.url.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
-  const openMatch = OPEN_RE.exec(path);
-  if (openMatch) {
-    const appId = decodeAppId(openMatch[1]!);
-    const parsed = parseOpenBody(req.body);
-    if (!parsed.ok) {
-      return { status: 400, body: { error: parsed.error } };
-    }
-    return callRpc(() => rpc.open(appId, parsed.path, parsed.extras));
-  }
-
-  const refreshMatch = REFRESH_RE.exec(path);
-  if (refreshMatch) {
-    const appId = decodeAppId(refreshMatch[1]!);
-    const parsed = parseRefreshBody(req.body);
-    if (!parsed.ok) {
-      return { status: 400, body: { error: parsed.error } };
-    }
-    return callRpc(() => rpc.refresh(appId, parsed.stack, parsed.extras));
-  }
-
-  return { status: 404, body: { error: "Not found" } };
-}
-
-async function callRpc(run: () => Promise<unknown>): Promise<AppHttpResponse> {
-  try {
-    const body = await run();
-    return { status: 200, body };
-  } catch (err) {
-    if (err instanceof AppNotFoundError) {
-      return { status: 404, body: { error: err.message } };
-    }
-    return { status: 500, body: { error: "App RPC failed" } };
-  }
 }
 
 function decodeAppId(raw: string): string {
@@ -204,16 +153,11 @@ export async function handleSessionHttp(
     return json(405, { error: "Method not allowed" });
   }
 
-  const expectedOrigin = expectedOriginFromRequest({
-    host: header(req.headers, "host"),
-    forwardedProto: header(req.headers, "x-forwarded-proto"),
-    encrypted: req.encrypted === true,
-    configuredOrigin: host.configuredOrigin,
-  });
+  const expectedOrigin = expectedOriginFromRequest(host.configuredOrigin);
   const csrf = checkCsrf({
     contentType: header(req.headers, "content-type"),
     origin: header(req.headers, "origin"),
-    expectedOrigin: expectedOrigin ?? "",
+    expectedOrigin: expectedOrigin,
   });
   if (!csrf.ok) {
     return json(403, { error: csrf.reason === "origin" ? "Invalid origin" : "Invalid content type" });

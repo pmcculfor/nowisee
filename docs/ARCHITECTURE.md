@@ -48,7 +48,7 @@ See [`.env.example`](../.env.example) (local) and [`.env.production.example`](..
 |----------|------|
 | `PORT` | Listen port (default `3000`) |
 | `NOWISEE_DB` | Host SQLite file (default `data/nowisee.db`) |
-| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Production: `https://nowisee.app` |
+| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Production: `https://nowisee.app`. If unset, every `/api` Origin check fails (no `Host` fallback). |
 | `NOWISEE_LOCKBOX_KEY` | 32-byte AES key, base64. Required if lockbox/OAuth apps are granted |
 | `NOWISEE_LOCKBOX_KEY_ID` | Optional key id (default `v1`) |
 | `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
@@ -141,7 +141,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **Router** is a pure boundary: `parse` / `hrefFor` / `setAddressBar`, and `hashchange` → `openLocation`. It never owns stack, cache, map, or busy.
 
-**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. A warm miss moves the stack, keeps the previous label, and blocks until refresh. Failure should leave last-good state (see MODULES).
+**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. A warm miss moves the stack, keeps the previous label, and blocks until refresh. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
 
 **Display:** text tips use `role="application"`, remount, and focus, with no `aria-live`. Input tips use a textarea or password field plus Cancel/Done (click only). Hide NavPads while input is open.
 
@@ -199,7 +199,7 @@ The root app lives at `#/` (canonical). `#/<rootAppId>` may alias. Other apps ar
 Unit-test without the DOM where possible. The list below is the behavior to cover, not a second spec.
 
 - Map lookup; push/replace/pop; pop omits toNodeId; `app` edge clears stack and switches app.
-- Warm hit vs warm miss (block); refresh failure clears busy.
+- Warm hit vs warm miss (block); warm-miss failure recovery copy; refresh failure clears busy.
 - Transition token: an A → B → A sequence discards the first A's in-flight result.
 - A superseded read-only call receives an aborted signal; an action call never does.
 - `extras.action` is set on exactly the traversal of an `action: true` edge, and on no other call.

@@ -40,4 +40,8 @@ export class Stack {
   snapshot(): readonly StackEntry[] {
     return this.entries.slice();
   }
+
+  restore(entries: readonly StackEntry[]): void {
+    this.entries = entries.slice();
+  }
 }

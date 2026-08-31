@@ -52,13 +52,11 @@ export async function handleOAuthHttp(
   }
 
   const token = readSessionToken(header(req.headers, "cookie"));
-  const resolved = token
-    ? await host.identity.resolve(token)
-    : { sessionId: "", userId: null as string | null };
+  const resolved = token ? await host.identity.lookup(token) : null;
   const query = new URL(req.url, "http://nowisee.local").searchParams;
   const result = await host.oauth.handleCallback({
-    sessionId: resolved.sessionId,
-    userId: resolved.userId,
+    sessionId: resolved?.sessionId ?? "",
+    userId: resolved?.userId ?? null,
     state: query.get("state"),
     code: query.get("code"),
     error: query.get("error"),

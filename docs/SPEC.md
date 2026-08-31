@@ -192,10 +192,11 @@ Copy is `clipboardText` on the result; core writes the clipboard. Durable storag
 |------|----------|
 | Open/bootstrap or map target not in warm | Block on refresh; ignore further intents; no placeholder |
 | Warm hit | Show immediately; background refresh; allow further map hits; discard any result whose transition token is not the newest |
-| Refresh failure | Keep last text; clear busy; do not crash shell |
+| Refresh failure (warm miss) | Speak core recovery copy; keep dest; `enter` retries; `back` restores previous node |
+| Refresh failure (warm hit or open) | Keep last text; clear busy; do not crash shell |
 | Missing edge | Silent no-op |
 
-**Known limitation:** those first three states are indistinguishable to a user who cannot see a spinner — blocked, dead-end, and failed all present as silence. A status channel is deferred ([`PREPAREDNESS.md`](PREPAREDNESS.md)). This is also why apps MUST resolve with a status node rather than reject: a rejected action call otherwise strands the user on a working label.
+**Known limitation:** blocked and dead-end still present as silence. Warm-miss failure is spoken on the content surface. A second announcement channel is deferred ([`PREPAREDNESS.md`](PREPAREDNESS.md)). Apps MUST resolve with a status node rather than reject: a rejected action on a warm dest otherwise strands the user on a working label.
 
 ### 4.14 Auth / database
 

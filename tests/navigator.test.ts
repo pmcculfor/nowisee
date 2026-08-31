@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Display } from "../src/core/display.ts";
 import { NavigationMapStore } from "../src/core/navigationMap.ts";
-import { Navigator } from "../src/core/navigator.ts";
+import { Navigator, LOAD_FAILURE_LABEL } from "../src/core/navigator.ts";
 import { NodeCache } from "../src/core/nodeCache.ts";
 import { PlatformCapabilities } from "../src/core/platform.ts";
 import { AppRegistry } from "../src/core/registry.ts";
@@ -255,7 +255,80 @@ describe("Navigator + Router contracts", () => {
     expect(h.display.getInputText()).toBe("hello");
   });
 
-  it("refresh failure clears blocked and keeps last display", async () => {
+  it("warm-miss refresh failure speaks recovery copy; enter retries without action", async () => {
+    const registry = new AppRegistry();
+    registry.register(createRootApp("home"));
+    let remainingFails = 1;
+    const failing: AppModule = {
+      id: "fail",
+      label: "Fail",
+      open: () => ({
+        navigationMap: {
+          root: {
+            next: { kind: "node", toNodeId: "x", stackBehavior: "replace" },
+          },
+        },
+        warm: [{ id: "root", label: "OK" }],
+        node: { id: "root", label: "OK" },
+        location: { appId: "fail", path: "/" },
+      }),
+      refresh: async () => {
+        if (remainingFails > 0) {
+          remainingFails -= 1;
+          throw new Error("boom");
+        }
+        return {
+          navigationMap: {
+            x: {
+              next: { kind: "node", toNodeId: "x", stackBehavior: "replace" },
+            },
+          },
+          warm: [{ id: "x", label: "X" }],
+          node: { id: "x", label: "X" },
+          location: { appId: "fail", path: "/x" },
+        };
+      },
+    };
+    registry.register(failing);
+
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+    const stack = new Stack();
+    const navigator = new Navigator({
+      config: { rootAppId: "home" },
+      registry,
+      display,
+      platform: new PlatformCapabilities({ clipboard: null }),
+      map: new NavigationMapStore(),
+      cache: new NodeCache(),
+      stack,
+      setAddressBar: () => undefined,
+    });
+
+    await navigator.openLocation({ appId: "fail", path: "/" });
+    expect(visibleText(root)).toBe("OK");
+
+    navigator.onIntent("next");
+    await flush();
+    expect(navigator.isBlocked()).toBe(false);
+    expect(visibleText(root)).toBe(LOAD_FAILURE_LABEL);
+    expect(stack.tip()?.nodeId).toBe("x");
+    expect(navigator.getTipKind()).toBe("text");
+
+    navigator.onIntent("next");
+    await flush();
+    expect(visibleText(root)).toBe(LOAD_FAILURE_LABEL);
+    expect(stack.tip()?.nodeId).toBe("x");
+
+    navigator.onIntent("enter");
+    await flush();
+    expect(visibleText(root)).toBe("X");
+    expect(stack.tip()?.nodeId).toBe("x");
+    expect(navigator.isBlocked()).toBe(false);
+  });
+
+  it("warm-miss failure back restores the previous node", async () => {
     const registry = new AppRegistry();
     registry.register(createRootApp("home"));
     const failing: AppModule = {
@@ -280,6 +353,7 @@ describe("Navigator + Router contracts", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
+    const stack = new Stack();
     const navigator = new Navigator({
       config: { rootAppId: "home" },
       registry,
@@ -287,22 +361,71 @@ describe("Navigator + Router contracts", () => {
       platform: new PlatformCapabilities({ clipboard: null }),
       map: new NavigationMapStore(),
       cache: new NodeCache(),
-      stack: new Stack(),
+      stack,
       setAddressBar: () => undefined,
     });
 
     await navigator.openLocation({ appId: "fail", path: "/" });
-    expect(visibleText(root)).toBe("OK");
+    navigator.onIntent("next");
+    await flush();
+    expect(visibleText(root)).toBe(LOAD_FAILURE_LABEL);
 
-    // Put x in warm so we take warm-hit path then failing refresh
-    // Actually warm has only root — next to x is warm miss + failing refresh
+    navigator.onIntent("back");
+    await flush();
+    expect(visibleText(root)).toBe("OK");
+    expect(stack.tip()?.nodeId).toBe("root");
+    expect(navigator.isBlocked()).toBe(false);
+  });
+
+  it("warm-hit refresh failure keeps the cached dest, not recovery copy", async () => {
+    const registry = new AppRegistry();
+    registry.register(createRootApp("home"));
+    const failing: AppModule = {
+      id: "fail",
+      label: "Fail",
+      open: () => ({
+        navigationMap: {
+          root: {
+            next: { kind: "node", toNodeId: "x", stackBehavior: "replace" },
+          },
+        },
+        warm: [
+          { id: "root", label: "OK" },
+          { id: "x", label: "X" },
+        ],
+        node: { id: "root", label: "OK" },
+        location: { appId: "fail", path: "/" },
+      }),
+      refresh: async () => {
+        throw new Error("boom");
+      },
+    };
+    registry.register(failing);
+
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+    const stack = new Stack();
+    const navigator = new Navigator({
+      config: { rootAppId: "home" },
+      registry,
+      display,
+      platform: new PlatformCapabilities({ clipboard: null }),
+      map: new NavigationMapStore(),
+      cache: new NodeCache(),
+      stack,
+      setAddressBar: () => undefined,
+    });
+
+    await navigator.openLocation({ appId: "fail", path: "/" });
     navigator.onIntent("next");
     await flush();
     expect(navigator.isBlocked()).toBe(false);
-    expect(visibleText(root)).toBe("OK");
+    expect(visibleText(root)).toBe("X");
+    expect(stack.tip()?.nodeId).toBe("x");
   });
 
-  it("malformed RefreshResult is treated as failure and keeps last display", async () => {
+  it("malformed RefreshResult on a warm miss enters load recovery", async () => {
     const registry = new AppRegistry();
     registry.register(createRootApp("home"));
     const bad: AppModule = {
@@ -325,6 +448,7 @@ describe("Navigator + Router contracts", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
+    const stack = new Stack();
     const navigator = new Navigator({
       config: { rootAppId: "home" },
       registry,
@@ -332,7 +456,7 @@ describe("Navigator + Router contracts", () => {
       platform: new PlatformCapabilities({ clipboard: null }),
       map: new NavigationMapStore(),
       cache: new NodeCache(),
-      stack: new Stack(),
+      stack,
       setAddressBar: () => undefined,
     });
 
@@ -342,7 +466,8 @@ describe("Navigator + Router contracts", () => {
     navigator.onIntent("next");
     await flush();
     expect(navigator.isBlocked()).toBe(false);
-    expect(visibleText(root)).toBe("OK");
+    expect(visibleText(root)).toBe(LOAD_FAILURE_LABEL);
+    expect(stack.tip()?.nodeId).toBe("x");
   });
 
   it("transition token: A → B → A discards the first A's in-flight result", async () => {

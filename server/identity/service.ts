@@ -38,6 +38,8 @@ export type AuthServiceResult =
 
 export interface IdentityService {
   resolve(token: string | null): Promise<ResolveResult>;
+  /** Live session for this token, or null. Never mints, never bumps last_seen. */
+  lookup(token: string | null): Promise<{ sessionId: string; userId: string | null } | null>;
   requestSignIn(sessionId: string, email: string): Promise<RequestSignInOutcome>;
   verifySignIn(sessionId: string, code: string): Promise<AuthServiceResult>;
   signOut(sessionId: string): Promise<{ issuedToken: null }>;
@@ -177,18 +179,26 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
     return true;
   }
 
+  function liveSession(token: string | null, at: number): SessionRow | null {
+    sweep(at);
+    if (!token) {
+      return null;
+    }
+    const row = db.get<SessionRow>(
+      "SELECT id, token_hash, user_id, created_at, last_seen_at, expires_at, idle_expires_at FROM sessions WHERE token_hash = ?",
+      hashToken(token),
+    );
+    if (!row || row.expires_at <= at || row.idle_expires_at <= at) {
+      return null;
+    }
+    return row;
+  }
+
   return {
     async resolve(token) {
       const at = now();
-      sweep(at);
-      if (!token) {
-        return mintAnonymous(at);
-      }
-      const row = db.get<SessionRow>(
-        "SELECT id, token_hash, user_id, created_at, last_seen_at, expires_at, idle_expires_at FROM sessions WHERE token_hash = ?",
-        hashToken(token),
-      );
-      if (!row || row.expires_at <= at || row.idle_expires_at <= at) {
+      const row = liveSession(token, at);
+      if (!row) {
         return mintAnonymous(at);
       }
       db.run(
@@ -197,6 +207,14 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
         at + IDLE_MS,
         row.id,
       );
+      return { sessionId: row.id, userId: row.user_id };
+    },
+
+    async lookup(token) {
+      const row = liveSession(token, now());
+      if (!row) {
+        return null;
+      }
       return { sessionId: row.id, userId: row.user_id };
     },
 

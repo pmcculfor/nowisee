@@ -33,7 +33,6 @@ export class Display {
   private readonly root: HTMLElement;
   private readonly host: DisplayHost | undefined;
   private mode: DisplayMode = "text";
-  private textEl: HTMLElement | null = null;
   private inputEl: HTMLTextAreaElement | HTMLInputElement | null = null;
 
   constructor(root: HTMLElement, host?: DisplayHost) {
@@ -59,14 +58,13 @@ export class Display {
     el.textContent = label;
 
     this.root.appendChild(el);
-    this.textEl = el;
     this.setMode("text");
     el.focus();
   }
 
   showInput(initialText: string, options: ShowInputOptions = {}): void {
     this.root.replaceChildren();
-    this.textEl = null;
+    this.inputEl = null;
 
     const secret = options.secret === true;
     const autocomplete = options.autocomplete ?? (secret ? "current-password" : "off");
@@ -114,15 +112,6 @@ export class Display {
 
   getInputText(): string {
     return this.inputEl?.value ?? "";
-  }
-
-  /** Focus the current surface (load / recovery). */
-  focus(): void {
-    if (this.mode === "input") {
-      this.inputEl?.focus();
-      return;
-    }
-    this.textEl?.focus();
   }
 
   private setMode(mode: DisplayMode): void {

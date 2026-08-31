@@ -121,8 +121,6 @@ export function startShell(
   router.attach();
 
   const initial = router.parse(window.location.hash || "#/");
-  // openLocation → showText/showInput already focuses. A second focus() here
-  // restarts VoiceOver on iOS after the first utterance has begun.
   void navigator.openLocation(initial);
 
   return {

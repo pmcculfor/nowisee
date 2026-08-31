@@ -70,6 +70,36 @@ describe("identity service", () => {
     expect(dead.issuedToken?.value).toBeTruthy();
   });
 
+  it("lookup returns a live session and never mints", async () => {
+    db = openDatabase({ path: ":memory:" });
+    let at = 1_000_000;
+    const { id } = service(db, { now: () => at });
+    expect(await id.lookup(null)).toBeNull();
+    expect(await id.lookup("not-a-real-token")).toBeNull();
+    expect(db.all("SELECT id FROM sessions")).toHaveLength(0);
+
+    const created = await id.resolve(null);
+    const lastSeen = db.get<{ last_seen_at: number }>(
+      "SELECT last_seen_at FROM sessions WHERE id = ?",
+      created.sessionId,
+    )!.last_seen_at;
+    at += 1000;
+    expect(await id.lookup(created.issuedToken!.value)).toEqual({
+      sessionId: created.sessionId,
+      userId: null,
+    });
+    expect(
+      db.get<{ last_seen_at: number }>(
+        "SELECT last_seen_at FROM sessions WHERE id = ?",
+        created.sessionId,
+      )!.last_seen_at,
+    ).toBe(lastSeen);
+
+    db.run("UPDATE sessions SET expires_at = 0 WHERE id = ?", created.sessionId);
+    expect(await id.lookup(created.issuedToken!.value)).toBeNull();
+    expect(db.all("SELECT id FROM sessions")).toHaveLength(0);
+  });
+
   it("verifySignIn rotates the token, keeps the session row, and creates the user", async () => {
     db = openDatabase({ path: ":memory:" });
     const { id, mailer } = service(db);

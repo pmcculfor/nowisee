@@ -74,7 +74,7 @@ Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). Th
 | `GET /oauth/callback` | IdP redirect. Dispatch by `state`, not by app id in the path. Cookie + hashed state is CSRF for this GET — do **not** run the JSON Origin check. |
 | `POST /oauth/:appId/events` | Reserved for cookie-less provider webhooks (deauthorize, data deletion). No first-party handler ships yet. |
 
-Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when `oauthAppIds` is non-empty. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less callback does **not** mint a session.
+Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when `oauthAppIds` is non-empty. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less **or dead/expired** cookie on the callback does **not** mint a session and does **not** send `Set-Cookie`. The callback looks the token up; it never calls `resolve`.
 
 | Outcome | Location |
 |---------|----------|
@@ -161,13 +161,19 @@ This is not two owners for expiry. The service decides and enforces it; the cook
 ```ts
 // server/identity/service.ts — no HTTP, no nodes, not an AppModule
 export interface IdentityService {
-  /** Every request. Creates an anonymous session when the token is absent or dead. */
+  /** Every `/api` request. Creates an anonymous session when the token is absent or dead. */
   resolve(token: string | null): Promise<{
     sessionId: string;
     userId: string | null;
     /** Present when the caller must send a new cookie. */
     issuedToken?: { value: string; expiresAt: number };
   }>;
+
+  /**
+   * Live session for this token, or null. Never mints, never bumps last_seen.
+   * Used by `GET /oauth/callback`, which must not Set-Cookie.
+   */
+  lookup(token: string | null): Promise<{ sessionId: string; userId: string | null } | null>;
 
   requestSignIn(sessionId: string, email: string): Promise<RequestSignInOutcome>;
   verifySignIn(sessionId: string, code: string): Promise<AuthOutcome>;
@@ -208,13 +214,13 @@ Opaque tokens rather than JWTs: we already have a database on the request path, 
 
 Once a session cookie exists, **every** `POST /api/apps/:id/refresh` is a cookie-authenticated, state-changing endpoint — an `action: true` edge is the "send the mail" button, and the browser attaches the cookie no matter which site caused the request.
 
-`Content-Type: application/json` is **not** protection by itself. A cross-origin `fetch` with `credentials: "include"` and `Content-Type: text/plain` is a simple request: no preflight, cookie attached, and today's `handleAppHttp` parses the body without ever looking at the content type.
+`Content-Type: application/json` is **not** protection by itself. A cross-origin `fetch` with `credentials: "include"` and `Content-Type: text/plain` is a simple request: no preflight, cookie attached. That is why `/api` rejects any request whose `Content-Type` is not `application/json`, not merely because the body happens to parse as JSON.
 
 Three layers, all required, all at the `/api` boundary:
 
 1. **`SameSite=Lax` on the session cookie**, set explicitly. Browser defaults vary; do not rely on them. Our API is POST-only, so the top-level-GET exemption in `Lax` never applies to us.
 2. **Reject any `/api` request whose `Content-Type` is not `application/json`.**
-3. **Reject any `/api` request whose `Origin` header is not this origin.** Absent `Origin` on a POST is also a reject.
+3. **Reject any `/api` request whose `Origin` header is not `NOWISEE_ORIGIN` (`configuredOrigin`).** Absent `Origin` on a POST is also a reject. Do not derive the expected origin from `Host` or `X-Forwarded-Proto`. If the configured origin is unset, every Origin check fails.
 
 Do **not** add CORS `Access-Control-Allow-Credentials` to `/api`. The SPA and the API are same-origin by design; making the API callable from other origins would undo all three layers at once.
 
@@ -312,7 +318,7 @@ An app may also carry a return address in the account app's path so that finishi
 
 **Expired mid-session** needs no separate mechanism. The next refresh simply arrives with `userId: null` and a stack of nodes the app can no longer authorize; the app returns the signed-out node as the tip. That is the existing "repair, not teleport" rule (`AppModule` MUST #8), not a new one.
 
-**What is still silent:** the transport failing — network down, host restarting. Navigator keeps the last good display and says nothing. That is the deferred status channel (§13), and after this decision it is the *only* remaining silent case, which is a good place to be.
+**What is still silent:** a warm-hit revalidation failure and a failed `open` keep last-good display. A warm-miss refresh failure speaks recovery copy on the content surface (retry / back). Busy and dead-end remain silent ([`PREPAREDNESS.md`](PREPAREDNESS.md)).
 
 ### Sign-out must clear the client
 
