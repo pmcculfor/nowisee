@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { startShell } from "../src/shell/bootstrap.ts";
-import { createHomeApp } from "../src/apps/home.ts";
+import { createHomeApp } from "../src/apps/home/index.ts";
 import { createAppHost } from "../server/host.ts";
 
 describe("shell bootstrap", () => {
@@ -45,9 +45,7 @@ describe("shell bootstrap", () => {
   });
 
   it("Home has no registry handle; the directory is a ctx grant", () => {
-    const home = createHomeApp({
-      rootAppId: "home",
-    });
+    const home = createHomeApp();
     expect(home.id).toBe("home");
     expect(home).not.toHaveProperty("registry");
   });

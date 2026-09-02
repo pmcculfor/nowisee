@@ -2,7 +2,7 @@
 
 This file is binding for anyone (human or agent) working on Nowisee. The lock table later in the file is meant to be scanned quickly. The surrounding sections explain the same rules in ordinary sentences.
 
-Start with the product in [`docs/SPEC.md`](docs/SPEC.md). Contracts and stack are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Core behavior and the app interface are in [`docs/MODULES.md`](docs/MODULES.md). Storage is [`docs/STORAGE.md`](docs/STORAGE.md); identity is [`docs/IDENTITY.md`](docs/IDENTITY.md). Scale and remaining deferrals are in [`docs/PREPAREDNESS.md`](docs/PREPAREDNESS.md). Each app’s graph and data live next to that app (`src/apps/<id>/README.md`, or [`src/apps/home.md`](src/apps/home.md)). Remaining non-doc work is listed in [`docs/current_audit.md`](docs/current_audit.md).
+Start with the product in [`docs/SPEC.md`](docs/SPEC.md). Contracts and stack are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Core behavior and the app interface are in [`docs/MODULES.md`](docs/MODULES.md). Storage is [`docs/STORAGE.md`](docs/STORAGE.md); identity is [`docs/IDENTITY.md`](docs/IDENTITY.md). Scale and remaining deferrals are in [`docs/PREPAREDNESS.md`](docs/PREPAREDNESS.md). Each app’s graph and data live next to that app (`src/apps/<id>/README.md`). Remaining non-doc work is listed in [`docs/current_audit.md`](docs/current_audit.md).
 
 ## Product in one paragraph
 

@@ -131,7 +131,7 @@ This is a discipline, not a sandbox.
 
 **Smell test:** if a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app — not in core. If every session would break unless Navigator runs it, it belongs in core.
 
-To add an app, implement `AppModule` and add a pack row in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts). The client POSTs `/api/apps/:id/…` using that id; it does not keep a matching stub list. Home lists whatever the server registry exposes via `ctx.directory`.
+To add an app, implement `AppModule` and add a pack row in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts) (`homeRole` if it should not be a normal optional Home item). The client POSTs `/api/apps/:id/…` using that id; it does not keep a matching stub list. Home lists peers from `ctx.directory` according to `homeRole` and the user’s store.
 
 ---
 
@@ -151,7 +151,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **NodeCache** stores warm payloads, pins stack ids, and clears on app switch.
 
-**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (host directory).
+**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (`{ id, label }`). The host directory bind may attach pack `homeRole` when granting `ctx.directory`.
 
 **Platform** owns the clipboard write for `clipboardText` during an action.
 

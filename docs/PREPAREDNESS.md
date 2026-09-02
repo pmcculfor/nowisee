@@ -26,7 +26,7 @@ Production is a Node host that serves the site and `/api` together (`npm start`)
 
 | Growth | What changes | What must not change |
 |--------|----------------|----------------------|
-| More first-party apps | A folder, an `AppModule`, a pack row, and a remote stub. Home lists `ctx.directory`. | No product names in core. The host does not open that app’s database. |
+| More first-party apps | A folder, an `AppModule`, a pack row (`homeRole` as needed), and a remote stub. Home lists `ctx.directory` using `homeRole` plus its store. | No product names in core. The host does not open that app’s database. |
 | Larger corpora | They stay on the server; the app seeds its own file. The client bundle stays a shell. | No corpus in `src/core/` or in the browser graph. |
 | Hosted identity at volume | The identity service could swap SQLite for another engine behind `server/db`. | Apps still see `ctx.userId`, never `ctx.db`. |
 | Native client (iPhone) | Map swipe and direct-touch to the same four intents. Extract a three-method Display port (`showText` / `showInput` / `getInputText`) so Navigator can run headless. Keep the session cookie in the WebView. | Do not port apps to Swift. Do not teach apps about swipes. Do not build a second login path. |

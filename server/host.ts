@@ -2,8 +2,10 @@ import { FIRST_PARTY_APPS, type StartedApp } from "./firstPartyApps.ts";
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
 import { AppRegistry } from "../src/core/registry.ts";
 import type {
+  AppDescriptor,
   AppModule,
   AppServerContext,
+  HomeRole,
   RefreshExtras,
   RefreshResult,
   StackEntry,
@@ -119,14 +121,25 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
 
   const registry = new AppRegistry();
   const started: StartedApp[] = [];
+  const homeRoleByAppId = new Map<string, HomeRole>();
   const hostStart = { rootAppId, ephemeral };
   for (const pack of FIRST_PARTY_APPS) {
     const app = pack.start(hostStart);
     registry.register(app);
     started.push(app);
+    if (pack.homeRole) {
+      homeRoleByAppId.set(app.id, pack.homeRole);
+    }
   }
   for (const extra of options.extraApps ?? []) {
     registry.register(extra);
+  }
+
+  function listDirectory(): readonly AppDescriptor[] {
+    return registry.listDescriptors().map((d) => {
+      const homeRole = homeRoleByAppId.get(d.id);
+      return homeRole ? { id: d.id, label: d.label, homeRole } : d;
+    });
   }
 
   const catalogIdentity: string[] = [];
@@ -200,7 +213,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       identity,
       slot: {},
       directoryAppIds,
-      directory: () => registry.listDescriptors(),
+      directory: listDirectory,
       lockboxAppIds,
       lockbox,
       oauthAppIds,
@@ -261,7 +274,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
         identity,
         slot: args.slot,
         directoryAppIds,
-        directory: () => registry.listDescriptors(),
+        directory: listDirectory,
         lockboxAppIds,
         lockbox,
         oauthAppIds,
