@@ -206,7 +206,7 @@ The map is nested (`fromNodeId → intent → edge`), so no delimiter is needed 
 ### Responsibilities
 
 - Maintain `StackEntry[]` for the current app only.
-- Operations: `push(entry)`, `replaceTip(entry)`, `pop() → entry | null`, `clear()`, `snapshot()` for refresh.
+- Operations: `push(entry)`, `replaceTip(entry)`, `pop() → entry | null`, `clear()`, `snapshot()` for refresh, `restore(snapshot)` when the user backs out of load recovery.
 - `replaceTip` refuses when the stack is empty (callers that mean push must `push`).
 - Tip = last entry.
 
@@ -243,6 +243,10 @@ Navigator is the **single owner** of every state transition: stack, cache, map, 
 ```text
 onIntent(intent):
   if blocked: return
+  if loadRecovery:
+    if intent == enter: refresh current stack (no extras.action); return
+    if intent == back: restore stack+display snapshot; return
+    return                                           // prev/next silent no-op
   edge = map.lookup(tip.id, intent)
   if !edge: return                                   // silent no-op
   if edge is malformed (push/replace missing toNodeId,
@@ -263,6 +267,7 @@ onIntent(intent):
     openLocation(edge.to, extras); return
 
   // node edge
+  snapshot stack and current payload                  // load-recovery back
   if edge.stackBehavior == "pop":
     if stack.length <= 1:
       openLocation({ appId: config.rootAppId, path: "/" }); return
@@ -282,6 +287,7 @@ onIntent(intent):
     // label (no placeholder, no empty flash) until result.node arrives
     startCall(refresh, extras, token)
     // on result (if token is newest): apply; blocked = false
+    // on failure: load recovery (below); stack stays on dest
 ```
 
 `openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. If the registry has no module, Navigator asks optional `resolveApp` (bootstrap mints a generic RPC stub). If that is missing or returns null, the id still resolves to `config.rootAppId` with path `/`. A known app with a non-canonical path is a silent no-op.
@@ -301,7 +307,7 @@ onIntent(intent):
 ### Action calls
 
 - `extras.action` is set on exactly one call: the one caused by traversing an edge with `action: true`.
-- Core never re-issues that call — no automatic retry, no replay after a discarded result, no repeat on later revalidation. A failed action is re-triggered by the user pressing the intent again.
+- Core never re-issues that call — no automatic retry, no replay after a discarded result, no repeat on later revalidation. A failed action is re-triggered by the user pressing the intent again. Load-recovery `enter` is a new read refresh, not a re-issue of a failed action.
 - Core may coalesce or debounce read-only revalidations (holding `next` through a long list should not issue one call per row). Action calls are never coalesced or dropped.
 
 ### Address bar
@@ -314,8 +320,9 @@ onIntent(intent):
 
 - Log/debug as appropriate.
 - `blocked = false`, busy clear.
-- Display, stack, map, and cache unchanged (last good).
-- With no status channel, a rejected action call leaves the user reading a working label indefinitely. Apps **MUST** resolve with a status node instead of rejecting. Distinguishing busy / dead-end / failure for the user is deferred — [`PREPAREDNESS.md`](PREPAREDNESS.md).
+- **Warm miss:** keep the dest on the stack. Map and cache stay last-good. Display the core recovery copy (`LOAD_FAILURE_LABEL`). `enter` retries `refresh` on the current stack with **no** `extras.action`. `back` restores the pre-miss stack and the previous payload. Other intents are a silent no-op. This is Navigator recovery, not an app-authored edge.
+- **Warm hit or failed open:** display, stack, map, and cache unchanged (last good). Do not overwrite cached dest text.
+- A rejected action call still leaves the user reading a working label if the dest was warm. Apps **MUST** resolve with a status node instead of rejecting. Busy and dead-end remain silent — [`PREPAREDNESS.md`](PREPAREDNESS.md).
 
 ### Non-goals
 
@@ -548,7 +555,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
 - Router uses `isAppId` (syntax), not the client registry, to accept a hash segment.
 - Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
-- Do **not** call `display.focus()` again after open resolves — `showText` / `showInput` already focused; a second focus restarts VoiceOver.
+- Do **not** focus the surface again after open resolves — `showText` / `showInput` already focused; a second focus restarts VoiceOver.
 
 ### Non-goals
 

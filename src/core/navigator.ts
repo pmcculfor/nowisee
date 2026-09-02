@@ -48,6 +48,15 @@ type InFlight = {
 
 type ApplyAs = { kind: "open"; appId: string } | { kind: "refresh" };
 
+type LoadRecovery = {
+  readonly stackBefore: readonly StackEntry[];
+  readonly previous: NodePayload | null;
+};
+
+/** Spoken on a warm-miss refresh failure. Core recovery copy, not an app node. */
+export const LOAD_FAILURE_LABEL =
+  "Something went wrong. Please check your network connection. Navigate right to try again. Navigate left to go back.";
+
 /**
  * Single owner of every state transition: stack, cache, map, blocked, display,
  * address bar, and the monotonic transition token.
@@ -81,6 +90,7 @@ export class Navigator {
     kind: NodeKind;
     label: string;
   } | null = null;
+  private loadRecovery: LoadRecovery | null = null;
 
   constructor(options: NavigatorOptions) {
     this.config = options.config;
@@ -121,6 +131,9 @@ export class Navigator {
   onIntent(intent: NavIntent): void | Promise<void> {
     if (this.blocked) {
       return;
+    }
+    if (this.loadRecovery) {
+      return this.onLoadRecoveryIntent(intent);
     }
     const tip = this.stack.tip();
     if (!tip) {
@@ -202,6 +215,8 @@ export class Navigator {
   ): Promise<void> | void {
     let destId: string;
     let behavior: StackBehavior = edge.stackBehavior;
+    const stackBefore = this.stack.snapshot();
+    const previous = this.payloadForCurrentTip();
 
     if (edge.stackBehavior === "pop") {
       if (this.stack.length <= 1) {
@@ -238,7 +253,79 @@ export class Navigator {
       invoke: (callExtras) => this.currentApp()!.refresh(this.stack.snapshot(), callExtras),
       baseExtras: extras,
       applyAs: { kind: "refresh" },
+      enterRecoveryOnFailure: { stackBefore, previous },
     });
+  }
+
+  private onLoadRecoveryIntent(intent: NavIntent): void | Promise<void> {
+    if (intent === "enter") {
+      const app = this.currentApp();
+      const recovery = this.loadRecovery;
+      if (!app || !recovery) {
+        return;
+      }
+      this.transitionToken += 1;
+      const token = this.transitionToken;
+      this.supersedeInFlight();
+      this.blocked = true;
+      return this.startCall({
+        token,
+        isAction: false,
+        invoke: (callExtras) => app.refresh(this.stack.snapshot(), callExtras),
+        baseExtras: {},
+        applyAs: { kind: "refresh" },
+        enterRecoveryOnFailure: recovery,
+      });
+    }
+    if (intent === "back") {
+      this.exitLoadRecovery();
+    }
+  }
+
+  private enterLoadRecovery(recovery: LoadRecovery): void {
+    this.loadRecovery = recovery;
+    this.tipKind = "text";
+    this.display.showText(LOAD_FAILURE_LABEL);
+    if (this.currentAppId) {
+      this.displayed = {
+        appId: this.currentAppId,
+        id: this.stack.tip()?.nodeId ?? "",
+        kind: "text",
+        label: LOAD_FAILURE_LABEL,
+      };
+    }
+  }
+
+  private exitLoadRecovery(): void {
+    const recovery = this.loadRecovery;
+    if (!recovery) {
+      return;
+    }
+    this.loadRecovery = null;
+    this.stack.restore(recovery.stackBefore);
+    const payload = recovery.previous ?? this.payloadForCurrentTip();
+    if (payload) {
+      this.showPayload(payload);
+    }
+  }
+
+  private payloadForCurrentTip(): NodePayload | null {
+    const tip = this.stack.tip();
+    if (!tip) {
+      return null;
+    }
+    const cached = this.cache.get(tip.nodeId);
+    if (cached) {
+      return cached;
+    }
+    if (this.displayed && this.displayed.appId === this.currentAppId) {
+      return {
+        id: this.displayed.id,
+        label: this.displayed.label,
+        kind: this.displayed.kind,
+      };
+    }
+    return { id: tip.nodeId, label: tip.label };
   }
 
   private applyLocalMove(
@@ -333,6 +420,7 @@ export class Navigator {
     baseExtras: RefreshExtras;
     applyAs: ApplyAs;
     invoke: (extras: RefreshExtras) => Promise<RefreshResult> | RefreshResult;
+    enterRecoveryOnFailure?: LoadRecovery;
   }): Promise<void> {
     const controller = new AbortController();
     this.inFlight = {
@@ -371,8 +459,10 @@ export class Navigator {
       if (args.token !== this.transitionToken) {
         return;
       }
-      // Keep display, stack, map, and cache as last good.
       console.warn("Navigator: refresh/open failed", err);
+      if (args.enterRecoveryOnFailure) {
+        this.enterLoadRecovery(args.enterRecoveryOnFailure);
+      }
       this.blocked = false;
     } finally {
       if (this.inFlight?.token === args.token) {
@@ -409,6 +499,7 @@ export class Navigator {
   }
 
   private applyResult(result: RefreshResult, applyAs: ApplyAs): void {
+    this.loadRecovery = null;
     if (applyAs.kind === "open") {
       this.stack.clear();
       this.cache.clear();

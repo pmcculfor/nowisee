@@ -44,11 +44,11 @@ These items are additive. The cost of waiting is recorded so they are not treate
 
 ### Status channel (busy / dead-end / failure)
 
-A dead-end key is a silent no-op (locked). A warm miss blocks with no placeholder. A refresh failure keeps the last text and clears busy.
+A dead-end key is a silent no-op (locked). A warm miss blocks with no placeholder. A warm-miss refresh failure now speaks on the content surface (retry / back). Warm-hit revalidation failure and failed open still keep last-good text.
 
-For this audience those three states are identical: the user presses a key and nothing is spoken. They cannot tell “nothing that way” from “still working” from “it failed.” The predictable coping behavior is to mash the key, which is the worst input pattern for in-flight transitions.
+Busy and dead-end are still identical silence for this audience. They cannot tell “nothing that way” from “still working.” The predictable coping behavior is to mash the key, which is the worst input pattern for in-flight transitions.
 
-**When taken up:** add a second, screen-reader-only announcement channel in Display, distinct from the focused content surface. It is an announcement, not a competing interactive region. Pending work after a short delay can speak a polite “working”; failure can speak a generic core announcement; a dead end can use a distinguishable cue (or silence as a setting). Content announcement stays focus-only. Until this lands, apps **MUST** resolve action calls with a status node rather than reject — a rejection strands the user on the working label.
+**When taken up:** add a second, screen-reader-only announcement channel in Display, distinct from the focused content surface. It is an announcement, not a competing interactive region. Pending work after a short delay can speak a polite “working”; a dead end can use a distinguishable cue (or silence as a setting). Warm-miss load failure already uses the content surface. Content announcement stays focus-only. Until this lands, apps **MUST** resolve action calls with a status node rather than reject — a rejection strands the user on the working label.
 
 ### Deep-link ancestry
 

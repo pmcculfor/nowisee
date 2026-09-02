@@ -20,18 +20,10 @@ export function checkCsrf(args: {
   return { ok: true };
 }
 
-export function expectedOriginFromRequest(args: {
-  readonly host: string | undefined;
-  readonly forwardedProto: string | undefined;
-  readonly encrypted: boolean;
-  readonly configuredOrigin?: string;
-}): string | null {
-  if (args.configuredOrigin) {
-    return args.configuredOrigin.replace(/\/+$/, "");
-  }
-  if (!args.host) {
-    return null;
-  }
-  const proto = (args.forwardedProto ?? (args.encrypted ? "https" : "http")).split(",")[0]!.trim();
-  return `${proto}://${args.host}`;
+/**
+ * Exact Origin for CSRF layer 3. Only the configured public origin
+ * (`NOWISEE_ORIGIN`). Unset means every Origin check fails.
+ */
+export function expectedOriginFromRequest(configuredOrigin?: string): string {
+  return (configuredOrigin ?? "").replace(/\/+$/, "");
 }

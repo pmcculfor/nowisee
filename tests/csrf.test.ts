@@ -84,4 +84,16 @@ describe("CSRF layers", () => {
     expect(out.headers?.["Cache-Control"]).toBe("no-store");
     expect(out.headers).not.toHaveProperty("Access-Control-Allow-Credentials");
   });
+
+  it("rejects even a matching Origin when configuredOrigin is unset", async () => {
+    h = createNowiseeHost({});
+    const out = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/home/open",
+      headers: headers(),
+      body: { path: "/" },
+    });
+    expect(out.status).toBe(403);
+    expect(out.body).toEqual({ error: "Invalid origin" });
+  });
 });

@@ -97,13 +97,12 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
     if (raw.length > 0) {
       body = JSON.parse(raw) as unknown;
     }
-    const out = await handleSessionHttp(host, {
-      method: req.method ?? "GET",
-      url: req.url ?? "/",
-      headers: req.headers,
-      body,
-      encrypted: Boolean((req.socket as { encrypted?: boolean }).encrypted),
-    });
+      const out = await handleSessionHttp(host, {
+        method: req.method ?? "GET",
+        url: req.url ?? "/",
+        headers: req.headers,
+        body,
+      });
     const json = JSON.stringify(out.body);
     res.statusCode = out.status;
     for (const [key, value] of Object.entries(out.headers ?? {})) {
@@ -124,7 +123,13 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
 }
 
 async function serveStatic(url: string, res: ServerResponse): Promise<void> {
-  const pathOnly = decodeURIComponent((url.split("?")[0] ?? "/"));
+  let pathOnly: string;
+  try {
+    pathOnly = decodeURIComponent(url.split("?")[0] ?? "/");
+  } catch {
+    writeError(res, 400, "Bad request");
+    return;
+  }
   const relative = pathOnly === "/" ? "index.html" : pathOnly.replace(/^\/+/, "");
   const resolved = resolve(DIST, normalize(relative));
   if (!(resolved === DIST || resolved.startsWith(DIST + sep))) {

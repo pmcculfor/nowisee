@@ -69,7 +69,6 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
         url,
         headers: req.headers,
         body,
-        encrypted: Boolean((req.socket as { encrypted?: boolean }).encrypted),
       });
       writeJson(res, out.status, out.body, out.headers);
     } catch (err) {
