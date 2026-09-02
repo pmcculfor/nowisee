@@ -274,7 +274,7 @@ The host passes the verified user as a third, server-only context argument — `
 | `ctx.identity` | Only for apps the host allows (§6). Everything else never sees it |
 | `ctx.lockbox` | Only for apps in `lockboxAppIds` (§3). Bound to `(userId, appId)` |
 | `ctx.oauth` | Only for apps in `oauthAppIds` (§3). Bound to `(userId, sessionId, appId)` |
-| `ctx.directory` | Only for apps the pack catalog marks (today: Home). `list()` returns descriptors, never modules |
+| `ctx.directory` | Only for apps the pack catalog marks (today: Home). `list()` returns `{ id, label, homeRole? }`, never modules |
 
 `ctx` may carry host **capabilities** (methods), not only data — see §11.3. That does not weaken the app boundary: the plain-data rule in [`ARCHITECTURE.md`](ARCHITECTURE.md) governs *payloads* (`stack`, `RefreshResult`, `NodePayload`, `NavigationMap`), and `PlatformContext` already establishes that capabilities are method-bearing.
 
@@ -328,9 +328,9 @@ The mechanism already exists and needs no new core concept: an `app` edge trigge
 
 ### Home is an ordinary app
 
-`AppRegistry.listDescriptors()` returns `[{ id, label }]` for every registered app — plain descriptors, never the registry object. The host grants that list as `ctx.directory` only to apps the pack catalog marks (today: Home). Home feature-detects it on each `open` / `refresh`.
+`AppRegistry.listDescriptors()` returns `[{ id, label }]` for every registered app — plain descriptors, never the registry object. The host grants a directory list as `ctx.directory` only to apps the pack catalog marks (today: Home). That list is `{ id, label, homeRole? }`: `homeRole` comes from the pack row (`internal` / `required` / `default` / `optional`; omit = optional). `listDescriptors()` itself stays `{ id, label }`. Home feature-detects the directory on each `open` / `refresh`.
 
-Home is **not special** for identity: it receives `ctx.userId` like every app. Per-user visible apps can later be filtered inside the directory bind using that user id. Signed out yields the full registered list. The host does not rewrite any app's catalog label.
+Home is **not special** for identity: it receives `ctx.userId` like every app. Signed out, Home shows `required` ∪ `default` plus Manage Apps (not the full registered list). Signed-in layout is Home’s own store, keyed by `ctx.userId`. The host does not rewrite any app's catalog label. `rootAppId` remains the shell root; it is not derived from `homeRole`.
 
 ---
 

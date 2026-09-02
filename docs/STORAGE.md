@@ -10,7 +10,7 @@ Core never sees a database. There is no `ctx.db`, and there is no client `platfo
 |------|---------|----------|-------|-----------|
 | **Identity** | email, sign-in challenges, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
 | **Secrets** | OAuth tokens | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
-| **App data** | verses, account flow, notes | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
+| **App data** | verses, account flow, notes, home list | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
 | **Large user files** | attachments (later) | Files next to that app's data, not the host db | That app (HTTP upload may pass through the host) | Owner on the metadata row |
 
 This layer does not include the client warm cache (tab-lifetime) or anything in a `RefreshResult` (plain JSON the user is meant to hear).
@@ -24,6 +24,7 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 | Database | Default path | Migrations / detail |
 |----------|----------------|---------------------|
 | Host (identity, lockbox, OAuth state) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql) |
+| Home | `data/apps/home.db` | [`src/apps/home/db/migrations/`](../src/apps/home/db/migrations/). Per-user home list. Graph: [`src/apps/home/README.md`](../src/apps/home/README.md) |
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
 | Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/). Graph: [`src/apps/notes/README.md`](../src/apps/notes/README.md) |

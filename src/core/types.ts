@@ -133,10 +133,19 @@ export interface PlatformContext {
   readonly requestRefresh?: () => void;
 }
 
+/**
+ * How Home treats this installed app on its list.
+ * Omit on `AppDescriptor` = `"optional"`. Not user-visible copy.
+ * `rootAppId` is a different fact (shell root); do not derive it from this.
+ */
+export type HomeRole = "internal" | "required" | "default" | "optional";
+
 /** What the registry exposes about an app. Plain data, not the module. */
 export interface AppDescriptor {
   readonly id: string;
   readonly label: string;
+  /** Pack catalog: Home-list policy. `listDescriptors()` does not set this. */
+  readonly homeRole?: HomeRole;
 }
 
 /**

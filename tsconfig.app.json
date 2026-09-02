@@ -25,6 +25,7 @@
     "src/apps/bible/store.ts",
     "src/apps/bible/import.ts",
     "src/apps/account/store.ts",
+    "src/apps/home/store.ts",
     "src/apps/notes/store.ts",
     "src/apps/gmail/store.ts",
     "src/apps/gmail/oauth.ts",

@@ -32,7 +32,7 @@ server/         HTTP, CSRF, identity, lockbox, OAuth; packs first-party apps
 tests/          Vitest, node environment
 ```
 
-Each app’s graph, data, and corpus notes live next to that app (`src/apps/<id>/README.md`, or `src/apps/home.md` for Home).
+Each app’s graph, data, and corpus notes live next to that app (`src/apps/<id>/README.md`).
 
 ## Docs
 

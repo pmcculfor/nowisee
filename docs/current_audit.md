@@ -18,7 +18,7 @@ The owner-approved documentation work from [`original_audit.md`](original_audit.
 | SPEC matches shipped apps (Gmail + commentaries) | [`SPEC.md`](SPEC.md) |
 | Stack / layout / env | [`ARCHITECTURE.md`](ARCHITECTURE.md) (ENGINEERING folded in, then deleted) |
 | Core modules + how apps call core | [`MODULES.md`](MODULES.md) — no per-app graphs |
-| Per-app graphs | `src/apps/<id>/README.md`, [`../src/apps/home.md`](../src/apps/home.md) |
+| Per-app graphs | `src/apps/<id>/README.md` |
 | Bible as-built (not the ticket) | [`../src/apps/bible/README.md`](../src/apps/bible/README.md) + [`SOURCES.md`](../src/apps/bible/data/SOURCES.md) |
 | Gmail as-built + research | [`../src/apps/gmail/README.md`](../src/apps/gmail/README.md) + [`RESEARCH.md`](../src/apps/gmail/RESEARCH.md) |
 | Why / scale / leftover deferrals | [`PREPAREDNESS.md`](PREPAREDNESS.md) (status channel + deep-link ancestry moved here; no potential-apps table) |

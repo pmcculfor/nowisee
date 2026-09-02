@@ -2,7 +2,7 @@
 
 This is the normative behavior for the **client shell**, the **app kit**, and the **app ↔ core interface**. Product locks are in [`SPEC.md`](SPEC.md). Types are in [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`src/core/types.ts`](../src/core/types.ts). Agent rules are in [`../AGENTS.md`](../AGENTS.md).
 
-Per-app graphs, stores, and corpora live next to each app (`src/apps/<id>/README.md`, [`src/apps/home.md`](../src/apps/home.md)).
+Per-app graphs, stores, and corpora live next to each app (`src/apps/<id>/README.md`).
 
 This document specifies **what each core module owns**, its **inputs and outputs**, **edge cases**, and **non-goals**. It does not prescribe a UI framework.
 
@@ -88,7 +88,7 @@ The source file is canonical. The narrative lives in [`ARCHITECTURE.md`](ARCHITE
 
 - Hold `AppModule` instances for this process (host: pack at start; client: lazy RPC stubs).
 - `get(id) → AppModule | null` — **core-internal only**; never handed to an app.
-- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home reads this through `ctx.directory`, never the client registry.
+- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home reads installed apps through `ctx.directory.list()`, never the client registry. The host may add `homeRole` from the pack when building that directory list; `listDescriptors()` itself does not.
 
 ### Edge cases
 
@@ -99,7 +99,7 @@ The source file is canonical. The narrative lives in [`ARCHITECTURE.md`](ARCHITE
 
 ### Non-goals
 
-- Being a product catalog. The host pack and `ctx.directory` own installed apps; hiding apps per user is a directory/Home concern.
+- Being a product catalog. The host pack and `ctx.directory` own installed apps; `homeRole` and per-user visible apps are a Home concern. `rootAppId` remains the shell root.
 - Loading third-party *server* modules on demand (the host still starts the pack at process start).
 
 ---

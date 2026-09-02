@@ -15,7 +15,7 @@ Typical sites force tabbing through chrome or exploring by touch, so users canno
 
 **First-party apps** are portable `AppModule`s, including Home:
 
-1. **Home** lists enabled apps and links to each by URL.
+1. **Home** lists the user’s home apps (and Manage Apps) and links to each by URL.
 2. **Help** is a short tutorial of intents, lists, and typing. It is the first catalog item.
 3. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
 4. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
