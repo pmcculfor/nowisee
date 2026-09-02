@@ -27,6 +27,10 @@ export type DisplayMode = "text" | "input";
 export interface DisplayHost {
   isBlocked(): boolean;
   onIntent(intent: NavIntent): void;
+  /** Optional. Fired after mode/label change so another intent host can sync. */
+  onSurfaceChange?(): void;
+  /** When true, `showText` does not focus — a native overlay owns VoiceOver. */
+  skipTextFocus?(): boolean;
 }
 
 export class Display {
@@ -45,6 +49,14 @@ export class Display {
     return this.mode;
   }
 
+  /** Text: the node label. Input: the field's accessible name, not the typed value. */
+  getLabel(): string {
+    if (this.mode === "input") {
+      return this.inputEl?.getAttribute("aria-label") ?? "";
+    }
+    return this.textEl?.getAttribute("aria-label") ?? this.textEl?.textContent ?? "";
+  }
+
   showText(label: string): void {
     this.root.replaceChildren();
     this.inputEl = null;
@@ -59,7 +71,9 @@ export class Display {
 
     this.root.appendChild(el);
     this.setMode("text");
-    el.focus();
+    if (this.host?.skipTextFocus?.() !== true) {
+      el.focus();
+    }
   }
 
   showInput(initialText: string, options: ShowInputOptions = {}): void {
@@ -118,14 +132,14 @@ export class Display {
     this.mode = mode;
     this.root.dataset.mode = mode;
     const parent = this.root.parentElement;
-    if (!parent) {
-      return;
+    if (parent) {
+      if (mode === "input") {
+        parent.setAttribute("data-input-open", "");
+      } else {
+        parent.removeAttribute("data-input-open");
+      }
     }
-    if (mode === "input") {
-      parent.setAttribute("data-input-open", "");
-    } else {
-      parent.removeAttribute("data-input-open");
-    }
+    this.host?.onSurfaceChange?.();
   }
 
   private fireIntent(intent: NavIntent): void {

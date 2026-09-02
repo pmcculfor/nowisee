@@ -343,6 +343,7 @@ onIntent(intent):
 - `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
+- Optional `skipTextFocus`: the iOS wrapper uses this so VoiceOver is not moved onto the web surface while the Direct Touch overlay owns speech.
 - Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done).
 
 ### Edge cases
@@ -427,6 +428,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
 - Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done or fire on explore-by-touch.
+- **Not mounted** when the iOS WKWebView host is present (`webkit.messageHandlers.nowisee`); the native overlay is the intent host then.
 
 | Edge | Intent |
 |------|--------|
@@ -440,6 +442,32 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - Visible chrome or sighted affordances (pads are intentionally transparent).
 - Knowing which intents an app map contains.
 - Replacing Keyboard on desktop; both paths coexist.
+
+---
+
+## 9c. Native WKWebView host
+
+**Path:** `src/shell/nativeBridge.ts` (page), `ios/` (Swift overlay)
+
+The iPhone app is a visible `WKWebView` of the production origin plus a transparent touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
+
+The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. It speaks `accessibilityLabel` (and posts an announcement when the label changes). The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay). After an input node, VoiceOver focus is moved back onto the overlay with a screen-changed notification so the page behind it is not still focused.
+
+The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
+
+### Page → native
+
+`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done.
+
+### Native → page
+
+`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back")`. Other strings are ignored.
+
+### Non-goals
+
+- A Display port or native text renderer (deferred until device spikes fail).
+- Teaching apps about swipes or User-Agent.
+- A second login path; the WebView keeps the session cookie.
 
 ---
 

@@ -11,6 +11,7 @@ import { AppRegistry } from "../core/registry.ts";
 import { Router } from "../core/router.ts";
 import { Stack } from "../core/stack.ts";
 import type { AppModule, NavIntent, ShellConfig } from "../core/types.ts";
+import { attachNativeBridge, isNativeHostPresent } from "./nativeBridge.ts";
 
 export type ShellHandle = {
   readonly navigator: Navigator;
@@ -62,11 +63,16 @@ export function startShell(
   mount.appendChild(surface);
 
   let navigator!: Navigator;
+  let nativeNotify: (() => void) | undefined;
   const display = new Display(surface, {
     isBlocked: () => navigator.isBlocked(),
     onIntent: (intent: NavIntent) => {
       void navigator.onIntent(intent);
     },
+    onSurfaceChange: () => {
+      nativeNotify?.();
+    },
+    skipTextFocus: () => isNativeHostPresent(),
   });
   const map = new NavigationMapStore();
   const cache = new NodeCache();
@@ -111,17 +117,38 @@ export function startShell(
     bindings: config.keyBindings ?? defaultKeyBindings(),
   });
 
-  const navPads = new NavPads({
-    parent: mount,
-    host: intentHost,
-  });
-
   keyboard.attach();
-  navPads.attach();
   router.attach();
 
+  let nativeDetach: (() => void) | undefined;
+  let navPads: NavPads | undefined;
+  if (isNativeHostPresent()) {
+    const bridge = attachNativeBridge({
+      onIntent: (intent) => navigator.onIntent(intent),
+      getState: () => ({
+        mode: display.getMode(),
+        label: display.getLabel(),
+        blocked: navigator.isBlocked(),
+      }),
+    });
+    nativeNotify = () => {
+      bridge.notify();
+    };
+    nativeDetach = () => {
+      bridge.detach();
+    };
+  } else {
+    navPads = new NavPads({
+      parent: mount,
+      host: intentHost,
+    });
+    navPads.attach();
+  }
+
   const initial = router.parse(window.location.hash || "#/");
-  void navigator.openLocation(initial);
+  void navigator.openLocation(initial).finally(() => {
+    nativeNotify?.();
+  });
 
   return {
     navigator,
@@ -130,7 +157,8 @@ export function startShell(
     display,
     stop() {
       keyboard.detach();
-      navPads.detach();
+      navPads?.detach();
+      nativeDetach?.();
       router.detach();
     },
   };

@@ -39,6 +39,7 @@ describe("Display", () => {
     expect(surface!.hasAttribute("aria-live")).toBe(false);
     expect(surface!.getAttribute("tabindex")).toBe("-1");
     expect(display.getMode()).toBe("text");
+    expect(display.getLabel()).toBe("Hello");
     expect(document.activeElement).toBe(surface);
   });
 
@@ -176,5 +177,39 @@ describe("Display", () => {
     expect(input!.getAttribute("aria-label")).toBe("Password");
     input!.value = "secret-value";
     expect(display.getInputText()).toBe("secret-value");
+  });
+
+  it("onSurfaceChange fires after showText and showInput", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const modes: string[] = [];
+    const display = new Display(root, {
+      isBlocked: () => false,
+      onIntent: () => {},
+      onSurfaceChange: () => {
+        modes.push(`${display.getMode()}:${display.getLabel()}`);
+      },
+    });
+
+    display.showText("Verse");
+    display.showInput("", { secret: true });
+    expect(modes).toEqual(["text:Verse", "input:Password"]);
+  });
+
+  it("skipTextFocus leaves the text surface unfocused", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const previous = document.activeElement;
+    const display = new Display(root, {
+      isBlocked: () => false,
+      onIntent: () => {},
+      skipTextFocus: () => true,
+    });
+
+    display.showText("Hello");
+    const surface = root.querySelector("[data-surface='text']");
+    expect(surface).not.toBeNull();
+    expect(document.activeElement).not.toBe(surface);
+    expect(document.activeElement).toBe(previous);
   });
 });
