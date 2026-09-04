@@ -245,8 +245,37 @@ describe("Home app", () => {
     expect(structuredClone(result)).toEqual(result);
   });
 
-  it("signed-out Manage Apps is a sign-in node", async () => {
-    const result = (await homeApp().open("/manage", {}, signedOutCtx())) as RefreshResult;
+  it("signed-out refresh of Manage Apps stays on the catalog row", async () => {
+    const app = homeApp();
+    const ctx = signedOutCtx();
+    const opened = (await app.open("/", {}, ctx)) as RefreshResult;
+    expect(opened.navigationMap[MANAGE_NODE_ID]?.enter).toEqual({
+      kind: "node",
+      toNodeId: MANAGE_SIGNED_OUT_ID,
+      stackBehavior: "push",
+    });
+
+    const refreshed = (await app.refresh(
+      [{ nodeId: MANAGE_NODE_ID, label: "Manage Apps", location: null }],
+      {},
+      ctx,
+    )) as RefreshResult;
+    expect(refreshed.node.id).toBe(MANAGE_NODE_ID);
+    expect(refreshed.node.label).toBe("Manage Apps");
+    expect(refreshed.location).toEqual({ appId: "home", path: "/manage" });
+  });
+
+  it("signed-out enter into Manage Apps is a sign-in node", async () => {
+    const app = homeApp();
+    const ctx = signedOutCtx();
+    const catalog = (await app.open("/manage", {}, ctx)) as RefreshResult;
+    expect(catalog.node.label).toBe("Manage Apps");
+
+    const result = (await app.refresh(
+      [{ nodeId: MANAGE_SIGNED_OUT_ID, label: "Sign in to manage apps.", location: null }],
+      {},
+      ctx,
+    )) as RefreshResult;
     expect(result.node.label).toBe("Sign in to manage apps.");
     expect(result.node.id).toBe(MANAGE_SIGNED_OUT_ID);
     expect(result.navigationMap[MANAGE_SIGNED_OUT_ID]?.enter).toEqual({

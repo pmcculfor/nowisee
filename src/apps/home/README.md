@@ -28,7 +28,7 @@ Home also omits its own module id. Pack today: Home `internal`; Help, Bible, Not
 
 ## Manage Apps
 
-Signed out: **Sign in to manage apps.** `enter` → `ctx.accountAppId`. `back` → `pop`. Do not use app-kit `signedOut()` (its back would be `/app/home`).
+Signed out: the catalog row stays **Manage Apps**. Enter pushes **Sign in to manage apps.** `enter` → `ctx.accountAppId`. `back` → `pop`. Do not use app-kit `signedOut()` (its back would be `/app/home`). `/manage` is that catalog row; interior paths are `/manage/…`.
 
 Signed in: **Add Apps**, then **Remove Apps**, then **Reorder Apps** (no wrap). `back` pops to Manage Apps.
 

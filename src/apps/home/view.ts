@@ -226,11 +226,13 @@ async function loadSession(
 }
 
 function isManagePath(path: string): boolean {
-  return path === "/manage" || path.startsWith("/manage/");
+  // `/manage` is the catalog row. Interior screens live under `/manage/…`.
+  return path.startsWith("/manage/");
 }
 
 function isManageTip(tipId: string | undefined): boolean {
-  return Boolean(tipId?.startsWith("home:manage"));
+  // `home:manage` is the catalog row. Interior ids are `home:manage:…`.
+  return Boolean(tipId?.startsWith("home:manage:"));
 }
 
 function tipIdForPath(path: string, session: HomeSession): string {
