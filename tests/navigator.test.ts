@@ -470,7 +470,7 @@ describe("Navigator + Router contracts", () => {
     expect(stack.tip()?.nodeId).toBe("x");
   });
 
-  it("transition token: A → B → A discards the first A's in-flight result", async () => {
+  it("transition token: A → B → A discards the first A's in-flight result as the tip", async () => {
     let release!: () => void;
     let gateOpen = false;
     const waiters: Array<() => void> = [];
@@ -508,7 +508,350 @@ describe("Navigator + Router contracts", () => {
     expect(visibleText(h.root)).toBe("A-fresh");
   });
 
-  it("superseded read-only refresh receives aborted signal; action does not", async () => {
+  it("rapid next coalesces to one in-flight refresh and one pending", async () => {
+    let release!: () => void;
+    const waiters: Array<() => void> = [];
+    let hold = true;
+    const gate = () =>
+      new Promise<void>((resolve) => {
+        if (!hold) {
+          resolve();
+          return;
+        }
+        waiters.push(resolve);
+      });
+    release = () => {
+      hold = false;
+      for (const w of waiters.splice(0)) {
+        w();
+      }
+    };
+
+    const h = harness({ gate });
+    hold = false;
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    hold = true;
+
+    h.navigator.onIntent("next"); // A in flight
+    h.navigator.onIntent("next"); // B pending (dropped)
+    h.navigator.onIntent("next"); // copy pending
+
+    expect(visibleText(h.root)).toBe("Copy");
+    expect(h.stack.tip()?.nodeId).toBe("copy");
+
+    release();
+    await flush();
+    await flush();
+    await flush();
+
+    const refreshCalls = h.fake.calls.filter((c) => c.method === "refresh");
+    expect(refreshCalls).toHaveLength(2);
+    expect(refreshCalls[0]!.extras.signal?.aborted).toBe(false);
+    expect(refreshCalls[1]!.stack?.at(-1)?.nodeId).toBe("copy");
+    expect(visibleText(h.root)).toBe("Copy");
+  });
+
+  it("covering stale refresh replaces warm and map without moving the tip", async () => {
+    let release!: () => void;
+    const waiters: Array<() => void> = [];
+    let hold = true;
+    const gate = () =>
+      new Promise<void>((resolve) => {
+        if (!hold) {
+          resolve();
+          return;
+        }
+        waiters.push(resolve);
+      });
+    release = () => {
+      hold = false;
+      for (const w of waiters.splice(0)) {
+        w();
+      }
+    };
+
+    const h = harness({ gate });
+    hold = false;
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    hold = true;
+
+    h.navigator.onIntent("next"); // A in flight
+    h.navigator.onIntent("next"); // B pending
+
+    release();
+    await flush();
+    await flush();
+    await flush();
+
+    expect(h.stack.tip()?.nodeId).toBe("b");
+    expect(visibleText(h.root)).toBe("B");
+    expect(h.cache.get("b")?.label).toBe("B");
+    expect(h.map.lookup("b", "prev")?.kind).toBe("node");
+    const refreshCalls = h.fake.calls.filter((c) => c.method === "refresh");
+    expect(refreshCalls.length).toBe(2);
+    expect(refreshCalls[1]!.stack?.at(-1)?.nodeId).toBe("b");
+  });
+
+  it("stale refresh that omits the live tip does not replace warm", async () => {
+    let releaseFirst!: () => void;
+    let firstHeld = true;
+    const firstGate = () =>
+      new Promise<void>((resolve) => {
+        if (!firstHeld) {
+          resolve();
+          return;
+        }
+        releaseFirst = () => {
+          firstHeld = false;
+          resolve();
+        };
+      });
+
+    const registry = new AppRegistry();
+    registry.register(createRootApp("home"));
+    let refreshCount = 0;
+    const probe: AppModule = {
+      id: "probe",
+      label: "Probe",
+      open() {
+        return {
+          navigationMap: {
+            here: {
+              next: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+            },
+            mid: {
+              next: { kind: "node", toNodeId: "there", stackBehavior: "replace" },
+            },
+          },
+          warm: [
+            { id: "here", label: "Here" },
+            { id: "mid", label: "Mid" },
+          ],
+          node: { id: "here", label: "Here" },
+          location: { appId: "probe", path: "/here" },
+        };
+      },
+      async refresh(stack) {
+        refreshCount += 1;
+        const tipId = stack[stack.length - 1]?.nodeId ?? "here";
+        if (refreshCount === 1) {
+          await firstGate();
+        }
+        if (tipId === "mid") {
+          return {
+            navigationMap: {
+              here: {
+                next: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+              },
+              mid: {
+                next: { kind: "node", toNodeId: "there", stackBehavior: "replace" },
+              },
+            },
+            warm: [
+              { id: "here", label: "Here-stale" },
+              { id: "mid", label: "Mid-stale" },
+            ],
+            node: { id: "mid", label: "Mid-stale" },
+            location: { appId: "probe", path: "/mid" },
+          };
+        }
+        return {
+          navigationMap: {
+            there: {
+              prev: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+            },
+          },
+          warm: [{ id: "there", label: "There" }],
+          node: { id: "there", label: "There" },
+          location: { appId: "probe", path: "/there" },
+        };
+      },
+    };
+    registry.register(probe);
+
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+    const map = new NavigationMapStore();
+    const cache = new NodeCache();
+    const stack = new Stack();
+    const navigator = new Navigator({
+      config: { rootAppId: "home" },
+      registry,
+      display,
+      platform: new PlatformCapabilities({ clipboard: { writeText: async () => undefined } }),
+      map,
+      cache,
+      stack,
+      setAddressBar: () => undefined,
+    });
+
+    await navigator.openLocation({ appId: "probe", path: "/here" });
+
+    navigator.onIntent("next"); // mid, in-flight
+    expect(visibleText(root)).toBe("Mid");
+    expect(navigator.isBlocked()).toBe(false);
+
+    navigator.onIntent("next"); // there, miss
+    expect(navigator.isBlocked()).toBe(true);
+    expect(stack.tip()?.nodeId).toBe("there");
+    expect(visibleText(root)).toBe("Mid");
+
+    releaseFirst!();
+    await flush();
+    await flush();
+    await flush();
+
+    expect(cache.get("here")?.label).not.toBe("Here-stale");
+    expect(stack.tip()?.nodeId).toBe("there");
+    expect(visibleText(root)).toBe("There");
+    expect(refreshCount).toBe(2);
+  });
+
+  it("covering stale refresh paints a warm-miss dest and unblocks", async () => {
+    let releaseFirst!: () => void;
+    let releaseSecond!: () => void;
+    let firstHeld = true;
+    let secondHeld = true;
+    const firstGate = () =>
+      new Promise<void>((resolve) => {
+        if (!firstHeld) {
+          resolve();
+          return;
+        }
+        releaseFirst = () => {
+          firstHeld = false;
+          resolve();
+        };
+      });
+    const secondGate = () =>
+      new Promise<void>((resolve) => {
+        if (!secondHeld) {
+          resolve();
+          return;
+        }
+        releaseSecond = () => {
+          secondHeld = false;
+          resolve();
+        };
+      });
+
+    const registry = new AppRegistry();
+    registry.register(createRootApp("home"));
+    let refreshCount = 0;
+    const probe: AppModule = {
+      id: "probe",
+      label: "Probe",
+      open() {
+        return {
+          navigationMap: {
+            here: {
+              next: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+            },
+            mid: {
+              next: { kind: "node", toNodeId: "there", stackBehavior: "replace" },
+            },
+          },
+          warm: [
+            { id: "here", label: "Here" },
+            { id: "mid", label: "Mid" },
+          ],
+          node: { id: "here", label: "Here" },
+          location: { appId: "probe", path: "/here" },
+        };
+      },
+      async refresh(stack) {
+        refreshCount += 1;
+        const tipId = stack[stack.length - 1]?.nodeId ?? "here";
+        if (refreshCount === 1) {
+          await firstGate();
+        }
+        if (refreshCount === 2) {
+          await secondGate();
+        }
+        if (tipId === "mid") {
+          return {
+            navigationMap: {
+              here: {
+                next: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+              },
+              mid: {
+                next: { kind: "node", toNodeId: "there", stackBehavior: "replace" },
+              },
+              there: {
+                prev: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+              },
+            },
+            warm: [
+              { id: "here", label: "Here-stale" },
+              { id: "mid", label: "Mid-stale" },
+              { id: "there", label: "There" },
+            ],
+            node: { id: "mid", label: "Mid-stale" },
+            location: { appId: "probe", path: "/mid" },
+          };
+        }
+        return {
+          navigationMap: {
+            there: {
+              prev: { kind: "node", toNodeId: "mid", stackBehavior: "replace" },
+            },
+          },
+          warm: [{ id: "there", label: "There-fresh" }],
+          node: { id: "there", label: "There-fresh" },
+          location: { appId: "probe", path: "/there" },
+        };
+      },
+    };
+    registry.register(probe);
+
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const display = new Display(root);
+    const map = new NavigationMapStore();
+    const cache = new NodeCache();
+    const stack = new Stack();
+    const navigator = new Navigator({
+      config: { rootAppId: "home" },
+      registry,
+      display,
+      platform: new PlatformCapabilities({ clipboard: { writeText: async () => undefined } }),
+      map,
+      cache,
+      stack,
+      setAddressBar: () => undefined,
+    });
+
+    await navigator.openLocation({ appId: "probe", path: "/here" });
+
+    navigator.onIntent("next"); // mid, in-flight
+    expect(visibleText(root)).toBe("Mid");
+
+    navigator.onIntent("next"); // there, miss — display stays Mid
+    expect(navigator.isBlocked()).toBe(true);
+    expect(stack.tip()?.nodeId).toBe("there");
+    expect(visibleText(root)).toBe("Mid");
+
+    releaseFirst!();
+    await flush();
+    await flush();
+
+    // Covering apply paints dest from the stale warm set; pending is still held.
+    expect(stack.tip()?.nodeId).toBe("there");
+    expect(visibleText(root)).toBe("There");
+    expect(navigator.isBlocked()).toBe(false);
+    expect(cache.get("there")?.label).toBe("There");
+    expect(refreshCount).toBe(2);
+
+    releaseSecond!();
+    await flush();
+    await flush();
+
+    expect(visibleText(root)).toBe("There-fresh");
+    expect(stack.tip()?.nodeId).toBe("there");
+  });
+
+  it("superseded read-only refresh is not aborted; pending runs after", async () => {
     let release!: () => void;
     const waiters: Array<() => void> = [];
     let hold = true;
@@ -533,15 +876,14 @@ describe("Navigator + Router contracts", () => {
     hold = true;
 
     h.navigator.onIntent("next"); // refresh A in flight
-    h.navigator.onIntent("next"); // supersedes → abort first
+    h.navigator.onIntent("next"); // pending; first is not aborted
 
     release();
     await flush();
     await flush();
 
     const refreshCalls = h.fake.calls.filter((c) => c.method === "refresh");
-    expect(refreshCalls.length).toBeGreaterThanOrEqual(2);
-    expect(refreshCalls[0]!.extras.signal?.aborted).toBe(true);
+    expect(refreshCalls[0]!.extras.signal?.aborted).toBe(false);
     expect(refreshCalls[1]!.extras.signal?.aborted).toBe(false);
   });
 

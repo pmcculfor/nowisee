@@ -51,7 +51,7 @@ Core talks to apps only through `open` / `refresh`. Apps never import Navigator,
 | Clipboard | The app returns `clipboardText` on an **action** result; core writes. |
 | Address bar | The app returns an `AppLocation` or `null`; Router serializes. |
 | Server context | `ctx.userId`, `ctx.sessionId`, `ctx.accountAppId`, plus granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). Never a database. |
-| Abort | `extras.signal` on read-only calls. Never on action calls. |
+| Abort | `extras.signal` on read-only calls. Never on action calls. Later read-only intents do not abort the in-flight refresh; they replace a single pending call. |
 
 ### What apps must do
 
@@ -259,7 +259,7 @@ onIntent(intent):
   if edge.action:
     extras.action = true                             // this traversal only
 
-  token = ++transitionToken                          // supersedes anything in flight
+  token = ++transitionToken                          // stale for full apply; read-only stays in flight
 
   if edge.kind == "external":
     handOffToBrowser(edge.href); return
@@ -279,15 +279,16 @@ onIntent(intent):
   payload = cache.get(destId)
   if payload:
     applyLocalMove(edge.stackBehavior, payload)      // update stack + display now
-    startCall(refresh, extras, token)                // revalidate in background
+    scheduleCall(refresh, extras, token)             // one in-flight; else pending
   else:
     blocked = true
     applyLocalMove(edge.stackBehavior, { nodeId: destId, label: "" })
     // stack moves so refresh sees the intended tip; Display keeps the previous
-    // label (no placeholder, no empty flash) until result.node arrives
-    startCall(refresh, extras, token)
-    // on result (if token is newest): apply; blocked = false
-    // on failure: load recovery (below); stack stays on dest
+    // label (no placeholder, no empty flash) until a covering or current-token result
+    scheduleCall(refresh, extras, token)
+    // current-token result: full apply; blocked = false
+    // stale result that still warms the live tip: replace map+warm, show dest if needed
+    // on current-token failure: load recovery (below); stack stays on dest
 ```
 
 `openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. If the registry has no module, Navigator asks optional `resolveApp` (bootstrap mints a generic RPC stub). If that is missing or returns null, the id still resolves to `config.rootAppId` with path `/`. A known app with a non-canonical path is a silent no-op.
@@ -299,16 +300,17 @@ onIntent(intent):
 ### Transition token
 
 - Every transition (intent, `openLocation`, `hashchange`) increments a monotonic token and records it on the call it starts.
-- On completion, apply the result **only if its token is the newest issued**; otherwise discard.
-- Comparing tip ids is *not* sufficient: an A → B → A sequence returns to the same id, and the first visit's stale result would pass an id check.
-- Superseded **read-only** calls get their `AbortSignal` aborted so apps can cancel real work.
-- Superseded **action** calls are never aborted — the effect may already be in flight and cancelling it midway is worse than letting it finish. Only the result is discarded.
+- On completion, a **current-token** result is a full `applyResult` (tip, display, location, map, warm).
+- A **stale** read-only refresh result still **replaces** map and warm when the live stack tip id is in `result.warm` (or is `result.node.id`). It does not adopt `result.node` as the tip or write the address bar from that result. If the live tip is missing from that warm set, discard the result.
+- Comparing tip ids is *not* sufficient for a full apply: an A → B → A sequence returns to the same id, and the first visit's stale result would pass an id check.
+- Read-only `refresh` is coalesced: at most one in-flight call and one pending (latest stack). The in-flight read-only call is not aborted when a later read-only intent arrives. When it settles, the pending call starts (one extra round trip).
+- Action and `openLocation` preempt: drop the read-only pending, abort an in-flight **read-only** call, and start immediately. **Action** calls are never aborted — only their results are discarded if the token is stale.
 
 ### Action calls
 
 - `extras.action` is set on exactly one call: the one caused by traversing an edge with `action: true`.
 - Core never re-issues that call — no automatic retry, no replay after a discarded result, no repeat on later revalidation. A failed action is re-triggered by the user pressing the intent again. Load-recovery `enter` is a new read refresh, not a re-issue of a failed action.
-- Core may coalesce or debounce read-only revalidations (holding `next` through a long list should not issue one call per row). Action calls are never coalesced or dropped.
+- Core coalesces read-only revalidations to one in-flight `refresh` and one pending (latest stack). A covering in-flight result replaces warm and map; it does not merge them. Action calls are never coalesced or dropped.
 
 ### Address bar
 
