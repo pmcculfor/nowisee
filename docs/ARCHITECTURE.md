@@ -107,7 +107,7 @@ Sibling browsing uses `prev` / `next` (no flag). Background revalidation carries
 | Crossing the boundary | Rule |
 |-----------------------|------|
 | `stack`, `inputText`, `NodePayload`, `NavigationMap`, `RefreshResult`, `AppLocation` | **Plain data only.** Must survive being serialized and sent as a message. No functions, class instances, DOM nodes, or live references. |
-| `AbortSignal` | Call mechanic, not payload. Core never aborts an action call. On the wire, abort cancels the HTTP request. If the socket is already closed when `/api` handles the call, the host does not invoke the app. |
+| `AbortSignal` | Call mechanic, not payload. Core never aborts an action call. On the wire, abort cancels the HTTP request. |
 | Anything else | Not permitted. Core hands apps no other live object; apps return no other live object. |
 
 Consequences:

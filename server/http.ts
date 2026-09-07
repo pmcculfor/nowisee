@@ -17,17 +17,7 @@ export type SessionHttpRequest = {
   readonly url: string;
   readonly headers: HeadersLike;
   readonly body?: unknown;
-  /** True when the Node socket is already destroyed or aborted. */
-  readonly clientClosed?: boolean;
 };
-
-/** Adapter helper: Navigator abort closes the fetch; skip the app if so. */
-export function incomingClientClosed(req: {
-  readonly destroyed: boolean;
-  readonly aborted?: boolean;
-}): boolean {
-  return req.destroyed || req.aborted === true;
-}
 
 export type HeadersLike = {
   readonly [name: string]: string | string[] | undefined;
@@ -159,9 +149,6 @@ export async function handleSessionHttp(
   host: NowiseeHost,
   req: SessionHttpRequest,
 ): Promise<AppHttpResponse> {
-  if (req.clientClosed) {
-    return json(499, { error: "Aborted" });
-  }
   if (req.method !== "POST") {
     return json(405, { error: "Method not allowed" });
   }

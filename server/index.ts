@@ -24,7 +24,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { createNowiseeHost } from "./host.ts";
-import { handleSessionHttp, incomingClientClosed, isAppApiUrl } from "./http.ts";
+import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
@@ -102,7 +102,6 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
         url: req.url ?? "/",
         headers: req.headers,
         body,
-        clientClosed: incomingClientClosed(req),
       });
     const json = JSON.stringify(out.body);
     res.statusCode = out.status;

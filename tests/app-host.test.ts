@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
-import { handleSessionHttp, incomingClientClosed } from "../server/http.ts";
-import type { AppModule } from "../src/core/types.ts";
+import { handleSessionHttp } from "../server/http.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -115,54 +114,5 @@ describe("app HTTP", () => {
       body: { stack: "nope" },
     });
     expect(out.status).toBe(400);
-  });
-
-  it("skips the app when the client already closed the request", async () => {
-    let calls = 0;
-    const probe: AppModule = {
-      id: "probe",
-      label: "Probe",
-      open() {
-        calls += 1;
-        return {
-          navigationMap: {},
-          warm: [],
-          node: { id: "probe:root", label: "Probe" },
-          location: { appId: "probe", path: "/" },
-        };
-      },
-      refresh() {
-        calls += 1;
-        return {
-          navigationMap: {},
-          warm: [],
-          node: { id: "probe:root", label: "Probe" },
-          location: { appId: "probe", path: "/" },
-        };
-      },
-    };
-    h = createNowiseeHost({
-      rootAppId: "home",
-      configuredOrigin: ORIGIN,
-      extraApps: [probe],
-    });
-    const out = await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/refresh",
-      headers: headers(),
-      body: { stack: [{ nodeId: "probe:root", label: "Probe", location: null }] },
-      clientClosed: true,
-    });
-    expect(out.status).toBe(499);
-    expect(out.body).toEqual({ error: "Aborted" });
-    expect(calls).toBe(0);
-  });
-});
-
-describe("incomingClientClosed", () => {
-  it("is true when the socket is destroyed or aborted", () => {
-    expect(incomingClientClosed({ destroyed: true })).toBe(true);
-    expect(incomingClientClosed({ destroyed: false, aborted: true })).toBe(true);
-    expect(incomingClientClosed({ destroyed: false, aborted: false })).toBe(false);
   });
 });

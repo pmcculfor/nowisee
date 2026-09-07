@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, Plugin } from "vite";
 import { createNowiseeHost, type NowiseeHost } from "./host.ts";
-import { handleSessionHttp, incomingClientClosed, isAppApiUrl } from "./http.ts";
+import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
@@ -69,7 +69,6 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
         url,
         headers: req.headers,
         body,
-        clientClosed: incomingClientClosed(req),
       });
       writeJson(res, out.status, out.body, out.headers);
     } catch (err) {
