@@ -48,6 +48,15 @@ type InFlight = {
 
 type ApplyAs = { kind: "open"; appId: string } | { kind: "refresh" };
 
+type CallArgs = {
+  token: number;
+  isAction: boolean;
+  baseExtras: RefreshExtras;
+  applyAs: ApplyAs;
+  invoke: (extras: RefreshExtras) => Promise<RefreshResult> | RefreshResult;
+  enterRecoveryOnFailure?: LoadRecovery;
+};
+
 type LoadRecovery = {
   readonly stackBefore: readonly StackEntry[];
   readonly previous: NodePayload | null;
@@ -76,6 +85,8 @@ export class Navigator {
   private blocked = false;
   private transitionToken = 0;
   private inFlight: InFlight | null = null;
+  /** Latest read-only refresh waiting for `inFlight` to settle. Overwritten, never queued. */
+  private pending: CallArgs | null = null;
   private currentAppId: string | null = null;
   private tipKind: NodeKind = "text";
   /**
@@ -161,9 +172,9 @@ export class Navigator {
 
     this.transitionToken += 1;
     const token = this.transitionToken;
-    this.supersedeInFlight();
 
     if (edge.kind === "external") {
+      this.preemptReadOnly();
       this.handOffExternal(edge.href);
       return;
     }
@@ -196,7 +207,7 @@ export class Navigator {
 
     this.transitionToken += 1;
     const token = this.transitionToken;
-    this.supersedeInFlight();
+    this.preemptReadOnly();
     this.blocked = true;
 
     await this.startCall({
@@ -231,13 +242,7 @@ export class Navigator {
     const payload = this.cache.get(destId);
     if (payload) {
       this.applyLocalMove(behavior, payload, { updateDisplay: true });
-      return this.startCall({
-        token,
-        isAction: extras.action === true,
-        invoke: (callExtras) => this.currentApp()!.refresh(this.stack.snapshot(), callExtras),
-        baseExtras: extras,
-        applyAs: { kind: "refresh" },
-      });
+      return this.scheduleCall(this.refreshCall(token, extras));
     }
 
     // Warm miss: move stack, keep previous display, block until refresh.
@@ -247,14 +252,7 @@ export class Navigator {
       { id: destId, label: "" },
       { updateDisplay: false },
     );
-    return this.startCall({
-      token,
-      isAction: extras.action === true,
-      invoke: (callExtras) => this.currentApp()!.refresh(this.stack.snapshot(), callExtras),
-      baseExtras: extras,
-      applyAs: { kind: "refresh" },
-      enterRecoveryOnFailure: { stackBefore, previous },
-    });
+    return this.scheduleCall(this.refreshCall(token, extras, { stackBefore, previous }));
   }
 
   private onLoadRecoveryIntent(intent: NavIntent): void | Promise<void> {
@@ -266,16 +264,9 @@ export class Navigator {
       }
       this.transitionToken += 1;
       const token = this.transitionToken;
-      this.supersedeInFlight();
+      this.preemptReadOnly();
       this.blocked = true;
-      return this.startCall({
-        token,
-        isAction: false,
-        invoke: (callExtras) => app.refresh(this.stack.snapshot(), callExtras),
-        baseExtras: {},
-        applyAs: { kind: "refresh" },
-        enterRecoveryOnFailure: recovery,
-      });
+      return this.startCall(this.refreshCall(token, {}, recovery));
     }
     if (intent === "back") {
       this.exitLoadRecovery();
@@ -403,25 +394,86 @@ export class Navigator {
     return this.registry.get(this.currentAppId);
   }
 
-  private supersedeInFlight(): void {
-    const prev = this.inFlight;
-    if (!prev) {
-      return;
-    }
-    // Action calls are never aborted — only their results are discarded.
-    if (!prev.isAction) {
-      prev.controller.abort();
+  private refreshCall(
+    token: number,
+    extras: RefreshExtras,
+    enterRecoveryOnFailure?: LoadRecovery,
+  ): CallArgs {
+    const stack = this.stack.snapshot();
+    const app = this.currentApp();
+    return {
+      token,
+      isAction: extras.action === true,
+      invoke: (callExtras) => app!.refresh(stack, callExtras),
+      baseExtras: extras,
+      applyAs: { kind: "refresh" },
+      enterRecoveryOnFailure,
+    };
+  }
+
+  /**
+   * Drop a queued read-only refresh and abort an in-flight read-only call.
+   * Actions are left running.
+   */
+  private preemptReadOnly(): void {
+    this.pending = null;
+    if (this.inFlight && !this.inFlight.isAction) {
+      this.inFlight.controller.abort();
     }
   }
 
-  private async startCall(args: {
-    token: number;
-    isAction: boolean;
-    baseExtras: RefreshExtras;
-    applyAs: ApplyAs;
-    invoke: (extras: RefreshExtras) => Promise<RefreshResult> | RefreshResult;
-    enterRecoveryOnFailure?: LoadRecovery;
-  }): Promise<void> {
+  /** One in-flight read-only refresh; further read-only intents overwrite `pending`. */
+  private scheduleCall(args: CallArgs): Promise<void> | void {
+    if (args.isAction) {
+      this.preemptReadOnly();
+      return this.startCall(args);
+    }
+    if (!this.inFlight) {
+      return this.startCall(args);
+    }
+    this.pending = args;
+  }
+
+  private flushPending(): void {
+    const next = this.pending;
+    if (!next) {
+      return;
+    }
+    this.pending = null;
+    void this.startCall(next);
+  }
+
+  private resultCoversCurrentTip(result: RefreshResult): boolean {
+    const tipId = this.stack.tip()?.nodeId;
+    if (!tipId) {
+      return false;
+    }
+    if (result.node.id === tipId) {
+      return true;
+    }
+    return result.warm.some((payload) => payload.id === tipId);
+  }
+
+  /**
+   * Stale read-only result whose warm set still contains the live tip.
+   * Replaces map and warm; does not adopt `result.node` as the stack tip.
+   */
+  private applyCovering(result: RefreshResult): void {
+    this.map.replace(result.navigationMap);
+    const stackIds = this.stack.snapshot().map((e) => e.nodeId);
+    this.cache.replaceWarm(result.warm, result.node, stackIds);
+    const tip = this.stack.tip();
+    const current = tip ? this.cache.get(tip.nodeId) : undefined;
+    if (!current) {
+      return;
+    }
+    if (!this.isAlreadyShowing(current)) {
+      this.showPayload(current);
+    }
+    this.blocked = false;
+  }
+
+  private async startCall(args: CallArgs): Promise<void> {
     const controller = new AbortController();
     this.inFlight = {
       token: args.token,
@@ -450,11 +502,16 @@ export class Navigator {
         throw new Error("Navigator: malformed RefreshResult");
       }
       const settled = await this.fulfillClipboardText(result, args.isAction);
-      if (args.token !== this.transitionToken) {
-        return; // stale — copy may already have run
+      if (args.token === this.transitionToken) {
+        this.applyResult(settled, args.applyAs);
+        this.blocked = false;
+      } else if (
+        !args.isAction &&
+        args.applyAs.kind === "refresh" &&
+        this.resultCoversCurrentTip(settled)
+      ) {
+        this.applyCovering(settled);
       }
-      this.applyResult(settled, args.applyAs);
-      this.blocked = false;
     } catch (err) {
       if (args.token !== this.transitionToken) {
         return;
@@ -465,11 +522,14 @@ export class Navigator {
       }
       this.blocked = false;
     } finally {
-      if (this.inFlight?.token === args.token) {
-        this.inFlight = null;
-      }
       if (args.isAction) {
         this.platform.endClipboardWrite();
+      }
+      // Only the owner of `inFlight` may start `pending`. A preempting action
+      // or open overwrites `inFlight`; the aborted call must not flush.
+      if (this.inFlight?.token === args.token) {
+        this.inFlight = null;
+        this.flushPending();
       }
     }
   }

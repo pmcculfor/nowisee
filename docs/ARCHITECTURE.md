@@ -92,7 +92,7 @@ Side effects are ordinary navigation — there is no `activate()` and no separat
 | Set `extras.action = true` on exactly the call caused by traversing that edge | Core |
 | Never set `extras.action` on bootstrap, revalidation, retry, replay, or any other call | Core |
 | Never re-issue, retry, or abort an action call | Core |
-| Never coalesce or drop an action call (read-only revalidations may be coalesced) | Core |
+| Never coalesce or drop an action call (read-only revalidations: one in-flight + one pending) | Core |
 | Perform side effects only when `extras.action` is true; otherwise read-only | App |
 | Resolve with a status node on failure rather than rejecting | App |
 
@@ -141,7 +141,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **Router** is a pure boundary: `parse` / `hrefFor` / `setAddressBar`, and `hashchange` → `openLocation`. It never owns stack, cache, map, or busy.
 
-**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. A warm miss moves the stack, keeps the previous label, and blocks until refresh. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
+**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. Read-only refreshes coalesce to one in-flight call and one pending; a covering stale result replaces warm and map without moving the tip. A warm miss moves the stack, keeps the previous label, and blocks until a covering or current-token refresh. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
 
 **Display:** text tips use `role="application"`, remount, and focus, with no `aria-live`. Input tips use a textarea or password field plus Cancel/Done (click only). Hide NavPads while input is open.
 
@@ -201,7 +201,7 @@ Unit-test without the DOM where possible. The list below is the behavior to cove
 - Map lookup; push/replace/pop; pop omits toNodeId; `app` edge clears stack and switches app.
 - Warm hit vs warm miss (block); warm-miss failure recovery copy; refresh failure clears busy.
 - Transition token: an A → B → A sequence discards the first A's in-flight result.
-- A superseded read-only call receives an aborted signal; an action call never does.
+- Read-only: one in-flight refresh plus one pending; a covering stale result replaces warm and map without moving the tip. A later read-only intent does not abort the in-flight call. An action call is never aborted.
 - `extras.action` is set on exactly the traversal of an `action: true` edge, and on no other call.
 - Walking the full sibling option list past an effectful node performs no effect.
 - `passInputText` included only when flag set from input tip.

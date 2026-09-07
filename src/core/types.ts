@@ -107,8 +107,8 @@ export interface RefreshExtras {
    */
   action?: boolean;
   /**
-   * Aborted when a read-only call is superseded by a newer transition.
-   * Core never aborts an action call.
+   * Aborted when a later action or `open` preempts this read-only call.
+   * A later read-only intent does not abort it; core never aborts an action.
    */
   signal?: AbortSignal;
 }

@@ -150,7 +150,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 **Why:** Only the app knows what is cheap/valuable. Optional **app kit** helpers may BFS with app callbacks—never automatic in Navigator.
 
-**Concurrency:** Navigator owns one monotonic transition token. A result is applied only if its token is the newest issued; comparing tip ids is not sufficient, because `prev` then `next` returns to the same id and would let a stale result through. Superseded read-only calls are aborted via `extras.signal`; action calls are never aborted, only their results discarded.
+**Concurrency:** Navigator owns one monotonic transition token. A current-token result is a full apply. A stale read-only result may still replace warm and map when it contains the live tip id; it must not take the tip. Comparing tip ids is not sufficient for a full apply, because `prev` then `next` returns to the same id. Read-only refreshes are coalesced to one in-flight call and one pending. Action calls are never aborted, only their results discarded if stale.
 
 ### 4.8 Input nodes
 
@@ -191,7 +191,7 @@ Copy is `clipboardText` on the result; core writes the clipboard. Durable storag
 | Case | Behavior |
 |------|----------|
 | Open/bootstrap or map target not in warm | Block on refresh; ignore further intents; no placeholder |
-| Warm hit | Show immediately; background refresh; allow further map hits; discard any result whose transition token is not the newest |
+| Warm hit | Show immediately; background refresh; allow further map hits. Current-token result fully applies. Stale read-only result replaces warm/map only if it still contains the live tip |
 | Refresh failure (warm miss) | Speak core recovery copy; keep dest; `enter` retries; `back` restores previous node |
 | Refresh failure (warm hit or open) | Keep last text; clear busy; do not crash shell |
 | Missing edge | Silent no-op |

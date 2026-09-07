@@ -101,7 +101,7 @@ These rows are the scanable form of the locks. The surrounding docs explain why.
 | Addressing | Apps use `AppLocation`; Router alone serializes; `location: null` keeps prior address bar |
 | App boundary | Plain data in, plain data out — must survive being sent as a message. The abort signal is the only non-data member |
 | Platform capabilities | Copy is `clipboardText` on the refresh result; core writes the clipboard during an action. Apps never touch browser APIs directly |
-| Concurrency | One monotonic transition token in Navigator decides what applies; tip-id comparison is not a staleness guard |
+| Concurrency | One monotonic transition token decides full apply; a covering stale read-only result may replace warm/map without taking the tip; read-only: one in-flight + one pending; tip-id comparison is not a full-apply guard |
 | Ownership | Navigator owns every state transition; Router is a pure URL boundary |
 | Client vs server cache | Core owns client warm only; server cache/session behind apps |
 | Identity ownership | A host-layer **identity service** owns credentials, hashing, sessions, and cookie → user resolution. The Account app owns only the screens, through `ctx.identity`, which the host grants per request to allowed apps only. See [`docs/IDENTITY.md`](docs/IDENTITY.md) §6 |
