@@ -160,9 +160,45 @@ describe("app HTTP", () => {
 });
 
 describe("incomingClientClosed", () => {
-  it("is true when the socket is destroyed or aborted", () => {
-    expect(incomingClientClosed({ destroyed: true })).toBe(true);
-    expect(incomingClientClosed({ destroyed: false, aborted: true })).toBe(true);
-    expect(incomingClientClosed({ destroyed: false, aborted: false })).toBe(false);
+  it("is true only when the request was aborted, not merely destroyed", () => {
+    expect(incomingClientClosed({ aborted: true })).toBe(true);
+    expect(incomingClientClosed({ aborted: false })).toBe(false);
+    expect(incomingClientClosed({})).toBe(false);
+  });
+
+  it("does not treat a fully read POST body as client-closed", async () => {
+    const { createServer } = await import("node:http");
+    const { readLimitedBody } = await import("../server/readBody.ts");
+    await new Promise<void>((resolve, reject) => {
+      const server = createServer((req, res) => {
+        void (async () => {
+          try {
+            await readLimitedBody(req);
+            expect(incomingClientClosed(req)).toBe(false);
+            res.end("ok");
+          } catch (err) {
+            reject(err);
+          }
+        })();
+      });
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address();
+        if (!addr || typeof addr === "string") {
+          reject(new Error("no listen address"));
+          return;
+        }
+        void fetch(`http://127.0.0.1:${addr.port}/`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ path: "/" }),
+        })
+          .then((res) => res.text())
+          .then(() => {
+            server.close();
+            resolve();
+          })
+          .catch(reject);
+      });
+    });
   });
 });
