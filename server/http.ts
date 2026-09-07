@@ -17,17 +17,16 @@ export type SessionHttpRequest = {
   readonly url: string;
   readonly headers: HeadersLike;
   readonly body?: unknown;
-  /** True when the client aborted before the host invoked the app. */
+  /** True when the Node socket is already destroyed or aborted. */
   readonly clientClosed?: boolean;
 };
 
-/**
- * True only when the HTTP client aborted.
- * Do not use `req.destroyed`: `for await` of the body marks the request
- * destroyed after a normal read, which would skip every open/refresh.
- */
-export function incomingClientClosed(req: { readonly aborted?: boolean }): boolean {
-  return req.aborted === true;
+/** Adapter helper: Navigator abort closes the fetch; skip the app if so. */
+export function incomingClientClosed(req: {
+  readonly destroyed: boolean;
+  readonly aborted?: boolean;
+}): boolean {
+  return req.destroyed || req.aborted === true;
 }
 
 export type HeadersLike = {
