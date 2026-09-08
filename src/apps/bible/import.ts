@@ -10,13 +10,13 @@ import {
   COMMENTARY_RECORDS,
   VERSION_RECORDS,
   canonBookBySort,
+  catalogCommentaryId,
+  catalogVersionId,
   getCanonBook,
   resolveBookToken,
-  verseOrd,
   type CommentaryRecord,
   type VersionRecord,
 } from "./catalog.ts";
-import { tokenize } from "./search.ts";
 import type { BibleSeed, BibleSeedSection, BibleSeedVerse } from "./types.ts";
 import type { Db } from "../../../server/sqlite.ts";
 
@@ -44,37 +44,37 @@ export function ensureCatalog(db: Db, options: EnsureCatalogOptions = {}): void 
 }
 
 function upsertDescriptors(db: Db): void {
-  const insertCanon = db.prepare(
-    "INSERT INTO canon_books (id, label, testament, sort_order, aliases) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, testament = excluded.testament, sort_order = excluded.sort_order, aliases = excluded.aliases",
+  const insertBook = db.prepare(
+    "INSERT INTO book (id, label, testament, sort_order) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, testament = excluded.testament, sort_order = excluded.sort_order",
   );
   const insertVersion = db.prepare(
-    "INSERT INTO versions (id, label, sort_order, license) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order, license = excluded.license",
+    "INSERT INTO version (id, slug, label, sort_order, license) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label, sort_order = excluded.sort_order, license = excluded.license",
   );
   const insertCommentary = db.prepare(
-    "INSERT INTO commentaries (id, label, sort_order) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order",
+    "INSERT INTO commentary (id, label, sort_order) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order",
   );
 
   db.transaction(() => {
     for (const book of CANON_BOOKS) {
-      insertCanon.run(
-        book.id,
-        book.label,
-        book.testament,
-        book.sort,
-        JSON.stringify(book.aliases),
-      );
+      insertBook.run(book.sort, book.label, book.testament, book.sort);
     }
     for (const version of VERSION_RECORDS) {
-      insertVersion.run(version.id, version.label, version.sortOrder, version.license);
+      insertVersion.run(
+        catalogVersionId(version),
+        version.id,
+        version.label,
+        version.sortOrder,
+        version.license,
+      );
     }
     for (const commentary of COMMENTARY_RECORDS) {
-      insertCommentary.run(commentary.id, commentary.label, commentary.sortOrder);
+      insertCommentary.run(catalogCommentaryId(commentary), commentary.label, commentary.sortOrder);
     }
   });
 }
 
 function seedFixture(db: Db, seed: BibleSeed): void {
-  if (db.get<{ n: number }>("SELECT COUNT(*) AS n FROM verses")?.n) {
+  if (db.get<{ n: number }>("SELECT COUNT(*) AS n FROM verse_text")?.n) {
     return;
   }
   db.transaction(() => {
@@ -89,7 +89,8 @@ function importRaw(db: Db, rawDir: string): void {
   const biblesDir = join(rawDir, "bibles");
   const commentariesDir = join(rawDir, "commentaries");
   for (const version of VERSION_RECORDS) {
-    if (hasVerses(db, version.id)) {
+    const versionId = catalogVersionId(version);
+    if (hasVerseText(db, versionId)) {
       continue;
     }
     const path = join(biblesDir, version.vplPath);
@@ -100,7 +101,8 @@ function importRaw(db: Db, rawDir: string): void {
     db.transaction(() => insertVerses(db, verses.map(toSeedVerse(version))));
   }
   for (const commentary of COMMENTARY_RECORDS) {
-    if (hasSections(db, commentary.id)) {
+    const commentaryId = catalogCommentaryId(commentary);
+    if (hasSections(db, commentaryId)) {
       continue;
     }
     const source = join(commentariesDir, commentary.sourcePath);
@@ -151,41 +153,91 @@ export function stripSuppliedWordBrackets(text: string): string {
 }
 
 function insertVerses(db: Db, verses: readonly BibleSeedVerse[]): void {
-  const ensureBook = db.prepare("INSERT OR IGNORE INTO books (version_id, book_id, name) VALUES (?, ?, ?)");
-  const insertVerse = db.prepare(
-    "INSERT OR IGNORE INTO verses (version_id, book_id, chapter, verse, verse_ord, text) VALUES (?, ?, ?, ?, ?, ?)",
+  const slots = new SlotWriter(db);
+  const insertText = db.prepare(
+    "INSERT OR IGNORE INTO verse_text (version_id, verse_id, text) VALUES (?, ?, ?)",
   );
-  const insertWord = db.prepare(
-    "INSERT OR IGNORE INTO verse_words (version_id, word, book_id, chapter, verse, verse_ord) VALUES (?, ?, ?, ?, ?, ?)",
+  const versionBySlug = new Map(
+    db.all<{ id: number; slug: string }>("SELECT id, slug FROM version").map((row) => [row.slug, row.id]),
   );
 
   for (const row of verses) {
     const canon = getCanonBook(row.bookId);
-    if (!canon) {
+    const versionId = versionBySlug.get(row.versionId);
+    if (!canon || versionId === undefined) {
       continue;
     }
-    ensureBook.run(row.versionId, row.bookId, canon.label);
-    const ord = verseOrd(canon.sort, row.chapter, row.verse);
-    insertVerse.run(row.versionId, row.bookId, row.chapter, row.verse, ord, row.text);
-    for (const word of tokenize(row.text)) {
-      insertWord.run(row.versionId, word, row.bookId, row.chapter, row.verse, ord);
+    const verseId = slots.ensure(canon.sort, row.chapter, row.verse);
+    insertText.run(versionId, verseId, row.text);
+  }
+}
+
+class SlotWriter {
+  private readonly insertChapter: ReturnType<Db["prepare"]>;
+  private readonly selectChapter: ReturnType<Db["prepare"]>;
+  private readonly insertVerse: ReturnType<Db["prepare"]>;
+  private readonly selectVerse: ReturnType<Db["prepare"]>;
+  private readonly chapters = new Map<string, number>();
+  private readonly verses = new Map<string, number>();
+
+  constructor(db: Db) {
+    this.insertChapter = db.prepare("INSERT OR IGNORE INTO chapter (book_id, number) VALUES (?, ?)");
+    this.selectChapter = db.prepare("SELECT id FROM chapter WHERE book_id = ? AND number = ?");
+    this.insertVerse = db.prepare("INSERT OR IGNORE INTO verse (chapter_id, number) VALUES (?, ?)");
+    this.selectVerse = db.prepare("SELECT id FROM verse WHERE chapter_id = ? AND number = ?");
+  }
+
+  ensure(bookId: number, chapter: number, verse: number): number {
+    const chapterId = this.chapterId(bookId, chapter);
+    const key = `${chapterId}:${verse}`;
+    const cached = this.verses.get(key);
+    if (cached !== undefined) {
+      return cached;
     }
+    this.insertVerse.run(chapterId, verse);
+    const row = this.selectVerse.get<{ id: number }>(chapterId, verse);
+    if (!row) {
+      throw new Error(`Bible import: missing verse slot ${bookId} ${chapter}:${verse}`);
+    }
+    this.verses.set(key, row.id);
+    return row.id;
+  }
+
+  private chapterId(bookId: number, chapter: number): number {
+    const key = `${bookId}:${chapter}`;
+    const cached = this.chapters.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    this.insertChapter.run(bookId, chapter);
+    const row = this.selectChapter.get<{ id: number }>(bookId, chapter);
+    if (!row) {
+      throw new Error(`Bible import: missing chapter ${bookId}:${chapter}`);
+    }
+    this.chapters.set(key, row.id);
+    return row.id;
   }
 }
 
 function insertSeedSection(db: Db, section: BibleSeedSection): void {
   const canon = getCanonBook(section.bookId);
-  if (!canon) {
+  const commentary = COMMENTARY_RECORDS.find((row) => row.id === section.commentaryId);
+  if (!canon || !commentary) {
     return;
   }
-  const start = verseOrd(canon.sort, section.startChapter, section.startVerse);
-  const end = verseOrd(canon.sort, section.endChapter, section.endVerse);
+  const slots = new SlotWriter(db);
+  if (section.startChapter === section.endChapter) {
+    for (let verse = section.startVerse; verse <= section.endVerse; verse++) {
+      slots.ensure(canon.sort, section.startChapter, verse);
+    }
+  } else {
+    slots.ensure(canon.sort, section.startChapter, section.startVerse);
+    slots.ensure(canon.sort, section.endChapter, section.endVerse);
+  }
   insertSection(db, {
-    commentaryId: section.commentaryId,
-    bookId: section.bookId,
-    chapter: section.startChapter,
-    start,
-    end,
+    commentaryId: catalogCommentaryId(commentary),
+    start: { sort: canon.sort, chapter: section.startChapter, verse: section.startVerse },
+    end: { sort: canon.sort, chapter: section.endChapter, verse: section.endVerse },
     body: section.body,
     xrefs: section.xrefs ?? [],
   });
@@ -193,11 +245,11 @@ function insertSeedSection(db: Db, section: BibleSeedSection): void {
 
 function importCommentary(db: Db, record: CommentaryRecord, source: string): void {
   if (record.format === "helloao-chapter-json") {
-    importHelloAo(db, record.id, source);
+    importHelloAo(db, catalogCommentaryId(record), source);
     return;
   }
   if (record.format === "tsk-xref-table") {
-    importTsk(db, record.id, readFileSync(source, "utf8"));
+    importTsk(db, catalogCommentaryId(record), readFileSync(source, "utf8"));
   }
 }
 
@@ -239,7 +291,8 @@ export function parseHelloAoChapter(json: unknown): { chapter: number; entries: 
   return { chapter: chapterNum, entries };
 }
 
-function importHelloAo(db: Db, commentaryId: string, dir: string): void {
+function importHelloAo(db: Db, commentaryId: number, dir: string): void {
+  const slots = new SlotWriter(db);
   for (const name of readdirSync(dir, { withFileTypes: true })) {
     if (!name.isDirectory()) {
       continue;
@@ -263,18 +316,19 @@ function importHelloAo(db: Db, commentaryId: string, dir: string): void {
       if (!chapter || chapter.entries.length === 0) {
         continue;
       }
-      const lastVerse = chapterLastVerse(db, book.id, chapter.chapter);
+      const lastVerse = chapterLastVerse(db, book.sort, chapter.chapter) || 1;
       for (let i = 0; i < chapter.entries.length; i++) {
         const entry = chapter.entries[i]!;
         const next = chapter.entries[i + 1];
         const endVerse = next ? next.number - 1 : lastVerse;
         const end = Math.max(entry.number, endVerse);
+        for (let verse = entry.number; verse <= end; verse++) {
+          slots.ensure(book.sort, chapter.chapter, verse);
+        }
         insertSection(db, {
           commentaryId,
-          bookId: book.id,
-          chapter: chapter.chapter,
-          start: verseOrd(book.sort, chapter.chapter, entry.number),
-          end: verseOrd(book.sort, chapter.chapter, end),
+          start: { sort: book.sort, chapter: chapter.chapter, verse: entry.number },
+          end: { sort: book.sort, chapter: chapter.chapter, verse: end },
           body: entry.text,
           xrefs: [],
         });
@@ -321,7 +375,8 @@ export function parseTsk(text: string): ParsedTskRow[] {
   return rows;
 }
 
-function importTsk(db: Db, commentaryId: string, text: string): void {
+function importTsk(db: Db, commentaryId: number, text: string): void {
+  const slots = new SlotWriter(db);
   const grouped = new Map<string, ParsedTskRow[]>();
   for (const row of parseTsk(text)) {
     const key = `${row.bookId}:${row.chapter}:${row.verse}`;
@@ -343,47 +398,61 @@ function importTsk(db: Db, commentaryId: string, text: string): void {
       .map((row) => (row.refs ? `${row.phrase}: ${row.refs}` : row.phrase))
       .filter(Boolean)
       .join("\n");
-    const ord = verseOrd(canon.sort, first.chapter, first.verse);
+    slots.ensure(canon.sort, first.chapter, first.verse);
     insertSection(db, {
       commentaryId,
-      bookId: first.bookId,
-      chapter: first.chapter,
-      start: ord,
-      end: ord,
+      start: { sort: canon.sort, chapter: first.chapter, verse: first.verse },
+      end: { sort: canon.sort, chapter: first.chapter, verse: first.verse },
       body,
       xrefs: group.map((row) => row.refs).filter(Boolean),
     });
   }
 }
 
+type CanonPoint = {
+  readonly sort: number;
+  readonly chapter: number;
+  readonly verse: number;
+};
+
 function insertSection(
   db: Db,
   section: {
-    commentaryId: string;
-    bookId: string;
-    chapter: number;
-    start: number;
-    end: number;
+    commentaryId: number;
+    start: CanonPoint;
+    end: CanonPoint;
     body: string;
     xrefs: readonly string[];
   },
 ): void {
   const result = db.run(
-    "INSERT INTO commentary_sections (commentary_id, start_ord, end_ord, body) VALUES (?, ?, ?, ?)",
+    "INSERT INTO commentary_section (commentary_id, body) VALUES (?, ?)",
     section.commentaryId,
-    section.start,
-    section.end,
     section.body,
   );
   const sectionId = Number(result.lastInsertRowid);
-  db.run(
-    "INSERT OR IGNORE INTO commentary_coverage (commentary_id, book_id, chapter) VALUES (?, ?, ?)",
-    section.commentaryId,
-    section.bookId,
-    section.chapter,
+  const covered = db.all<{ id: number }>(
+    `SELECT v.id
+     FROM verse v
+     JOIN chapter c ON c.id = v.chapter_id
+     JOIN book b ON b.id = c.book_id
+     WHERE (b.sort_order, c.number, v.number) >= (?, ?, ?)
+       AND (b.sort_order, c.number, v.number) <= (?, ?, ?)`,
+    section.start.sort,
+    section.start.chapter,
+    section.start.verse,
+    section.end.sort,
+    section.end.chapter,
+    section.end.verse,
   );
+  const insertCover = db.prepare(
+    "INSERT OR IGNORE INTO commentary_section_verse (section_id, verse_id) VALUES (?, ?)",
+  );
+  for (const row of covered) {
+    insertCover.run(sectionId, row.id);
+  }
   const insertXref = db.prepare(
-    "INSERT INTO commentary_xrefs (section_id, sort_order, refs) VALUES (?, ?, ?)",
+    "INSERT INTO commentary_xref (section_id, sort_order, refs) VALUES (?, ?, ?)",
   );
   for (const [index, refs] of section.xrefs.entries()) {
     insertXref.run(sectionId, index, refs);
@@ -409,21 +478,26 @@ function flattenText(value: unknown): string {
   return "";
 }
 
-function chapterLastVerse(db: Db, bookId: string, chapter: number): number {
+function chapterLastVerse(db: Db, bookId: number, chapter: number): number {
   const row = db.get<{ n: number }>(
-    "SELECT COALESCE(MAX(verse), 0) AS n FROM verses WHERE book_id = ? AND chapter = ?",
+    `SELECT v.number AS n
+     FROM verse v
+     JOIN chapter c ON c.id = v.chapter_id
+     WHERE c.book_id = ? AND c.number = ?
+     ORDER BY v.number DESC
+     LIMIT 1`,
     bookId,
     chapter,
   );
-  return row?.n && row.n > 0 ? row.n : 1;
+  return row?.n ?? 0;
 }
 
-function hasVerses(db: Db, versionId: string): boolean {
-  return Boolean(db.get("SELECT 1 FROM verses WHERE version_id = ? LIMIT 1", versionId));
+function hasVerseText(db: Db, versionId: number): boolean {
+  return Boolean(db.get("SELECT 1 FROM verse_text WHERE version_id = ? LIMIT 1", versionId));
 }
 
-function hasSections(db: Db, commentaryId: string): boolean {
+function hasSections(db: Db, commentaryId: number): boolean {
   return Boolean(
-    db.get("SELECT 1 FROM commentary_sections WHERE commentary_id = ? LIMIT 1", commentaryId),
+    db.get("SELECT 1 FROM commentary_section WHERE commentary_id = ? LIMIT 1", commentaryId),
   );
 }

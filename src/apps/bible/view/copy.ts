@@ -3,24 +3,27 @@ import type { NodePayload, RefreshResult } from "../../../core/types.ts";
 import { formatRef } from "../canon.ts";
 import { copyStatusId } from "../ids.ts";
 import type { CanonRef } from "../types.ts";
-import { addNode, bookLabel, type ViewSession } from "./helpers.ts";
+import { addNode, bookLabel, slotVerseId, type ViewSession } from "./helpers.ts";
 import { addOptionPayloads } from "./verse.ts";
+
 export function resolveCopyStatus(
   session: ViewSession,
-  version: string,
+  versionId: number,
   ref: CanonRef,
 ): RefreshResult {
-  const statusNodeId = copyStatusId(version, ref);
-  const verse = session.deps.store.getVerse({ ...ref, version });
-  const versionLabel = session.deps.store.getVersion(version)?.label ?? version;
-  const line = verse
-    ? `${versionLabel}. ${formatRef(bookLabel(session.deps.store, version, ref.bookId), ref)}. ${verse.text}`
-    : null;
+  const statusNodeId = copyStatusId(versionId, ref);
+  const verseId = slotVerseId(session.deps.store, ref);
+  const text = verseId === null ? null : session.deps.store.getVerseText(versionId, verseId);
+  const versionLabel = session.deps.store.getVersion(versionId)?.label ?? String(versionId);
+  const line =
+    text !== null
+      ? `${versionLabel}. ${formatRef(bookLabel(session.deps.store, ref.bookId), ref)}. ${text}`
+      : null;
   const label = line ? "Copied" : "Copy failed: verse not found.";
 
   const payloads = new Map<string, NodePayload>();
   addNode(payloads, { id: statusNodeId, label });
-  addOptionPayloads(session, payloads, version, ref);
+  addOptionPayloads(session, payloads, versionId, ref);
 
   return {
     navigationMap: {
@@ -33,8 +36,8 @@ export function resolveCopyStatus(
   };
 }
 
-export function idleCopyStatus(version: string, ref: CanonRef): RefreshResult {
-  const statusNodeId = copyStatusId(version, ref);
+export function idleCopyStatus(versionId: number, ref: CanonRef): RefreshResult {
+  const statusNodeId = copyStatusId(versionId, ref);
   return {
     navigationMap: {
       [statusNodeId]: { back: edgePop() },

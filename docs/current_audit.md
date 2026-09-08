@@ -210,11 +210,11 @@ CSRF origin no longer falls back to `Host` / `X-Forwarded-Proto`. Unset `NOWISEE
 
 **Bible version: path, then user pref, then first row by sort order.** If we drop the first-row default, a user with no pref and a version-less URL would get the empty-data node even when versions exist.
 
-**Bible book label: that version’s name, then canon label, then the id.** If we only use the store, a book missing from a version would speak a raw id (or blank).
+**Bible book label: `book.label`.** Path aliases still resolve through `catalog.ts`.
 
-**Bible `displayedVerse`.** Clamp into the chapter; if clamp fails, keep the original numbers. If we only clamp, a missing book/chapter would have no verse payload. If we never clamp, a too-large verse number would miss the row.
+**Bible missing translation.** If the canon slot exists but `verse_text` does not, stay on that verse and speak that it is not in this version. Enter is the ordinary verse menu. Unknown canon book/chapter/verse numbers still walk back.
 
-**Bible path parse.** Bad version/book/chapter/verse walks back to the first root tip or empty-data, not a throw. If we 404 inside the app, a truncated share link would fail open.
+**Bible path parse.** Bad version slug / book / chapter / verse walks back to the first root tip or empty-data, not a throw. If we 404 inside the app, a truncated share link would fail open.
 
 **Bible empty catalog → `bible:empty`.** If we remove it, an unseeded DB would crash root open.
 

@@ -16,7 +16,9 @@ import { resolveCopyStatus } from "./copy.ts";
 import {
   activeVersion,
   addNode,
-  touchRecency,
+  slotVerseId,
+  touchCommentaryRecency,
+  touchVersionRecency,
   viewSession,
   type BibleViewDeps,
   type ViewSession,
@@ -58,14 +60,18 @@ export function refreshBibleView(
 }
 
 function writePrefFromPath(session: ViewSession, path: string): void {
-  const versionId = path.replace(/^\/+/, "").split("/").filter(Boolean)[0];
-  if (!versionId || !session.deps.store.getVersion(versionId)) {
+  const slug = path.replace(/^\/+/, "").split("/").filter(Boolean)[0];
+  if (!slug) {
+    return;
+  }
+  const version = session.deps.store.getVersionBySlug(slug);
+  if (!version) {
     return;
   }
   if (session.userId) {
-    session.deps.store.setActiveVersionId(session.userId, versionId);
+    session.deps.store.setActiveVersionId(session.userId, version.id);
   }
-  touchRecency(session, "version", versionId);
+  touchVersionRecency(session, version.id);
 }
 
 function applyAction(session: ViewSession, tipId: string): RefreshResult | null {
@@ -83,7 +89,7 @@ function applyAction(session: ViewSession, tipId: string): RefreshResult | null 
     return applySearch(session);
   }
   if (parsed.kind === "commentary-chunk") {
-    touchRecency(session, "commentary", parsed.commentaryId);
+    touchCommentaryRecency(session, parsed.commentaryId);
     return null;
   }
   return null;
@@ -94,7 +100,16 @@ function applyBookmarkToggle(session: ViewSession, ref: CanonRef): RefreshResult
   if (!session.userId) {
     return signInResult(session, { appId: session.deps.appId, path: "/bookmarks" });
   }
-  const result = session.deps.store.toggleBookmark(session.userId, ref);
+  const verseId = slotVerseId(session.deps.store, ref);
+  if (verseId === null) {
+    return {
+      navigationMap: { [statusId]: { back: edgePop() } },
+      warm: [{ id: statusId, label: "Bookmark failed: verse not found." }],
+      node: { id: statusId, label: "Bookmark failed: verse not found." },
+      location: null,
+    };
+  }
+  const result = session.deps.store.toggleBookmark(session.userId, verseId);
   const label = result === "added" ? "Bookmarked" : "Bookmark removed";
   return {
     navigationMap: { [statusId]: { back: edgePop() } },
@@ -111,7 +126,7 @@ function applySearch(session: ViewSession): RefreshResult {
     return emptyBibleView(session);
   }
   if (!session.sessionId) {
-    const id = searchEmptyId("none");
+    const id = searchEmptyId(0);
     const label = emptySearchLabel(query);
     return {
       navigationMap: { [id]: { back: edgePop() } },
@@ -120,7 +135,7 @@ function applySearch(session: ViewSession): RefreshResult {
       location: { appId: session.deps.appId, path: "/search" },
     };
   }
-  const hits = searchHits(session, version, query);
+  const hits = searchHits(session, version.id, query);
   const queryId = session.deps.store.createSearchQuery(session.sessionId, query, hits);
   if (hits.length === 0) {
     const id = searchEmptyId(queryId);
@@ -132,7 +147,11 @@ function applySearch(session: ViewSession): RefreshResult {
       location: { appId: session.deps.appId, path: "/search" },
     };
   }
-  return buildBibleView(session, verseNodeId({ type: "search", queryId }, hits[0]!));
+  const first = hits[0]!;
+  return buildBibleView(
+    session,
+    verseNodeId({ type: "search", queryId }, first),
+  );
 }
 
 export function buildBibleView(session: ViewSession, tipId: string): RefreshResult {

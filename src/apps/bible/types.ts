@@ -1,62 +1,79 @@
 import type { RecencyWorkKind, VersionLicense, VersionRecord } from "./catalog.ts";
 
-export type RecencyOwner = {
-  readonly kind: "user" | "session";
-  readonly id: string;
-};
-
 export type BibleVersion = {
-  readonly id: string;
+  readonly id: number;
+  readonly slug: string;
   readonly label: string;
   readonly license: VersionLicense;
 };
 
 export type BibleBook = {
-  readonly versionId: string;
-  readonly bookId: string;
-  readonly name: string;
+  readonly id: number;
+  readonly label: string;
   readonly testament: string;
   readonly sort: number;
-  readonly chapterCount: number;
+};
+
+export type BibleChapter = {
+  readonly id: number;
+  readonly bookId: number;
+  readonly number: number;
+};
+
+export type BibleVerseSlot = {
+  readonly id: number;
+  readonly chapterId: number;
+  readonly number: number;
+};
+
+export type VerseReading = {
+  readonly verseId: number;
+  readonly bookId: number;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly text: string | null;
 };
 
 export type BibleRef = {
-  readonly version: string;
-  readonly bookId: string;
+  readonly versionId: number;
+  readonly bookId: number;
   readonly chapter: number;
   readonly verse: number;
-};
-
-export type BibleVerse = BibleRef & {
-  readonly text: string;
 };
 
 export type CanonRef = {
-  readonly bookId: string;
+  readonly bookId: number;
   readonly chapter: number;
   readonly verse: number;
 };
 
-export type BookmarkRecord = CanonRef & {
+export type BookmarkRecord = {
+  readonly verseId: number;
+  readonly bookId: number;
+  readonly chapter: number;
+  readonly verse: number;
   readonly createdAt: number;
 };
 
 export type CommentarySection = {
   readonly id: number;
-  readonly commentaryId: string;
-  readonly startOrd: number;
-  readonly endOrd: number;
+  readonly commentaryId: number;
   readonly body: string;
   readonly xrefs: readonly string[];
 };
 
 export type CommentaryWork = {
-  readonly id: string;
+  readonly id: number;
   readonly label: string;
   readonly sortOrder: number;
 };
 
-export type SearchHit = CanonRef;
+export type SearchHit = {
+  readonly verseId: number;
+  readonly bookId: number;
+  readonly chapter: number;
+  readonly verse: number;
+};
 
 export type BibleSeedVerse = {
   readonly versionId: string;
@@ -84,28 +101,38 @@ export type BibleSeed = {
 };
 
 export interface BibleStore {
-  defaultVersionId(): string | null;
-  getVersion(id: string): BibleVersion | undefined;
-  listVersions(owner?: RecencyOwner | null): readonly BibleVersion[];
-  getActiveVersionId(userId: string): string | null;
-  setActiveVersionId(userId: string, versionId: string): void;
-  touchRecency(owner: RecencyOwner, workKind: RecencyWorkKind, workId: string): void;
-  listBooks(versionId: string, testament: string): readonly BibleBook[];
-  getBook(versionId: string, bookIdOrAlias: string): BibleBook | undefined;
-  lastVerse(versionId: string, bookId: string, chapter: number): number;
-  getVerse(ref: BibleRef): BibleVerse | undefined;
-  listVerses(versionId: string, bookId: string, chapter: number): readonly BibleVerse[];
-  isBookmarked(userId: string, ref: CanonRef): boolean;
+  defaultVersionId(): number | null;
+  getVersion(id: number): BibleVersion | undefined;
+  getVersionBySlug(slug: string): BibleVersion | undefined;
+  listVersions(userId?: string | null): readonly BibleVersion[];
+  getActiveVersionId(userId: string): number | null;
+  setActiveVersionId(userId: string, versionId: number): void;
+  touchVersionRecency(userId: string, versionId: number): void;
+  touchCommentaryRecency(userId: string, commentaryId: number): void;
+  listBooks(testament: string): readonly BibleBook[];
+  getBook(id: number): BibleBook | undefined;
+  getBookBySort(sort: number): BibleBook | undefined;
+  getChapter(bookId: number, number: number): BibleChapter | undefined;
+  listChapters(bookId: number): readonly BibleChapter[];
+  getVerseSlot(bookId: number, chapter: number, verse: number): BibleVerseSlot | undefined;
+  getVerseText(versionId: number, verseId: number): string | null;
+  listVerseReadings(versionId: number, chapterId: number): readonly VerseReading[];
+  isBookmarked(userId: string, verseId: number): boolean;
   listBookmarks(userId: string): readonly BookmarkRecord[];
-  toggleBookmark(userId: string, ref: CanonRef): "added" | "removed";
-  listCommentaries(owner?: RecencyOwner | null): readonly CommentaryWork[];
-  getCommentary(id: string): CommentaryWork | undefined;
-  findSection(commentaryId: string, ref: CanonRef): CommentarySection | undefined;
-  createSearchQuery(sessionId: string, query: string, hits: readonly SearchHit[]): string;
-  getSearchQuery(queryId: string, sessionId: string): string | null;
-  listSearchHits(queryId: string, sessionId: string): readonly SearchHit[];
-  searchVerses(versionId: string, tokens: readonly string[], cap: number): readonly SearchHit[];
+  toggleBookmark(userId: string, verseId: number): "added" | "removed";
+  listCommentaries(userId?: string | null): readonly CommentaryWork[];
+  getCommentary(id: number): CommentaryWork | undefined;
+  findSection(commentaryId: number, verseId: number): CommentarySection | undefined;
+  createSearchQuery(sessionId: string, query: string, hits: readonly SearchHit[]): number;
+  getSearchQuery(queryId: number, sessionId: string): string | null;
+  listSearchHits(queryId: number, sessionId: string): readonly SearchHit[];
+  listSearchHitReadings(
+    queryId: number,
+    sessionId: string,
+    versionId: number,
+  ): readonly VerseReading[];
+  searchVerses(versionId: number, tokens: readonly string[], cap: number): readonly SearchHit[];
   close(): void;
 }
 
-export type { VersionRecord };
+export type { RecencyWorkKind, VersionRecord };

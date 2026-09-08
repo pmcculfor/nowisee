@@ -57,6 +57,5 @@ export type {
   BibleRef,
   BibleSeed,
   BibleStore,
-  BibleVerse,
   BibleVersion,
 } from "./types.ts";

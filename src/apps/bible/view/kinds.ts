@@ -31,7 +31,8 @@ import { idleCopyStatus } from "./copy.ts";
 import {
   activeVersion,
   addNode,
-  displayedVerse,
+  bookLabel,
+  slotVerseId,
   verseLocation,
   type ViewSession,
 } from "./helpers.ts";
@@ -45,19 +46,20 @@ import {
   optionNodeLabel,
   versePayload,
 } from "./verse.ts";
+import type { BibleRef } from "../types.ts";
 
 type KindRow = {
-  version(session: ViewSession, parsed: ParsedNode): string | null;
-  location(session: ViewSession, parsed: ParsedNode, version: string): AppLocation | null;
-  payload(session: ViewSession, parsed: ParsedNode, version: string): NodePayload;
+  version(session: ViewSession, parsed: ParsedNode): number | null;
+  location(session: ViewSession, parsed: ParsedNode, version: number): AppLocation | null;
+  payload(session: ViewSession, parsed: ParsedNode, version: number): NodePayload;
   addLevel?(
     session: ViewSession,
     payloads: Map<string, NodePayload>,
     fragments: MapFragment[],
     parsed: ParsedNode,
-    version: string,
+    version: number,
   ): void;
-  directView?(session: ViewSession, parsed: ParsedNode, version: string): RefreshResult;
+  directView?(session: ViewSession, parsed: ParsedNode, version: number): RefreshResult;
 };
 
 function asKind<K extends ParsedNode["kind"]>(
@@ -67,11 +69,11 @@ function asKind<K extends ParsedNode["kind"]>(
   return parsed as Extract<ParsedNode, { kind: K }>;
 }
 
-function active(session: ViewSession): string | null {
-  return activeVersion(session);
+function active(session: ViewSession): number | null {
+  return activeVersion(session)?.id ?? null;
 }
 
-function parsedVersion(_session: ViewSession, parsed: ParsedNode): string | null {
+function parsedVersion(_session: ViewSession, parsed: ParsedNode): number | null {
   return "version" in parsed ? parsed.version : null;
 }
 
@@ -79,8 +81,12 @@ function loc(session: ViewSession, path: string): AppLocation {
   return { appId: session.deps.appId, path };
 }
 
-function versionRoot(session: ViewSession, _parsed: ParsedNode, version: string): AppLocation {
-  return loc(session, `/${version}`);
+function versionSlug(session: ViewSession, versionId: number): string {
+  return session.deps.store.getVersion(versionId)?.slug ?? String(versionId);
+}
+
+function versionRoot(session: ViewSession, _parsed: ParsedNode, version: number): AppLocation {
+  return loc(session, `/${versionSlug(session, version)}`);
 }
 
 function bookmarksLoc(session: ViewSession): AppLocation {
@@ -91,11 +97,20 @@ function searchLoc(session: ViewSession): AppLocation {
   return loc(session, "/search");
 }
 
-function verseLocFromParsed(session: ViewSession, parsed: ParsedNode): AppLocation {
-  if (!("version" in parsed) || !("ref" in parsed)) {
+function verseLocFromParsed(session: ViewSession, parsed: ParsedNode, version: number): AppLocation {
+  if (!("ref" in parsed)) {
     throw new Error("Bible view: expected a verse-tree node");
   }
-  return verseLocation(session.deps.appId, parsed.version, parsed.ref);
+  return verseLocation(
+    session.deps.appId,
+    versionSlug(session, version),
+    bookLabel(session.deps.store, parsed.ref.bookId),
+    parsed.ref,
+  );
+}
+
+function withVersion(ref: BibleRef, versionId: number): BibleRef {
+  return ref.versionId ? ref : { ...ref, versionId };
 }
 
 function addRootPlain(
@@ -103,7 +118,7 @@ function addRootPlain(
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
   _parsed: ParsedNode,
-  version: string,
+  version: number,
 ): void {
   addRootLevel(session, payloads, fragments, version);
 }
@@ -126,7 +141,11 @@ function addSearchEmpty(
 function bookmarkIdle(session: ViewSession, parsed: ParsedNode): RefreshResult {
   const ref = asKind(parsed, "bookmark-status").ref;
   const statusId = bookmarkStatusId(ref);
-  const bookmarked = session.userId ? session.deps.store.isBookmarked(session.userId, ref) : false;
+  const verseId = slotVerseId(session.deps.store, ref);
+  const bookmarked =
+    Boolean(session.userId) &&
+    verseId !== null &&
+    session.deps.store.isBookmarked(session.userId!, verseId);
   const label = bookmarked ? "Bookmarked" : "Bookmark removed";
   return {
     navigationMap: { [statusId]: { back: edgePop() } },
@@ -211,7 +230,7 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     location: versionRoot,
     payload: (s, parsed) => {
       const id = asKind(parsed, "version-pick").versionId;
-      return { id: versionPickId(id), label: s.deps.store.getVersion(id)?.label ?? id };
+      return { id: versionPickId(id), label: s.deps.store.getVersion(id)?.label ?? String(id) };
     },
     addLevel: (s, pay, frag) => {
       addRootVersionList(s, pay, frag);
@@ -227,15 +246,16 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
   },
   book: {
     version: parsedVersion,
-    location: (s, parsed) => {
+    location: (s, parsed, version) => {
       const n = asKind(parsed, "book");
-      return loc(s, `/${n.version}/${bookPathSegment(n.bookId)}`);
+      const book = s.deps.store.getBook(n.bookId);
+      return loc(s, `/${versionSlug(s, version)}/${bookPathSegment(book?.label ?? String(n.bookId))}`);
     },
     payload: (s, parsed) => {
       const n = asKind(parsed, "book");
       return {
         id: bookNodeId(n.version, n.bookId),
-        label: s.deps.store.getBook(n.version, n.bookId)?.name ?? n.bookId,
+        label: s.deps.store.getBook(n.bookId)?.label ?? String(n.bookId),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
@@ -245,9 +265,13 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
   },
   chapter: {
     version: parsedVersion,
-    location: (s, parsed) => {
+    location: (s, parsed, version) => {
       const n = asKind(parsed, "chapter");
-      return loc(s, `/${n.version}/${bookPathSegment(n.bookId)}/${n.chapter}`);
+      const book = s.deps.store.getBook(n.bookId);
+      return loc(
+        s,
+        `/${versionSlug(s, version)}/${bookPathSegment(book?.label ?? String(n.bookId))}/${n.chapter}`,
+      );
     },
     payload: (_s, parsed) => {
       const n = asKind(parsed, "chapter");
@@ -262,19 +286,24 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
   },
   verse: {
-    version: (s, parsed) => asKind(parsed, "verse").ref.version || active(s),
+    version: (s, parsed) => asKind(parsed, "verse").ref.versionId || active(s),
     location: (s, parsed, version) => {
       const n = asKind(parsed, "verse");
-      const ref = displayedVerse(s.deps.store, version, n.ref);
-      return verseLocation(s.deps.appId, ref.version, ref);
+      const ref = withVersion(n.ref, version);
+      return verseLocation(
+        s.deps.appId,
+        versionSlug(s, version),
+        bookLabel(s.deps.store, ref.bookId),
+        ref,
+      );
     },
     payload: (s, parsed, version) => {
       const n = asKind(parsed, "verse");
-      return versePayload(s, n.seq, displayedVerse(s.deps.store, version, n.ref));
+      return versePayload(s, n.seq, withVersion(n.ref, version));
     },
     addLevel: (s, pay, frag, parsed, version) => {
       const n = asKind(parsed, "verse");
-      addVerseLevel(s, pay, frag, n.seq, displayedVerse(s.deps.store, version, n.ref));
+      addVerseLevel(s, pay, frag, n.seq, withVersion(n.ref, version));
     },
   },
   option: {
@@ -320,7 +349,7 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
       const n = asKind(parsed, "verse-version-pick");
       return {
         id: verseVersionPickId(n.version, n.ref, n.targetVersionId),
-        label: s.deps.store.getVersion(n.targetVersionId)?.label ?? n.targetVersionId,
+        label: s.deps.store.getVersion(n.targetVersionId)?.label ?? String(n.targetVersionId),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
@@ -347,7 +376,7 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
       const n = asKind(parsed, "commentary-work");
       return {
         id: commentaryWorkId(n.version, n.ref, n.commentaryId),
-        label: s.deps.store.getCommentary(n.commentaryId)?.label ?? n.commentaryId,
+        label: s.deps.store.getCommentary(n.commentaryId)?.label ?? String(n.commentaryId),
       };
     },
     addLevel: (s, pay, frag, parsed) => {

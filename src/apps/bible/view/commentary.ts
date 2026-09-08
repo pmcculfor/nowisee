@@ -8,36 +8,38 @@ import {
 import type { NodePayload } from "../../../core/types.ts";
 import { commentaryChunkId, commentaryWorkId } from "../ids.ts";
 import type { CanonRef, CommentarySection } from "../types.ts";
-import { addNode, listedCommentaries, type ViewSession } from "./helpers.ts";
+import { addNode, listedCommentaries, slotVerseId, type ViewSession } from "./helpers.ts";
 
 export function addCommentaryWorks(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  version: string,
+  versionId: number,
   ref: CanonRef,
 ): void {
   const works = listedCommentaries(session);
-  const ids = works.map((work) => commentaryWorkId(version, ref, work.id));
+  const ids = works.map((work) => commentaryWorkId(versionId, ref, work.id));
   fragments.push(siblingListEdges(ids, { wrap: true }));
+  const verseId = slotVerseId(session.deps.store, ref);
 
   for (const work of works) {
     addNode(payloads, {
-      id: commentaryWorkId(version, ref, work.id),
+      id: commentaryWorkId(versionId, ref, work.id),
       label: work.label,
     });
-    const section = session.deps.store.findSection(work.id, ref);
+    const section =
+      verseId === null ? undefined : session.deps.store.findSection(work.id, verseId);
     const chunks = splitText(commentaryLabel(section, work.label));
-    const chunkIds = chunks.map((_, index) => commentaryChunkId(version, ref, work.id, index));
+    const chunkIds = chunks.map((_, index) => commentaryChunkId(versionId, ref, work.id, index));
     fragments.push({
-      [commentaryWorkId(version, ref, work.id)]: {
+      [commentaryWorkId(versionId, ref, work.id)]: {
         ...(chunkIds[0] ? { enter: edgeAction(chunkIds[0]) } : {}),
         back: edgePop(),
       },
     });
     fragments.push(siblingListEdges(chunkIds, { wrap: false }));
     chunks.forEach((label, index) => {
-      const id = commentaryChunkId(version, ref, work.id, index);
+      const id = commentaryChunkId(versionId, ref, work.id, index);
       addNode(payloads, { id, label });
       fragments.push({
         [id]: { back: edgePop() },
@@ -56,11 +58,14 @@ export function commentaryLabel(section: CommentarySection | undefined, workLabe
 export function commentaryChunkLabel(
   session: ViewSession,
   ref: CanonRef,
-  commentaryId: string,
+  commentaryId: number,
   index: number,
 ): string {
   const work = session.deps.store.getCommentary(commentaryId);
-  const section = session.deps.store.findSection(commentaryId, ref);
-  const chunks = splitText(commentaryLabel(section, work?.label ?? commentaryId));
-  return chunks[index] ?? chunks[0] ?? commentaryLabel(section, work?.label ?? commentaryId);
+  const verseId = slotVerseId(session.deps.store, ref);
+  const section =
+    verseId === null ? undefined : session.deps.store.findSection(commentaryId, verseId);
+  const fallback = work?.label ?? String(commentaryId);
+  const chunks = splitText(commentaryLabel(section, fallback));
+  return chunks[index] ?? chunks[0] ?? commentaryLabel(section, fallback);
 }

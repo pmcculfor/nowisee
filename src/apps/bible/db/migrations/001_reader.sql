@@ -1,126 +1,112 @@
 -- Bible corpus and reader tables.
 -- One file: the product is in development; existing rows need not be preserved.
 
-CREATE TABLE canon_books (
-  id TEXT PRIMARY KEY,
-  label TEXT NOT NULL,
+CREATE TABLE book (
+  id INTEGER PRIMARY KEY,
+  label TEXT NOT NULL UNIQUE,
   testament TEXT NOT NULL,
-  sort_order INTEGER NOT NULL,
-  aliases TEXT NOT NULL
+  sort_order INTEGER NOT NULL UNIQUE
 );
 
-CREATE TABLE versions (
-  id TEXT PRIMARY KEY,
+CREATE TABLE chapter (
+  id INTEGER PRIMARY KEY,
+  book_id INTEGER NOT NULL REFERENCES book (id),
+  number INTEGER NOT NULL,
+  UNIQUE (book_id, number)
+);
+
+CREATE TABLE verse (
+  id INTEGER PRIMARY KEY,
+  chapter_id INTEGER NOT NULL REFERENCES chapter (id),
+  number INTEGER NOT NULL,
+  UNIQUE (chapter_id, number)
+);
+
+CREATE TABLE version (
+  id INTEGER PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL,
-  sort_order INTEGER NOT NULL,
+  sort_order INTEGER NOT NULL UNIQUE,
   license TEXT NOT NULL
 );
 
-CREATE TABLE books (
-  version_id TEXT NOT NULL REFERENCES versions (id),
-  book_id TEXT NOT NULL REFERENCES canon_books (id),
-  name TEXT NOT NULL,
-  PRIMARY KEY (version_id, book_id)
-);
-
-CREATE TABLE verses (
-  version_id TEXT NOT NULL,
-  book_id TEXT NOT NULL,
-  chapter INTEGER NOT NULL,
-  verse INTEGER NOT NULL,
-  verse_ord INTEGER NOT NULL,
+CREATE TABLE verse_text (
+  version_id INTEGER NOT NULL REFERENCES version (id),
+  verse_id INTEGER NOT NULL REFERENCES verse (id),
   text TEXT NOT NULL,
-  PRIMARY KEY (version_id, book_id, chapter, verse),
-  FOREIGN KEY (version_id, book_id) REFERENCES books (version_id, book_id)
+  PRIMARY KEY (version_id, verse_id)
 );
 
-CREATE INDEX verses_ord ON verses (version_id, verse_ord);
-CREATE INDEX verses_chapter ON verses (version_id, book_id, chapter, verse);
-
-CREATE TABLE verse_words (
-  version_id TEXT NOT NULL,
-  word TEXT NOT NULL,
-  book_id TEXT NOT NULL,
-  chapter INTEGER NOT NULL,
-  verse INTEGER NOT NULL,
-  verse_ord INTEGER NOT NULL,
-  PRIMARY KEY (version_id, word, book_id, chapter, verse)
-);
-
-CREATE INDEX verse_words_lookup ON verse_words (version_id, word);
-
-CREATE TABLE reader_prefs (
+CREATE TABLE reader_pref (
   user_id TEXT PRIMARY KEY,
-  active_version_id TEXT NOT NULL REFERENCES versions (id)
+  active_version_id INTEGER NOT NULL REFERENCES version (id)
 );
 
-CREATE TABLE reader_recency (
-  owner_kind TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  work_kind TEXT NOT NULL,
-  work_id TEXT NOT NULL,
-  used_at INTEGER NOT NULL,
-  PRIMARY KEY (owner_kind, owner_id, work_kind, work_id)
-);
-
-CREATE INDEX reader_recency_list ON reader_recency (owner_kind, owner_id, work_kind, used_at DESC);
-
-CREATE TABLE bookmarks (
+CREATE TABLE version_recency (
   user_id TEXT NOT NULL,
-  book_id TEXT NOT NULL,
-  chapter INTEGER NOT NULL,
-  verse INTEGER NOT NULL,
+  version_id INTEGER NOT NULL REFERENCES version (id),
+  used_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, version_id)
+);
+
+CREATE INDEX version_recency_list ON version_recency (user_id, used_at DESC);
+
+CREATE TABLE commentary (
+  id INTEGER PRIMARY KEY,
+  label TEXT NOT NULL UNIQUE,
+  sort_order INTEGER NOT NULL UNIQUE
+);
+
+CREATE TABLE commentary_recency (
+  user_id TEXT NOT NULL,
+  commentary_id INTEGER NOT NULL REFERENCES commentary (id),
+  used_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, commentary_id)
+);
+
+CREATE INDEX commentary_recency_list ON commentary_recency (user_id, used_at DESC);
+
+CREATE TABLE bookmark (
+  user_id TEXT NOT NULL,
+  verse_id INTEGER NOT NULL REFERENCES verse (id),
   created_at INTEGER NOT NULL,
-  PRIMARY KEY (user_id, book_id, chapter, verse)
+  PRIMARY KEY (user_id, verse_id)
 );
 
-CREATE INDEX bookmarks_user ON bookmarks (user_id, created_at);
+CREATE INDEX bookmark_user ON bookmark (user_id, created_at);
 
-CREATE TABLE commentaries (
-  id TEXT PRIMARY KEY,
-  label TEXT NOT NULL,
-  sort_order INTEGER NOT NULL
-);
-
-CREATE TABLE commentary_sections (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  commentary_id TEXT NOT NULL REFERENCES commentaries (id),
-  start_ord INTEGER NOT NULL,
-  end_ord INTEGER NOT NULL,
+CREATE TABLE commentary_section (
+  id INTEGER PRIMARY KEY,
+  commentary_id INTEGER NOT NULL REFERENCES commentary (id),
   body TEXT NOT NULL
 );
 
-CREATE INDEX commentary_sections_range ON commentary_sections (commentary_id, start_ord, end_ord);
-
-CREATE TABLE commentary_coverage (
-  commentary_id TEXT NOT NULL REFERENCES commentaries (id),
-  book_id TEXT NOT NULL,
-  chapter INTEGER NOT NULL,
-  PRIMARY KEY (commentary_id, book_id, chapter)
+CREATE TABLE commentary_section_verse (
+  section_id INTEGER NOT NULL REFERENCES commentary_section (id) ON DELETE CASCADE,
+  verse_id INTEGER NOT NULL REFERENCES verse (id),
+  PRIMARY KEY (section_id, verse_id)
 );
 
-CREATE TABLE commentary_xrefs (
-  section_id INTEGER NOT NULL REFERENCES commentary_sections (id) ON DELETE CASCADE,
+CREATE INDEX commentary_section_verse_verse ON commentary_section_verse (verse_id);
+
+CREATE TABLE commentary_xref (
+  section_id INTEGER NOT NULL REFERENCES commentary_section (id) ON DELETE CASCADE,
   sort_order INTEGER NOT NULL,
   refs TEXT NOT NULL
 );
 
-CREATE TABLE search_queries (
-  id TEXT PRIMARY KEY,
+CREATE TABLE search_query (
+  id INTEGER PRIMARY KEY,
   session_id TEXT NOT NULL,
   query TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
 
-CREATE INDEX search_queries_session ON search_queries (session_id, created_at);
+CREATE INDEX search_query_session ON search_query (session_id, created_at);
 
-CREATE TABLE search_hits (
-  query_id TEXT NOT NULL REFERENCES search_queries (id) ON DELETE CASCADE,
+CREATE TABLE search_hit (
+  query_id INTEGER NOT NULL REFERENCES search_query (id) ON DELETE CASCADE,
   position INTEGER NOT NULL,
-  book_id TEXT NOT NULL,
-  chapter INTEGER NOT NULL,
-  verse INTEGER NOT NULL,
+  verse_id INTEGER NOT NULL REFERENCES verse (id),
   PRIMARY KEY (query_id, position)
 );
-
-CREATE INDEX search_hits_ref ON search_hits (query_id, book_id, chapter, verse);

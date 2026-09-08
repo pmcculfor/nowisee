@@ -1,17 +1,13 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import {
-  getCanonBook,
-  resolveBookToken,
-  verseOrd,
-} from "./catalog.ts";
+import { tokenize } from "./search.ts";
 import { createBibleApp, type BibleApp } from "./index.ts";
 import { ensureCatalog, type EnsureCatalogOptions } from "./import.ts";
 import { MEMORY_SEED } from "./memorySeed.ts";
-import { tokenize } from "./search.ts";
 import type {
   BibleBook,
+  BibleChapter,
   BibleSeed,
   BibleStore,
   BibleVersion,
@@ -19,9 +15,14 @@ import type {
   CommentarySection,
   CommentaryWork,
   SearchHit,
+  VerseReading,
 } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
+
+const VERSION_COLUMNS = "id, slug, label, license";
+const BOOK_COLUMNS = "id, label, testament, sort_order AS sort";
+const HIT_COLUMNS = `v.id AS verseId, b.id AS bookId, c.number AS chapter, v.number AS verse`;
 
 export const DEFAULT_BIBLE_DB_PATH = "data/apps/bible.db";
 
@@ -35,270 +36,236 @@ export function openBibleDatabase(path: string = DEFAULT_BIBLE_DB_PATH): Db {
 export function createSqliteBibleStore(db: Db): BibleStore {
   return {
     defaultVersionId() {
-      const row = db.get<{ id: string }>(
-        "SELECT id FROM versions ORDER BY sort_order ASC, id ASC LIMIT 1",
+      const row = db.get<{ id: number }>(
+        "SELECT id FROM version ORDER BY sort_order ASC, id ASC LIMIT 1",
       );
       return row?.id ?? null;
     },
     getVersion(id) {
-      return db.get<BibleVersion>("SELECT id, label, license FROM versions WHERE id = ?", id);
+      return db.get<BibleVersion>(
+        `SELECT ${VERSION_COLUMNS} FROM version WHERE id = ?`,
+        id,
+      );
     },
-    listVersions(owner) {
-      if (!owner) {
+    getVersionBySlug(slug) {
+      return db.get<BibleVersion>(
+        `SELECT ${VERSION_COLUMNS} FROM version WHERE slug = ?`,
+        slug,
+      );
+    },
+    listVersions(userId) {
+      if (!userId) {
         return db.all<BibleVersion>(
-          "SELECT id, label, license FROM versions ORDER BY sort_order ASC, id ASC",
+          `SELECT ${VERSION_COLUMNS} FROM version ORDER BY sort_order ASC, id ASC`,
         );
       }
       return db.all<BibleVersion>(
-        `SELECT v.id, v.label, v.license
-         FROM versions v
-         LEFT JOIN reader_recency r
-           ON r.owner_kind = ? AND r.owner_id = ? AND r.work_kind = 'version' AND r.work_id = v.id
+        `SELECT v.id, v.slug, v.label, v.license
+         FROM version v
+         LEFT JOIN version_recency r ON r.user_id = ? AND r.version_id = v.id
          ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,
-        owner.kind,
-        owner.id,
-      );
-    },
-    touchRecency(owner, workKind, workId) {
-      db.run(
-        `INSERT INTO reader_recency (owner_kind, owner_id, work_kind, work_id, used_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(owner_kind, owner_id, work_kind, work_id)
-         DO UPDATE SET used_at = excluded.used_at`,
-        owner.kind,
-        owner.id,
-        workKind,
-        workId,
-        Date.now(),
+        userId,
       );
     },
     getActiveVersionId(userId) {
-      const row = db.get<{ active_version_id: string }>(
-        "SELECT active_version_id FROM reader_prefs WHERE user_id = ?",
+      const row = db.get<{ active_version_id: number }>(
+        "SELECT active_version_id FROM reader_pref WHERE user_id = ?",
         userId,
       );
       return row?.active_version_id ?? null;
     },
     setActiveVersionId(userId, versionId) {
       db.run(
-        "INSERT INTO reader_prefs (user_id, active_version_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET active_version_id = excluded.active_version_id",
+        "INSERT INTO reader_pref (user_id, active_version_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET active_version_id = excluded.active_version_id",
         userId,
         versionId,
       );
     },
-    listBooks(versionId, testament) {
-      const rows = db.all<{
-        version_id: string;
-        book_id: string;
-        name: string;
-        testament: string;
-        sort_order: number;
-        chapter_count: number;
-      }>(
-        `SELECT b.version_id, b.book_id, b.name, c.testament, c.sort_order,
-                COALESCE(MAX(v.chapter), 0) AS chapter_count
-         FROM books b
-         JOIN canon_books c ON c.id = b.book_id
-         LEFT JOIN verses v ON v.version_id = b.version_id AND v.book_id = b.book_id
-         WHERE b.version_id = ? AND c.testament = ?
-         GROUP BY b.version_id, b.book_id, b.name, c.testament, c.sort_order
-         ORDER BY c.sort_order ASC`,
+    touchVersionRecency(userId, versionId) {
+      db.run(
+        `INSERT INTO version_recency (user_id, version_id, used_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id, version_id)
+         DO UPDATE SET used_at = excluded.used_at`,
+        userId,
         versionId,
+        Date.now(),
+      );
+    },
+    touchCommentaryRecency(userId, commentaryId) {
+      db.run(
+        `INSERT INTO commentary_recency (user_id, commentary_id, used_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(user_id, commentary_id)
+         DO UPDATE SET used_at = excluded.used_at`,
+        userId,
+        commentaryId,
+        Date.now(),
+      );
+    },
+    listBooks(testament) {
+      return db.all<BibleBook>(
+        `SELECT ${BOOK_COLUMNS} FROM book WHERE testament = ? ORDER BY sort_order ASC`,
         testament,
       );
-      return rows.map(toBook);
     },
-    getBook(versionId, bookIdOrAlias) {
-      const bookId = resolveBookToken(bookIdOrAlias)?.id ?? bookIdOrAlias;
-      const row = db.get<{
-        version_id: string;
-        book_id: string;
-        name: string;
-        testament: string;
-        sort_order: number;
-        chapter_count: number;
-      }>(
-        `SELECT b.version_id, b.book_id, b.name, c.testament, c.sort_order,
-                COALESCE(MAX(v.chapter), 0) AS chapter_count
-         FROM books b
-         JOIN canon_books c ON c.id = b.book_id
-         LEFT JOIN verses v ON v.version_id = b.version_id AND v.book_id = b.book_id
-         WHERE b.version_id = ? AND b.book_id = ?
-         GROUP BY b.version_id, b.book_id, b.name, c.testament, c.sort_order`,
-        versionId,
+    getBook(id) {
+      return db.get<BibleBook>(`SELECT ${BOOK_COLUMNS} FROM book WHERE id = ?`, id);
+    },
+    getBookBySort(sort) {
+      return db.get<BibleBook>(`SELECT ${BOOK_COLUMNS} FROM book WHERE sort_order = ?`, sort);
+    },
+    getChapter(bookId, number) {
+      return db.get<BibleChapter>(
+        "SELECT id, book_id AS bookId, number FROM chapter WHERE book_id = ? AND number = ?",
+        bookId,
+        number,
+      );
+    },
+    listChapters(bookId) {
+      return db.all<BibleChapter>(
+        "SELECT id, book_id AS bookId, number FROM chapter WHERE book_id = ? ORDER BY number ASC",
         bookId,
       );
-      return row ? toBook(row) : undefined;
     },
-    lastVerse(versionId, bookId, chapter) {
-      const row = db.get<{ n: number }>(
-        "SELECT COALESCE(MAX(verse), 0) AS n FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ?",
-        versionId,
+    getVerseSlot(bookId, chapter, verse) {
+      return db.get(
+        `SELECT v.id, v.chapter_id AS chapterId, v.number
+         FROM verse v
+         JOIN chapter c ON c.id = v.chapter_id
+         WHERE c.book_id = ? AND c.number = ? AND v.number = ?`,
         bookId,
         chapter,
+        verse,
       );
-      return row?.n ?? 0;
     },
-    getVerse(ref) {
+    getVerseText(versionId, verseId) {
       const row = db.get<{ text: string }>(
-        "SELECT text FROM verses WHERE version_id = ? AND book_id = ? AND chapter = ? AND verse = ?",
-        ref.version,
-        ref.bookId,
-        ref.chapter,
-        ref.verse,
-      );
-      if (!row) {
-        return undefined;
-      }
-      return { ...ref, text: row.text };
-    },
-    listVerses(versionId, bookId, chapter) {
-      const rows = db.all<{ verse: number; text: string }>(
-        `SELECT verse, text FROM verses
-         WHERE version_id = ? AND book_id = ? AND chapter = ?
-         ORDER BY verse ASC`,
+        "SELECT text FROM verse_text WHERE version_id = ? AND verse_id = ?",
         versionId,
-        bookId,
-        chapter,
+        verseId,
       );
-      return rows.map((r) => ({
-        version: versionId,
-        bookId,
-        chapter,
-        verse: r.verse,
-        text: r.text,
-      }));
+      return row?.text ?? null;
     },
-    isBookmarked(userId, ref) {
+    listVerseReadings(versionId, chapterId) {
+      return db.all<VerseReading>(
+        `SELECT v.id AS verseId, c.book_id AS bookId, c.number AS chapter, v.number AS verse, t.text
+         FROM verse v
+         JOIN chapter c ON c.id = v.chapter_id
+         LEFT JOIN verse_text t ON t.verse_id = v.id AND t.version_id = ?
+         WHERE v.chapter_id = ?
+         ORDER BY v.number ASC`,
+        versionId,
+        chapterId,
+      );
+    },
+    isBookmarked(userId, verseId) {
       return Boolean(
-        db.get(
-          "SELECT 1 FROM bookmarks WHERE user_id = ? AND book_id = ? AND chapter = ? AND verse = ?",
-          userId,
-          ref.bookId,
-          ref.chapter,
-          ref.verse,
-        ),
+        db.get("SELECT 1 FROM bookmark WHERE user_id = ? AND verse_id = ?", userId, verseId),
       );
     },
     listBookmarks(userId) {
       return db.all<BookmarkRecord>(
-        `SELECT book_id AS bookId, chapter, verse, created_at AS createdAt
-         FROM bookmarks WHERE user_id = ?
-         ORDER BY created_at ASC, book_id ASC, chapter ASC, verse ASC`,
+        `SELECT bm.verse_id AS verseId, b.id AS bookId, c.number AS chapter, v.number AS verse, bm.created_at AS createdAt
+         FROM bookmark bm
+         JOIN verse v ON v.id = bm.verse_id
+         JOIN chapter c ON c.id = v.chapter_id
+         JOIN book b ON b.id = c.book_id
+         WHERE bm.user_id = ?
+         ORDER BY bm.created_at ASC, b.sort_order ASC, c.number ASC, v.number ASC`,
         userId,
       );
     },
-    toggleBookmark(userId, ref) {
+    toggleBookmark(userId, verseId) {
       const existing = db.get(
-        "SELECT 1 FROM bookmarks WHERE user_id = ? AND book_id = ? AND chapter = ? AND verse = ?",
+        "SELECT 1 FROM bookmark WHERE user_id = ? AND verse_id = ?",
         userId,
-        ref.bookId,
-        ref.chapter,
-        ref.verse,
+        verseId,
       );
       if (existing) {
-        db.run(
-          "DELETE FROM bookmarks WHERE user_id = ? AND book_id = ? AND chapter = ? AND verse = ?",
-          userId,
-          ref.bookId,
-          ref.chapter,
-          ref.verse,
-        );
+        db.run("DELETE FROM bookmark WHERE user_id = ? AND verse_id = ?", userId, verseId);
         return "removed";
       }
       db.run(
-        "INSERT INTO bookmarks (user_id, book_id, chapter, verse, created_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO bookmark (user_id, verse_id, created_at) VALUES (?, ?, ?)",
         userId,
-        ref.bookId,
-        ref.chapter,
-        ref.verse,
+        verseId,
         Date.now(),
       );
       return "added";
     },
-    listCommentaries(owner) {
-      if (!owner) {
+    listCommentaries(userId) {
+      if (!userId) {
         return db.all<CommentaryWork>(
-          "SELECT id, label, sort_order AS sortOrder FROM commentaries ORDER BY sort_order ASC, id ASC",
+          "SELECT id, label, sort_order AS sortOrder FROM commentary ORDER BY sort_order ASC, id ASC",
         );
       }
       return db.all<CommentaryWork>(
         `SELECT c.id, c.label, c.sort_order AS sortOrder
-         FROM commentaries c
-         LEFT JOIN reader_recency r
-           ON r.owner_kind = ? AND r.owner_id = ? AND r.work_kind = 'commentary' AND r.work_id = c.id
+         FROM commentary c
+         LEFT JOIN commentary_recency r ON r.user_id = ? AND r.commentary_id = c.id
          ORDER BY r.used_at DESC, c.sort_order ASC, c.id ASC`,
-        owner.kind,
-        owner.id,
+        userId,
       );
     },
     getCommentary(id) {
       return db.get<CommentaryWork>(
-        "SELECT id, label, sort_order AS sortOrder FROM commentaries WHERE id = ?",
+        "SELECT id, label, sort_order AS sortOrder FROM commentary WHERE id = ?",
         id,
       );
     },
-    findSection(commentaryId, ref) {
-      const canon = getCanonBook(ref.bookId);
-      if (!canon) {
-        return undefined;
-      }
-      const ord = verseOrd(canon.sort, ref.chapter, ref.verse);
+    findSection(commentaryId, verseId) {
       const row = db.get<{
         id: number;
-        commentary_id: string;
-        start_ord: number;
-        end_ord: number;
+        commentary_id: number;
         body: string;
       }>(
-        `SELECT id, commentary_id, start_ord, end_ord, body
-         FROM commentary_sections
-         WHERE commentary_id = ? AND start_ord <= ? AND end_ord >= ?
-         ORDER BY (end_ord - start_ord) ASC, start_ord DESC, id ASC
+        `SELECT s.id, s.commentary_id, s.body
+         FROM commentary_section s
+         JOIN commentary_section_verse csv ON csv.section_id = s.id
+         WHERE s.commentary_id = ? AND csv.verse_id = ?
+         ORDER BY (
+           SELECT COUNT(*) FROM commentary_section_verse c2 WHERE c2.section_id = s.id
+         ) ASC, s.id ASC
          LIMIT 1`,
         commentaryId,
-        ord,
-        ord,
+        verseId,
       );
       if (!row) {
         return undefined;
       }
       const xrefs = db.all<{ refs: string }>(
-        "SELECT refs FROM commentary_xrefs WHERE section_id = ? ORDER BY sort_order ASC",
+        "SELECT refs FROM commentary_xref WHERE section_id = ? ORDER BY sort_order ASC",
         row.id,
       );
       return {
         id: row.id,
         commentaryId: row.commentary_id,
-        startOrd: row.start_ord,
-        endOrd: row.end_ord,
         body: row.body,
         xrefs: xrefs.map((x) => x.refs),
       } satisfies CommentarySection;
     },
     createSearchQuery(sessionId, query, hits) {
-      const id = crypto.randomUUID();
-      const insertHit = db.prepare(
-        "INSERT INTO search_hits (query_id, position, book_id, chapter, verse) VALUES (?, ?, ?, ?, ?)",
-      );
-      db.transaction(() => {
-        db.run(
-          "INSERT INTO search_queries (id, session_id, query, created_at) VALUES (?, ?, ?, ?)",
-          id,
+      return db.transaction(() => {
+        const result = db.run(
+          "INSERT INTO search_query (session_id, query, created_at) VALUES (?, ?, ?)",
           sessionId,
           query,
           Date.now(),
         );
+        const id = Number(result.lastInsertRowid);
+        const insertHit = db.prepare(
+          "INSERT INTO search_hit (query_id, position, verse_id) VALUES (?, ?, ?)",
+        );
         for (let i = 0; i < hits.length; i++) {
-          const hit = hits[i]!;
-          insertHit.run(id, i, hit.bookId, hit.chapter, hit.verse);
+          insertHit.run(id, i, hits[i]!.verseId);
         }
+        return id;
       });
-      return id;
     },
     getSearchQuery(queryId, sessionId) {
       const row = db.get<{ query: string }>(
-        "SELECT query FROM search_queries WHERE id = ? AND session_id = ?",
+        "SELECT query FROM search_query WHERE id = ? AND session_id = ?",
         queryId,
         sessionId,
       );
@@ -306,11 +273,30 @@ export function createSqliteBibleStore(db: Db): BibleStore {
     },
     listSearchHits(queryId, sessionId) {
       return db.all<SearchHit>(
-        `SELECT h.book_id AS bookId, h.chapter, h.verse
-         FROM search_hits h
-         INNER JOIN search_queries q ON q.id = h.query_id
+        `SELECT ${HIT_COLUMNS}
+         FROM search_hit h
+         JOIN search_query q ON q.id = h.query_id
+         JOIN verse v ON v.id = h.verse_id
+         JOIN chapter c ON c.id = v.chapter_id
+         JOIN book b ON b.id = c.book_id
          WHERE h.query_id = ? AND q.session_id = ?
          ORDER BY h.position ASC`,
+        queryId,
+        sessionId,
+      );
+    },
+    listSearchHitReadings(queryId, sessionId, versionId) {
+      return db.all<VerseReading>(
+        `SELECT ${HIT_COLUMNS}, t.text
+         FROM search_hit h
+         JOIN search_query q ON q.id = h.query_id
+         JOIN verse v ON v.id = h.verse_id
+         JOIN chapter c ON c.id = v.chapter_id
+         JOIN book b ON b.id = c.book_id
+         LEFT JOIN verse_text t ON t.verse_id = v.id AND t.version_id = ?
+         WHERE h.query_id = ? AND q.session_id = ?
+         ORDER BY h.position ASC`,
+        versionId,
         queryId,
         sessionId,
       );
@@ -320,27 +306,23 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       if (unique.length === 0 || cap <= 0) {
         return [];
       }
-      const placeholders = unique.map(() => "?").join(", ");
-      const rows = db.all<{ book_id: string; chapter: number; verse: number }>(
-        `SELECT book_id, chapter, verse
-         FROM verse_words
-         WHERE version_id = ? AND word IN (${placeholders})
-         GROUP BY book_id, chapter, verse
-         HAVING COUNT(DISTINCT word) = ?
-         ORDER BY MIN(verse_ord) ASC
+      const lowered = "LOWER(t.text)";
+      const clauses = unique.map(() => wholeWordSql(lowered)).join(" AND ");
+      const params: Array<string | number> = [versionId];
+      for (const token of unique) {
+        params.push(...wholeWordParams(token));
+      }
+      params.push(cap);
+      return db.all<SearchHit>(
+        `SELECT ${HIT_COLUMNS}
+         FROM verse_text t
+         JOIN verse v ON v.id = t.verse_id
+         JOIN chapter c ON c.id = v.chapter_id
+         JOIN book b ON b.id = c.book_id
+         WHERE t.version_id = ? AND ${clauses}
+         ORDER BY b.sort_order ASC, c.number ASC, v.number ASC
          LIMIT ?`,
-        versionId,
-        ...unique,
-        unique.length,
-        cap,
-      );
-      return rows.map(
-        (r) =>
-          ({
-            bookId: r.book_id,
-            chapter: r.chapter,
-            verse: r.verse,
-          }) satisfies SearchHit,
+        ...params,
       );
     },
     close() {
@@ -349,22 +331,12 @@ export function createSqliteBibleStore(db: Db): BibleStore {
   };
 }
 
-function toBook(row: {
-  version_id: string;
-  book_id: string;
-  name: string;
-  testament: string;
-  sort_order: number;
-  chapter_count: number;
-}): BibleBook {
-  return {
-    versionId: row.version_id,
-    bookId: row.book_id,
-    name: row.name,
-    testament: row.testament,
-    sort: row.sort_order,
-    chapterCount: row.chapter_count,
-  };
+function wholeWordSql(column: string): string {
+  return `(${column} = ? OR ${column} GLOB ? OR ${column} GLOB ? OR ${column} GLOB ?)`;
+}
+
+function wholeWordParams(token: string): readonly [string, string, string, string] {
+  return [token, `${token}[^a-z]*`, `*[^a-z]${token}`, `*[^a-z]${token}[^a-z]*`];
 }
 
 export type StartBibleAppOptions = {

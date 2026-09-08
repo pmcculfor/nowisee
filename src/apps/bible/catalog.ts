@@ -54,10 +54,10 @@ export type SearchPolicy = {
 };
 
 export type VerseSequence =
-  | { readonly type: "chapter"; readonly versionId: string; readonly bookId: string; readonly chapter: number }
-  | { readonly type: "context"; readonly versionId: string; readonly bookId: string; readonly chapter: number }
+  | { readonly type: "chapter"; readonly versionId: number; readonly bookId: number; readonly chapter: number }
+  | { readonly type: "context"; readonly versionId: number; readonly bookId: number; readonly chapter: number }
   | { readonly type: "bookmarks" }
-  | { readonly type: "search"; readonly queryId: string };
+  | { readonly type: "search"; readonly queryId: number };
 
 export const SEARCH_POLICY: SearchPolicy = { maxHits: 1000, siblingRadius: 24 };
 
@@ -258,8 +258,14 @@ export function canonBookBySort(sort: number): CanonBook | undefined {
   return BOOKS_BY_SORT.get(sort);
 }
 
-export function verseOrd(bookSort: number, chapter: number, verse: number): number {
-  return bookSort * 1_000_000 + chapter * 1_000 + verse;
+/** Stable integer PK: catalog `sortOrder` is 0-based. */
+export function catalogVersionId(record: VersionRecord): number {
+  return record.sortOrder + 1;
+}
+
+/** Stable integer PK: catalog `sortOrder` is 0-based. */
+export function catalogCommentaryId(record: CommentaryRecord): number {
+  return record.sortOrder + 1;
 }
 
 export function testamentLabel(id: string): string {
