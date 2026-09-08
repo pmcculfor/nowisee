@@ -26,6 +26,7 @@ import {
   optionId,
   searchId,
   searchInputId,
+  searchLimitedId,
   searchWorkingId,
   signInId,
   testamentId,
@@ -298,7 +299,7 @@ describe("Bible app", () => {
       { nodeId: contextId, label: "x", location: null },
     ]);
     expect(context.node.label).toBe(
-      "(Context) 3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
+      "3 (context). Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
     );
     expect(context.navigationMap[contextId]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
     expect(context.navigationMap[contextId]?.enter).toEqual({
@@ -369,6 +370,52 @@ describe("Bible app", () => {
       stackBehavior: "replace",
     });
     expect(hits.navigationMap[v26]).toBeUndefined();
+    expect(hits.warm.some((n) => n.id === searchLimitedId(queryId))).toBe(false);
+  });
+
+  it("search at the hit cap ends with a limit node", async () => {
+    const cap = SEARCH_POLICY.maxHits;
+    const verses = Array.from({ length: cap + 1 }, (_, i) => ({
+      versionId: "kjv",
+      bookId: "PSA",
+      chapter: 1,
+      verse: i + 1,
+      text: `Needleword verse ${i + 1}.`,
+    }));
+    const instance = bibleWithSeed({ verses });
+    const ctx = signedOut();
+    const first = await refresh(
+      instance,
+      [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
+      { action: true, inputText: "needleword" },
+      ctx,
+    );
+    const queryId = searchQueryId(first.node.id);
+    const lastHit = verseNodeId({ type: "search", queryId }, canon(PSA, 1, cap));
+    const limitedId = searchLimitedId(queryId);
+    expect(first.warm.some((n) => n.id === limitedId)).toBe(false);
+
+    const last = await refresh(instance, [{ nodeId: lastHit, label: "x", location: null }], {}, ctx);
+    expect(last.navigationMap[lastHit]?.next).toEqual({
+      kind: "node",
+      toNodeId: limitedId,
+      stackBehavior: "replace",
+    });
+    expect(last.warm.find((n) => n.id === limitedId)?.label).toBe(
+      `search limited to ${cap} results.`,
+    );
+
+    const limited = await refresh(instance, [{ nodeId: limitedId, label: "x", location: null }], {}, ctx);
+    expect(limited.node.id).toBe(limitedId);
+    expect(limited.node.label).toBe(`search limited to ${cap} results.`);
+    expect(limited.navigationMap[limitedId]?.prev).toEqual({
+      kind: "node",
+      toNodeId: lastHit,
+      stackBehavior: "replace",
+    });
+    expect(limited.navigationMap[limitedId]?.next).toBeUndefined();
+    expect(limited.navigationMap[limitedId]?.enter).toBeUndefined();
+    expect(limited.navigationMap[limitedId]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
   });
 
   it("commentary range is shared and split into chunks", async () => {

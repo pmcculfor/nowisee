@@ -29,6 +29,10 @@ export function searchEmptyId(queryId: number): string {
   return `bible:q:${queryId}:empty`;
 }
 
+export function searchLimitedId(queryId: number): string {
+  return `bible:q:${queryId}:limited`;
+}
+
 export function versionsHeadingId(): string {
   return "bible:versions";
 }
@@ -107,6 +111,7 @@ export type ParsedNode =
   | { kind: "search-input" }
   | { kind: "search-working" }
   | { kind: "search-empty"; queryId: number }
+  | { kind: "search-limited"; queryId: number }
   | { kind: "versions-heading" }
   | { kind: "version-pick"; versionId: number }
   | { kind: "signin" }
@@ -150,6 +155,11 @@ export function parseNodeId(id: string): ParsedNode | null {
   const emptyQ = /^bible:q:(\d+):empty$/.exec(id);
   if (emptyQ) {
     return { kind: "search-empty", queryId: Number(emptyQ[1]) };
+  }
+
+  const limitedQ = /^bible:q:(\d+):limited$/.exec(id);
+  if (limitedQ) {
+    return { kind: "search-limited", queryId: Number(limitedQ[1]) };
   }
 
   const ver = /^bible:ver:(\d+)$/.exec(id);

@@ -80,7 +80,7 @@ describe("app host", () => {
     const result = await host().open("recents", "/", {
       parkedAppIds: ["home", "notes", "recents"],
     });
-    expect(result.node.label).toBe("Notes");
+    expect(result.node.label).toBe("Notes (recent)");
     expect(result.location).toBeNull();
     expect(result.navigationMap[result.node.id]?.enter).toEqual({
       kind: "resume",

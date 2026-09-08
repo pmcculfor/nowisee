@@ -85,7 +85,7 @@ function payloadsFor(rows: readonly AppDescriptor[]): Map<string, NodePayload> {
   payloads.set(HOME_NODE_ID, { id: HOME_NODE_ID, label: "Home" });
   for (const app of rows) {
     const id = appRowId(app.id);
-    payloads.set(id, { id, label: app.label });
+    payloads.set(id, { id, label: `${app.label} (recent)` });
   }
   return payloads;
 }

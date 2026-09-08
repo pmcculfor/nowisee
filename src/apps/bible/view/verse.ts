@@ -23,11 +23,13 @@ import {
   commentaryWorkId,
   copyStatusId,
   optionId,
+  searchLimitedId,
   signInId,
   verseNodeId,
   verseVersionPickId,
   versionPickId,
 } from "../ids.ts";
+import { searchLimitedLabel } from "./search.ts";
 import type { BibleRef, CanonRef, VerseReading } from "../types.ts";
 import {
   addNode,
@@ -47,17 +49,13 @@ export function addVerseLevel(
 ): void {
   const versionId = ref.versionId;
   const siblings = siblingReadings(session, seq, versionId);
-  const ids = siblings.map((r) => verseNodeId(seq, canonReading(r)));
+  const ids = sequenceIds(seq, siblings);
   const focusIndex = siblings.findIndex((r) => sameCanon(canonReading(r), ref));
   const around =
     seq.type === "search" && focusIndex >= 0
       ? { index: focusIndex, radius: SEARCH_POLICY.siblingRadius }
       : undefined;
-  const warmStart = around ? Math.max(0, around.index - around.radius) : 0;
-  const warmEnd = around ? Math.min(siblings.length, around.index + around.radius + 1) : siblings.length;
-  for (let i = warmStart; i < warmEnd; i++) {
-    addNode(payloads, versePayload(session, seq, toRef(versionId, siblings[i]!)));
-  }
+  addSequenceWindow(session, payloads, fragments, seq, versionId, siblings, ids, around);
   fragments.push(siblingListEdges(ids, { wrap: seq.type === "chapter" || seq.type === "context", around }));
 
   const tip = verseNodeId(seq, ref);
@@ -106,6 +104,61 @@ function canonReading(row: VerseReading): CanonRef {
 
 function toRef(versionId: number, row: VerseReading): BibleRef {
   return { versionId, bookId: row.bookId, chapter: row.chapter, verse: row.verse };
+}
+
+export function addSearchLimited(
+  session: ViewSession,
+  payloads: Map<string, NodePayload>,
+  fragments: MapFragment[],
+  queryId: number,
+  versionId: number,
+): void {
+  const seq: VerseSequence = { type: "search", queryId };
+  const siblings = siblingReadings(session, seq, versionId);
+  const ids = sequenceIds(seq, siblings);
+  const limitedId = searchLimitedId(queryId);
+  addNode(payloads, { id: limitedId, label: searchLimitedLabel() });
+  fragments.push({ [limitedId]: { back: edgePop() } });
+  const focusIndex = ids.indexOf(limitedId);
+  if (focusIndex < 0) {
+    return;
+  }
+  const around = { index: focusIndex, radius: SEARCH_POLICY.siblingRadius };
+  addSequenceWindow(session, payloads, fragments, seq, versionId, siblings, ids, around);
+  fragments.push(siblingListEdges(ids, { wrap: false, around }));
+}
+
+function sequenceIds(seq: VerseSequence, siblings: readonly VerseReading[]): string[] {
+  const ids = siblings.map((r) => verseNodeId(seq, canonReading(r)));
+  if (seq.type === "search" && siblings.length >= SEARCH_POLICY.maxHits) {
+    ids.push(searchLimitedId(seq.queryId));
+  }
+  return ids;
+}
+
+function addSequenceWindow(
+  session: ViewSession,
+  payloads: Map<string, NodePayload>,
+  fragments: MapFragment[],
+  seq: VerseSequence,
+  versionId: number,
+  siblings: readonly VerseReading[],
+  ids: readonly string[],
+  around: { readonly index: number; readonly radius: number } | undefined,
+): void {
+  const start = around ? Math.max(0, around.index - around.radius) : 0;
+  const end = around ? Math.min(ids.length, around.index + around.radius + 1) : ids.length;
+  for (let i = start; i < end; i++) {
+    if (i < siblings.length) {
+      addNode(payloads, versePayload(session, seq, toRef(versionId, siblings[i]!)));
+      continue;
+    }
+    if (seq.type === "search") {
+      const limitedId = searchLimitedId(seq.queryId);
+      addNode(payloads, { id: limitedId, label: searchLimitedLabel() });
+      fragments.push({ [limitedId]: { back: edgePop() } });
+    }
+  }
 }
 
 function siblingReadings(session: ViewSession, seq: VerseSequence, versionId: number): VerseReading[] {

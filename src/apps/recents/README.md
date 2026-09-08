@@ -8,7 +8,7 @@ Navigator opens this app via the reserved `recents` intent and sends `extras.par
 
 ## Graph
 
-- One node per listed parked app. `enter` is `kind: "resume"` to that app.
+- One node per listed parked app, labeled `Name (recent)`. `enter` is `kind: "resume"` to that app.
 - `prev` on the first row goes to a **Home** node. `enter` there is a plain `app` edge that **opens** Home. Do not wrap prev from Home.
 - `next` walks the listed apps. The last row has no `next` (silent no-op). Do not wrap.
 - `back` is `kind: "resume"` to `parkedAppIds[0]` (the caller), including Home.

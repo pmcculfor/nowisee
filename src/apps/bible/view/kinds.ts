@@ -16,6 +16,7 @@ import {
   searchEmptyId,
   searchId,
   searchInputId,
+  searchLimitedId,
   searchWorkingId,
   signInId,
   testamentId,
@@ -36,11 +37,12 @@ import {
   verseLocation,
   type ViewSession,
 } from "./helpers.ts";
-import { addSearchInput, emptySearchLabel } from "./search.ts";
+import { addSearchInput, emptySearchLabel, searchLimitedLabel } from "./search.ts";
 import { addSignIn } from "./signin.ts";
 import {
   addOptionLevel,
   addRootVersionList,
+  addSearchLimited,
   addVerseLevel,
   addVerseVersionList,
   optionNodeLabel,
@@ -217,6 +219,17 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     }),
     addLevel: (s, pay, frag, parsed) => {
       addSearchEmpty(s, pay, frag, parsed);
+    },
+  },
+  "search-limited": {
+    version: active,
+    location: (s) => searchLoc(s),
+    payload: (_s, parsed) => ({
+      id: searchLimitedId(asKind(parsed, "search-limited").queryId),
+      label: searchLimitedLabel(),
+    }),
+    addLevel: (s, pay, frag, parsed, version) => {
+      addSearchLimited(s, pay, frag, asKind(parsed, "search-limited").queryId, version);
     },
   },
   "versions-heading": {

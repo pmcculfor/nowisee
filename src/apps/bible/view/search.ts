@@ -34,3 +34,7 @@ export function searchHits(session: ViewSession, versionId: number, query: strin
 export function emptySearchLabel(query: string): string {
   return tokenize(query).length === 0 ? "Enter a search." : "No verses matched.";
 }
+
+export function searchLimitedLabel(): string {
+  return `search limited to ${SEARCH_POLICY.maxHits} results.`;
+}

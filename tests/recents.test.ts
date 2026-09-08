@@ -39,7 +39,7 @@ describe("Recents app", () => {
   it("skips Home, unparkable Recents, and unknown ids; lands on the first listed row", () => {
     const result = openListed(["home", "notes", "recents", "missing", "bible"]);
     expect(result.node.id).toBe(appRowId("notes"));
-    expect(result.node.label).toBe("Notes");
+    expect(result.node.label).toBe("Notes (recent)");
     expect(result.location).toBeNull();
     expect(result.warm.map((n) => n.id)).toEqual([
       EMPTY_NODE_ID,
@@ -135,7 +135,7 @@ describe("Recents app", () => {
       directory(PACK),
     ) as RefreshResult;
     expect(result.node.id).toBe(appRowId("bible"));
-    expect(result.node.label).toBe("Bible");
+    expect(result.node.label).toBe("Bible (recent)");
   });
 
   it("missing directory lists nothing", () => {
