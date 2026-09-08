@@ -16,6 +16,10 @@ describe("RefreshResult plain-data contract", () => {
             to: { appId: "home", path: "/" },
           },
           enter: {
+            kind: "resume",
+            appId: "notes",
+          },
+          recents: {
             kind: "external",
             href: "https://example.com",
           },

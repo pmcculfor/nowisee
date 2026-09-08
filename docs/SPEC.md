@@ -9,18 +9,19 @@
 
 **Nowisee** is a website for blind (and screen-reader / keyboard-primary) users who struggle with modern, cluttered UIs.
 
-The core idea is that the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label (`role="application"` so arrow keys reach the page). When the current node is an **input** node, that surface is a multiline text box plus Cancel and Done. Navigation is driven by a **navigation map** of four intents — `prev`, `next`, `enter`, `back` — which core binds to the arrow keys by default on text tips (and to VoiceOver edge pads on focus or click). A user or locale can rebind those keys without any app changing.
+The core idea is that the page shows **one unformatted text surface** — no pictures, menus, cards, or competing chrome. When the current node is a normal text node, that surface is the node’s label (`role="application"` so arrow keys reach the page). When the current node is an **input** node, that surface is a multiline text box plus Cancel, Done, and Recent apps. Navigation is driven by a **navigation map** of intents (`prev`, `next`, `enter`, `back`) which core binds to the arrow keys by default on text tips (and to VoiceOver edge pads on focus or click), plus a reserved `recents` intent. A user or locale can rebind those keys without any app changing.
 
 Typical sites force tabbing through chrome or exploring by touch, so users cannot quickly find content. Nowisee makes the reading cursor and the UI the same thing: whatever is on screen is what matters.
 
 **First-party apps** are portable `AppModule`s, including Home:
 
 1. **Home** lists the user’s home apps (and Manage Apps) and links to each by URL.
-2. **Help** is a short tutorial of intents, lists, and typing. It is the first catalog item.
-3. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
-4. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
-5. **Gmail** connects a Google account and shows inbox messages (subject, then from), body chunks, and compose/send. Tokens go through host OAuth/lockbox.
-6. **Account** is sign in / register / sign out. Credentials live in the identity service, not in this app.
+2. **Recents** is the session app switcher. It is not on Home. Desktop **r** (and the input **Recent apps** button) opens it.
+3. **Help** is a short tutorial of intents, lists, and typing. It is the first catalog item.
+4. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
+5. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
+6. **Gmail** connects a Google account and shows inbox messages (subject, then from), body chunks, and compose/send. Tokens go through host OAuth/lockbox.
+7. **Account** is sign in / register / sign out. Credentials live in the identity service, not in this app.
 
 Long-term there should be many apps, and possibly third-party apps and an in-product App Store. Core must never special-case product names. A new app is a module plus a pack row, not a core edit.
 
@@ -37,12 +38,13 @@ Apps author **intents**. Core owns which keystroke produces each one (defaults i
 | `prev` / `next` | `ArrowUp` / `ArrowDown` on a text tip; VoiceOver pads top / bottom | Move among siblings (`stackBehavior: replace`) |
 | `enter` | `ArrowRight` on a text tip; VoiceOver pad right; **Done** on an input tip | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions and input commit |
 | `back` | `ArrowLeft` on a text tip; VoiceOver pad left; **Cancel** on an input tip | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home**. On an input tip: abandon |
-| plain arrows on an **input** tip | unbound | Caret keeps them. Leave via Done / Cancel, not a chord. |
+| plain arrows on an **input** tip | unbound | Caret keeps them. Leave via Done / Cancel / Recent apps, not a chord. |
+| `recents` | `r` on a text tip; **Recent apps** on an input tip. No fifth pad. | Opens the Recents app. Missing `recentsAppId` or already there: silent no-op |
 | Missing map edge | — | Silent no-op (stay) |
 
 Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.
 
-The display is one text blob, or a multiline field plus Cancel / Done. The screen reader announces updates by focusing the remounted text surface (there is no `aria-live` on that surface). Help is a first-class app, not a modal.
+The display is one text blob, or a multiline field plus Cancel / Done / Recent apps. The screen reader announces updates by focusing the remounted text surface (there is no `aria-live` on that surface). Help is a first-class app, not a modal.
 
 A few example paths:
 
@@ -99,6 +101,7 @@ Packaging, stack, and env: [`ARCHITECTURE.md`](ARCHITECTURE.md). How apps call c
 
 - `kind: "node"` + `stackBehavior: push | replace | pop`
 - `kind: "app"` → an `AppLocation` inside Nowisee; core serializes it
+- `kind: "resume"` → restore that app's parked stack, then `refresh`
 - `kind: "external"` → leaves the platform
 - Optional `passInputText` on edges leaving an input node
 - Optional `action: true` marking a deliberate trigger (§4.5)
@@ -113,11 +116,11 @@ Packaging, stack, and env: [`ARCHITECTURE.md`](ARCHITECTURE.md). How apps call c
 
 **Rejected:** `NavKey` values like `"ctrl+right"` in app data. Also rejected as a *default binding*: Ctrl+Left / Ctrl+Right on input nodes, which are word-wise caret movement on every major platform.
 
-### 4.4 Per-app stack; URL open resets stack
+### 4.4 Per-app stack; URL open resets that app
 
-**Decision:** The session stack holds only node ids for the **current app**. Every location open (including same-app jumps and returning to Home) goes through `navigator.openLocation` and **resets** that app’s stack, then bootstraps with `open`.
+**Decision:** The session stack holds only node ids for the **current app**. Other apps' stacks live in an in-memory session park (one snapshot per appId). A plain `kind: "app"` open still **resets** that destination and drops its park. `kind: "resume"` restores the parked stack, then `refresh`es. The reserved `recents` intent opens `config.recentsAppId`.
 
-**Why:** Stacks never mix apps; cross-app is URL; history back (`pop`) stays inside one app.
+**Why:** Stacks never mix apps; history back (`pop`) stays inside one app; switching apps can restore where the user left off.
 
 ### 4.5 No separate `activate()`; effects are marked on the **edge**
 
@@ -154,7 +157,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.8 Input nodes
 
-**Decision:** Input is a node type (multiline `<textarea>` plus Cancel and Done, or `<input type="password">` when `secret` is set). Leave only via navigation-map edges: **Done** fires `enter` (typically commit with `passInputText`); **Cancel** fires `back` (typically abandon). Plain arrows stay unbound so the caret keeps them. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode. The two buttons are the only extra chrome, and only while the tip is an input. `secret` is a flag on the existing input kind, not a new `NodeKind`.
+**Decision:** Input is a node type (multiline `<textarea>` plus Cancel, Done, and Recent apps, or `<input type="password">` when `secret` is set). Leave only via navigation-map edges or the reserved recents intent: **Done** fires `enter` (typically commit with `passInputText`); **Cancel** fires `back` (typically abandon); **Recent apps** fires `recents`. Plain arrows stay unbound so the caret keeps them. **No Escape-to-exit** platform behavior. Behavior is derived from tip node type, not a separate Escape-toggled mode. The three buttons are the only extra chrome, and only while the tip is an input. `secret` is a flag on the existing input kind, not a new `NodeKind`.
 
 **Why:** One consistent exit vocabulary that matches how people already leave a form (move to a named button and activate it), instead of a Nowisee-only chord or guessing every screen-reader blur path. Apps still author `enter` / `back`; core only supplies the controls.
 
@@ -164,7 +167,7 @@ Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a
 
 Shareable tips **may** return a location from refresh; that is not required for every node. Aliases are fine; the app canonicalizes on open. A null location means core **keeps** the previous address bar. The field is required; omitting it is not the same as null.
 
-Cross-app and Home exit use `kind: "app"` edges only. `kind: "external"` leaves the platform.
+Cross-app launch uses `kind: "app"` edges. Recents uses `kind: "resume"` to restore a parked stack. `kind: "external"` leaves the platform.
 
 ### 4.10 App boundary: data in, data out
 

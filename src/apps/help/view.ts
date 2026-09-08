@@ -46,9 +46,16 @@ const ITEM4_LABEL = [
   "Navigate right when you are ready to begin.",
 ].join(" ");
 
+const RECENTS_LABEL = [
+  "Press the r key on a text screen to open recent apps.",
+  "On an input screen, find the Recent apps button next to Cancel and Done.",
+  "In that list, navigate up from the first app to go Home, or navigate right to return to an app where you left it.",
+  "Navigate right to continue.",
+].join(" ");
+
 const TYPE_PROMPT_LABEL = [
   "The next page is an input box.",
-  "Enter text in the box, then use the tab key or your native screen gestures to find and click the Cancel or Done buttons on the page.",
+  "Enter text in the box, then use the tab key or your native screen gestures to find and click Cancel, Done, or Recent apps.",
 ].join(" ");
 
 export function openHelp(deps: HelpViewDeps, path: string, extras: RefreshExtras = {}): RefreshResult {
@@ -78,6 +85,7 @@ function payloadsFor(inputText: string | undefined): Map<string, NodePayload> {
   return new Map<string, NodePayload>([
     [NODE.welcome, { id: NODE.welcome, label: WELCOME_LABEL }],
     [NODE.backPractice, { id: NODE.backPractice, label: BACK_PRACTICE_LABEL }],
+    [NODE.recents, { id: NODE.recents, label: RECENTS_LABEL }],
     [NODE.item1, { id: NODE.item1, label: ITEM1_LABEL }],
     [NODE.item2, { id: NODE.item2, label: ITEM2_LABEL }],
     [NODE.item3, { id: NODE.item3, label: ITEM3_LABEL }],
@@ -106,6 +114,10 @@ function helpMap(rootAppId: string): NavigationMap {
         enter: edgeNode(NODE.backPractice, "push"),
       },
       [NODE.backPractice]: {
+        enter: edgeNode(NODE.recents, "push"),
+        back: edgePop(),
+      },
+      [NODE.recents]: {
         enter: edgeNode(NODE.item1, "push"),
         back: edgePop(),
       },
@@ -141,6 +153,8 @@ function tipForPath(path: string): string {
   switch (path) {
     case "/back":
       return NODE.backPractice;
+    case "/recents":
+      return NODE.recents;
     case "/practice/1":
       return NODE.item1;
     case "/practice/2":
@@ -164,6 +178,8 @@ function locationFor(tipId: string): AppLocation {
   switch (tipId) {
     case NODE.backPractice:
       return { appId: HELP_APP_ID, path: "/back" };
+    case NODE.recents:
+      return { appId: HELP_APP_ID, path: "/recents" };
     case NODE.item1:
       return { appId: HELP_APP_ID, path: "/practice/1" };
     case NODE.item2:
@@ -187,6 +203,7 @@ function isKnown(tipId: string): boolean {
   return (
     tipId === NODE.welcome ||
     tipId === NODE.backPractice ||
+    tipId === NODE.recents ||
     tipId === NODE.typePrompt ||
     tipId === NODE.input ||
     tipId === NODE.done ||

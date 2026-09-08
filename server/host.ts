@@ -122,6 +122,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   const registry = new AppRegistry();
   const started: StartedApp[] = [];
   const homeRoleByAppId = new Map<string, HomeRole>();
+  const parkableByAppId = new Map<string, boolean>();
   const hostStart = { rootAppId, ephemeral };
   for (const pack of FIRST_PARTY_APPS) {
     const app = pack.start(hostStart);
@@ -129,6 +130,9 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     started.push(app);
     if (pack.homeRole) {
       homeRoleByAppId.set(app.id, pack.homeRole);
+    }
+    if (pack.parkable === false) {
+      parkableByAppId.set(app.id, false);
     }
   }
   for (const extra of options.extraApps ?? []) {
@@ -138,7 +142,15 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   function listDirectory(): readonly AppDescriptor[] {
     return registry.listDescriptors().map((d) => {
       const homeRole = homeRoleByAppId.get(d.id);
-      return homeRole ? { id: d.id, label: d.label, homeRole } : d;
+      const parkable = parkableByAppId.get(d.id);
+      const extra: { homeRole?: HomeRole; parkable?: boolean } = {};
+      if (homeRole) {
+        extra.homeRole = homeRole;
+      }
+      if (parkable === false) {
+        extra.parkable = false;
+      }
+      return Object.keys(extra).length > 0 ? { ...d, ...extra } : d;
     });
   }
 
@@ -333,6 +345,9 @@ function toRefreshExtras(extras: WireExtras): RefreshExtras {
   }
   if (extras.action) {
     out.action = true;
+  }
+  if (extras.parkedAppIds) {
+    out.parkedAppIds = extras.parkedAppIds;
   }
   return out;
 }

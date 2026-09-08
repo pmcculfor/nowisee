@@ -63,6 +63,26 @@ describe("app host", () => {
     expect(result.node.label).toBe("Copied");
     expect(result.clipboardText).toContain("Genesis 1:1.");
   });
+
+  it("opens Recents with parked ids; skips Home and unparkable Recents", async () => {
+    const result = await host().open("recents", "/", {
+      parkedAppIds: ["home", "notes", "recents"],
+    });
+    expect(result.node.label).toBe("Notes");
+    expect(result.location).toBeNull();
+    expect(result.navigationMap[result.node.id]?.enter).toEqual({
+      kind: "resume",
+      appId: "notes",
+    });
+    expect(result.navigationMap[result.node.id]?.prev).toEqual({
+      kind: "app",
+      to: { appId: "home", path: "/" },
+    });
+    expect(result.navigationMap[result.node.id]?.back).toEqual({
+      kind: "resume",
+      appId: "home",
+    });
+  });
 });
 
 describe("app HTTP", () => {
@@ -112,6 +132,17 @@ describe("app HTTP", () => {
       url: "/api/apps/bible/refresh",
       headers: headers(),
       body: { stack: "nope" },
+    });
+    expect(out.status).toBe(400);
+  });
+
+  it("rejects extras.parkedAppIds that are not string arrays", async () => {
+    h = sessionHost();
+    const out = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/recents/open",
+      headers: headers(),
+      body: { path: "/", extras: { parkedAppIds: "nope" } },
     });
     expect(out.status).toBe(400);
   });

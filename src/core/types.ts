@@ -80,6 +80,11 @@ export type NavEdge =
       kind: "external";
       /** Leaves Nowisee entirely. Core does not manage what happens next. */
       href: string;
+    }
+  | {
+      kind: "resume";
+      /** Restore this app's parked stack, then refresh. Path is ignored. */
+      appId: string;
     };
 
 /**
@@ -106,6 +111,11 @@ export interface RefreshExtras {
    * effects only when this is true.
    */
   action?: boolean;
+  /**
+   * MRU parked app ids. Navigator sets this only on Recents `open` / `refresh`.
+   * Other apps ignore it. Ids only — never stacks or tip text.
+   */
+  parkedAppIds?: readonly string[];
   /**
    * Aborted when a later action or `open` preempts this read-only call.
    * A later read-only intent does not abort it; core never aborts an action.
@@ -146,11 +156,16 @@ export interface AppDescriptor {
   readonly label: string;
   /** Pack catalog: Home-list policy. `listDescriptors()` does not set this. */
   readonly homeRole?: HomeRole;
+  /**
+   * Recents-list policy. Omit = true. `listDescriptors()` does not set this.
+   * Navigator parks everyone; Recents skips `parkable: false` when listing.
+   */
+  readonly parkable?: boolean;
 }
 
 /**
  * Host-owned directory of installed apps as descriptors, never modules.
- * Granted only to apps the catalog marks (today: Home). Feature-detect.
+ * Granted only to apps the catalog marks (today: Home and Recents). Feature-detect.
  */
 export interface DirectoryCapability {
   list(): readonly AppDescriptor[];
@@ -279,6 +294,11 @@ export interface AppModule {
 export interface ShellConfig {
   /** App used for the empty path and for recovery. No core file names it. */
   readonly rootAppId: string;
+  /**
+   * App opened by the reserved `recents` intent. Omit: that intent is a
+   * silent no-op. No core file names it.
+   */
+  readonly recentsAppId?: string;
   readonly keyBindings?: readonly KeyBinding[];
 }
 

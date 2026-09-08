@@ -4,7 +4,7 @@ Home is an ordinary `AppModule`. Persistence is `HomeStore` on this app’s SQLi
 
 Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts), [`membership.ts`](membership.ts), [`ids.ts`](ids.ts). Tests: [`tests/home.test.ts`](../../../tests/home.test.ts) (in-memory SQLite).
 
-It lists installed apps from `ctx.directory.list()`, which the host grants only to Home. Descriptors include optional `homeRole` from the pack row. Home receives descriptors, **not** the registry object. `AppRegistry.listDescriptors()` stays `{ id, label }` only. `rootAppId` is still the shell root; it is not derived from `homeRole`.
+It lists installed apps from `ctx.directory.list()`, which the host grants to Home (and Recents). Descriptors include optional `homeRole` from the pack row. Home receives descriptors, **not** the registry object. `AppRegistry.listDescriptors()` stays `{ id, label }` only. `rootAppId` is still the shell root; it is not derived from `homeRole`.
 
 ## `homeRole`
 
@@ -15,7 +15,7 @@ It lists installed apps from `ctx.directory.list()`, which the host grants only 
 | `default` | until the user removes it | yes | yes |
 | `optional` (omit) | only after the user adds it | yes | yes if on the list |
 
-Home also omits its own module id. Pack today: Home `internal`; Help, Bible, Notes `default`; Gmail omit; Account `required`.
+Home also omits its own module id. Pack today: Home and Recents `internal`; Help, Bible, Notes `default`; Gmail omit; Account `required`. Recents is also `parkable: false` (Recents-list policy, not Home's).
 
 ## Home list
 

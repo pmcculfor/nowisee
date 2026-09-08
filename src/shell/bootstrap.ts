@@ -41,6 +41,7 @@ export function startShell(
 ): ShellHandle {
   const config: ShellConfig = {
     rootAppId: options.config?.rootAppId ?? "home",
+    recentsAppId: options.config?.recentsAppId ?? "recents",
     keyBindings: options.config?.keyBindings,
   };
 

@@ -9,8 +9,8 @@ import { PlatformCapabilities } from "../src/core/platform.ts";
 import { AppRegistry } from "../src/core/registry.ts";
 import { Router } from "../src/core/router.ts";
 import { Stack } from "../src/core/stack.ts";
-import type { AppLocation, AppModule, RefreshResult } from "../src/core/types.ts";
-import { createFakeApp, createRootApp } from "./helpers/fakeApp.ts";
+import type { AppLocation, AppModule, RefreshExtras, RefreshResult } from "../src/core/types.ts";
+import { createFakeApp, createRootApp, type FakeCall } from "./helpers/fakeApp.ts";
 
 function visibleText(root: HTMLElement): string {
   const input = root.querySelector<HTMLTextAreaElement>("textarea[data-surface='input']");
@@ -34,10 +34,61 @@ async function intent(nav: Navigator, name: Parameters<Navigator["onIntent"]>[0]
   await flush();
 }
 
+function createRecentsStub(): { app: AppModule; calls: FakeCall[] } {
+  const calls: FakeCall[] = [];
+
+  function view(extras: RefreshExtras, tipId?: string): RefreshResult {
+    const ids = extras.parkedAppIds ?? [];
+    const caller = ids[0];
+    const listed = ids.filter((id) => id !== "home" && id !== "recents");
+    const first = listed[0];
+    const nodeId = first ? `recents:app:${first}` : "recents:empty";
+    const node = {
+      id: tipId && listed.some((id) => `recents:app:${id}` === tipId) ? tipId : nodeId,
+      label: first ?? "empty",
+    };
+    const home = { kind: "app" as const, to: { appId: "home", path: "/" } };
+    const back = caller ? { kind: "resume" as const, appId: caller } : home;
+    const map: Record<string, RefreshResult["navigationMap"][string]> = {
+      "recents:empty": { prev: home, back },
+    };
+    for (let i = 0; i < listed.length; i++) {
+      const id = listed[i]!;
+      const rowId = `recents:app:${id}`;
+      map[rowId] = {
+        enter: { kind: "resume", appId: id },
+        back,
+        prev:
+          i === 0
+            ? home
+            : { kind: "node", toNodeId: `recents:app:${listed[i - 1]!}`, stackBehavior: "replace" },
+      };
+    }
+    return { navigationMap: map, warm: [node], node, location: null };
+  }
+
+  return {
+    calls,
+    app: {
+      id: "recents",
+      label: "Recent apps",
+      open(path, extras = {}) {
+        calls.push({ method: "open", path, extras: { ...extras } });
+        return view(extras);
+      },
+      refresh(stack, extras = {}) {
+        calls.push({ method: "refresh", stack, extras: { ...extras } });
+        return view(extras, stack[stack.length - 1]?.nodeId);
+      },
+    },
+  };
+}
+
 function harness(args?: {
   gate?: () => Promise<void>;
   clipboard?: null | { writeText: (t: string) => Promise<void> };
   resolveApp?: (appId: string) => AppModule | null;
+  recentsAppId?: string;
 }) {
   const root = document.createElement("div");
   document.body.appendChild(root);
@@ -51,6 +102,10 @@ function harness(args?: {
   });
   registry.register(createRootApp("home"));
   registry.register(fake.app);
+  const recents = args?.recentsAppId ? createRecentsStub() : null;
+  if (recents) {
+    registry.register(recents.app);
+  }
 
   const map = new NavigationMapStore();
   const cache = new NodeCache();
@@ -70,7 +125,7 @@ function harness(args?: {
 
   let router!: Router;
   const navigator = new Navigator({
-    config: { rootAppId: "home" },
+    config: { rootAppId: "home", recentsAppId: args?.recentsAppId },
     registry,
     display,
     platform,
@@ -112,6 +167,7 @@ function harness(args?: {
     cache,
     stack,
     fake,
+    recents,
     addressLog,
     externalLog,
     getHash: () => hash,
@@ -1143,5 +1199,129 @@ describe("Router.hrefFor is the only # producer in core open path", () => {
     await h.navigator.openLocation({ appId: "fake", path: "/" });
     expect(spy).toHaveBeenCalled();
     expect(h.getHash().startsWith("#/")).toBe(true);
+  });
+});
+
+describe("Navigator recents / resume", () => {
+  it("recents is a no-op when recentsAppId is unset", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "recents");
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(visibleText(h.root)).toBe("Root");
+  });
+
+  it("intercepts recents, parks the outgoing app, and sends parkedAppIds only to Recents", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "home", path: "/" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "recents");
+    expect(h.navigator.getCurrentAppId()).toBe("recents");
+    expect(visibleText(h.root)).toBe("fake");
+    const recentsOpen = h.recents!.calls.filter((c) => c.method === "open").at(-1);
+    expect(recentsOpen?.extras.parkedAppIds).toEqual(["fake", "home"]);
+    expect(h.fake.calls.every((c) => c.extras.parkedAppIds === undefined)).toBe(true);
+  });
+
+  it("already in Recents, recents is a silent no-op", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "recents");
+    const opens = h.recents!.calls.filter((c) => c.method === "open").length;
+    await intent(h.navigator, "recents");
+    expect(h.recents!.calls.filter((c) => c.method === "open")).toHaveLength(opens);
+    expect(h.navigator.getCurrentAppId()).toBe("recents");
+  });
+
+  it("resume restores the parked stack then refresh, not open", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "enter");
+    expect(visibleText(h.root)).toBe("Child");
+    await intent(h.navigator, "recents");
+    const opensBefore = h.fake.calls.filter((c) => c.method === "open").length;
+    await intent(h.navigator, "enter");
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(visibleText(h.root)).toBe("Child");
+    expect(h.stack.snapshot().map((e) => e.nodeId)).toEqual(["root", "child"]);
+    expect(h.fake.calls.filter((c) => c.method === "open")).toHaveLength(opensBefore);
+    const last = h.fake.calls.at(-1);
+    expect(last?.method).toBe("refresh");
+    expect(last?.extras.parkedAppIds).toBeUndefined();
+  });
+
+  it("Home-fresh open drops the destination park (one stack per app)", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "back");
+    await intent(h.navigator, "back");
+    expect(h.navigator.getCurrentAppId()).toBe("home");
+    await intent(h.navigator, "enter");
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(visibleText(h.root)).toBe("Root");
+    expect(h.stack.snapshot().map((e) => e.nodeId)).toEqual(["root"]);
+    const lastOpen = h.fake.calls.filter((c) => c.method === "open").at(-1);
+    expect(lastOpen?.path).toBe("/");
+  });
+
+  it("stashes input text on park and restores it on resume", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "enter");
+    expect(h.display.getMode()).toBe("input");
+    const field = h.root.querySelector<HTMLTextAreaElement>("textarea[data-surface='input']")!;
+    field.value = "hello\nthere";
+    await intent(h.navigator, "recents");
+    expect(h.navigator.getCurrentAppId()).toBe("recents");
+    await intent(h.navigator, "enter");
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(h.display.getMode()).toBe("input");
+    expect(h.display.getInputText()).toBe("hello\nthere");
+  });
+
+  it("failed cross-app open does not park; the previous session stays", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "home", path: "/" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "enter");
+    const boom: AppModule = {
+      id: "boom",
+      label: "Boom",
+      open: () => {
+        throw new Error("boom");
+      },
+      refresh: () => {
+        throw new Error("boom");
+      },
+    };
+    h.registry.register(boom);
+    h.map.replace({
+      child: {
+        enter: { kind: "app", to: { appId: "boom", path: "/" } },
+      },
+    });
+    await intent(h.navigator, "enter");
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(visibleText(h.root)).toBe("Child");
+    await intent(h.navigator, "recents");
+    expect(h.recents!.calls.at(-1)?.extras.parkedAppIds).toEqual(["fake", "home"]);
+    expect(h.recents!.calls.at(-1)?.extras.parkedAppIds).not.toContain("boom");
+  });
+
+  it("resume with no park opens the destination", async () => {
+    const h = harness({ recentsAppId: "recents" });
+    await h.navigator.openLocation({ appId: "home", path: "/" });
+    h.map.replace({
+      "home-root": {
+        enter: { kind: "resume", appId: "fake" },
+      },
+    });
+    await intent(h.navigator, "enter");
+    expect(h.navigator.getCurrentAppId()).toBe("fake");
+    expect(visibleText(h.root)).toBe("Root");
+    expect(h.fake.calls.filter((c) => c.method === "open").length).toBeGreaterThan(0);
   });
 });

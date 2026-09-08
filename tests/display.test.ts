@@ -43,7 +43,7 @@ describe("Display", () => {
     expect(document.activeElement).toBe(surface);
   });
 
-  it("showInput mounts a textarea with real newlines, Cancel, and Done", () => {
+  it("showInput mounts a textarea with real newlines, Cancel, Done, and Recent apps", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
@@ -62,12 +62,16 @@ describe("Display", () => {
 
     const cancel = root.querySelector("[data-input-action='cancel']");
     const done = root.querySelector("[data-input-action='done']");
+    const recents = root.querySelector("[data-input-action='recents']");
     expect(cancel?.textContent).toBe("Cancel");
     expect(done?.textContent).toBe("Done");
+    expect(recents?.textContent).toBe("Recent apps");
     expect(cancel?.getAttribute("type")).toBe("button");
     expect(done?.getAttribute("type")).toBe("button");
+    expect(recents?.getAttribute("type")).toBe("button");
     expect(input!.compareDocumentPosition(cancel!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(cancel!.compareDocumentPosition(done!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(done!.compareDocumentPosition(recents!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(root.dataset.mode).toBe("input");
     expect(document.body.hasAttribute("data-input-open")).toBe(true);
   });
@@ -103,6 +107,20 @@ describe("Display", () => {
     expect(host.intents).toEqual(["enter", "back"]);
   });
 
+  it("Recent apps click fires recents; focus does not", () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const host = hostMock();
+    const display = new Display(root, host);
+
+    display.showInput("draft");
+    const recents = root.querySelector<HTMLButtonElement>("[data-input-action='recents']")!;
+    recents.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(host.intents).toEqual([]);
+    recents.click();
+    expect(host.intents).toEqual(["recents"]);
+  });
+
   it("action buttons do not fire while blocked", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
@@ -113,6 +131,7 @@ describe("Display", () => {
     host.blocked = true;
     root.querySelector<HTMLButtonElement>("[data-input-action='done']")!.click();
     root.querySelector<HTMLButtonElement>("[data-input-action='cancel']")!.click();
+    root.querySelector<HTMLButtonElement>("[data-input-action='recents']")!.click();
     expect(host.intents).toEqual([]);
   });
 

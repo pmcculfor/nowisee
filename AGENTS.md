@@ -87,14 +87,15 @@ These rows are the scanable form of the locks. The surrounding docs explain why.
 |-------|------|
 | App API | `open(path)` + `refresh(stack, extras)` → navigation map + warm + tip + location |
 | Prefetch | App pushes `warm` + navigation-map edges; core only stores/serves |
-| Navigation map | `(fromNodeId, intent) → node \| app \| external` edge; missing = silent no-op; nested structure, no delimiter |
-| Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes, edge pads, and input Cancel/Done to intents |
+| Navigation map | `(fromNodeId, intent) → node \| app \| external \| resume` edge; missing = silent no-op; nested structure, no delimiter |
+| Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes, edge pads, and input Cancel/Done/Recent apps to intents. Reserved `recents` is intercepted by Navigator (opens `config.recentsAppId`) |
 | Actions | `action: true` on an edge; core sets `extras.action` on that traversal **only**; never re-issues, retries, aborts, or coalesces it; apps run side effects only then |
-| Stack | Per **current app** only; opening a location resets stack |
+| Stack | One **current** stack per session; Navigator parks the previous app's stack on successful cross-app `open`. `kind: "resume"` restores then `refresh`. URL `open` still resets **that** app |
 | Node edge stackBehavior | `push` / `replace` / `pop` (on `pop`, omit `toNodeId`; stack tip wins) |
-| Cross-app / leave app | `app` location edges only; app root `back` **MUST** be an `app` edge to home |
+| Cross-app / leave app | `app` location edges (fresh `open`, drops destination park); `resume` restores a parked stack. App root `back` **MUST** be an `app` edge to home |
 | Home | An `AppModule`, not a core-special UI; identified by `config.rootAppId`, never a core constant |
-| Input leave | Done → `enter`, Cancel → `back`; plain arrows unbound for the caret; **no Escape exit** |
+| Recents | A first-party app (`config.recentsAppId`). Hidden from Home (`homeRole: internal`, `parkable: false`). Navigator intercepts `recents`. Home is parkable but never listed |
+| Input leave | Done → `enter`, Cancel → `back`, Recent apps → `recents`; plain arrows unbound for the caret; **no Escape exit** |
 | Sibling ends | App choice via edges (wrap not mandated) |
 | Dead-end intent | Silent no-op |
 | Status / action aftermath | Stay on node until user navigates; refresh may update text in place |
@@ -108,7 +109,7 @@ These rows are the scanable form of the locks. The surrounding docs explain why.
 | Signed out | `ctx.userId` is `null`; the request still reaches the app; the **app** decides what that means. No `401`, no core redirect, no host gate |
 | Sessions | One per visitor from the first `/api` call. Anonymous **session**, never an anonymous *user* id. Opaque token, only its hash stored, rotated on sign-in |
 | Auth/DB | Identity on the host SQLite file; each app opens its own database. Secret lockbox and generic OAuth broker landed (`ctx.lockbox` / `ctx.oauth`). Tests leave grant lists empty; the running host grants lockbox/OAuth to apps that declare them. Clipboard remains the only platform capability the client provides. See [`docs/STORAGE.md`](docs/STORAGE.md) |
-| Secret input | A `secret` flag on `kind: "input"` (not a new NodeKind). Display renders `type="password"` and honest `autocomplete` tokens. Leave path unchanged: Done → `enter`, Cancel → `back` |
+| Secret input | A `secret` flag on `kind: "input"` (not a new NodeKind). Display renders `type="password"` and honest `autocomplete` tokens. Leave path unchanged: Done → `enter`, Cancel → `back`, Recent apps → `recents` |
 | In development | No backwards compatibility. Existing stored data (users, notes, settings, bookmarks, sessions) need not be preserved across changes. Do not add shims for old clients, old contracts, or old rows. |
 
 ## Mental model
@@ -128,4 +129,4 @@ The product is a frontend SPA (Vanilla TypeScript + Vite) plus a same-origin app
 - **Lint / typecheck:** there is no ESLint/Prettier. `npm run build` runs `tsc -p tsconfig.app.json --noEmit` and `tsc -p tsconfig.node.json --noEmit`, then `vite build`. A "chunks are larger than 500 kB" warning, if it still appears, is not an error. Large corpora stay on the server; see each app’s README for how that app seeds.
 - **Do not drive the running app in a browser.** The owner prefers agents verify with `npm test` (and, if needed, HTTP against `/api`). Browser automation is slow. Humans may still use a browser locally.
 
-Humans using the running app: on a text node, arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter inserts a newline) and activate **Done** (`enter`) or **Cancel** (`back`). Password nodes use a masked field. Tab and Escape stay unbound.
+Humans using the running app: on a text node, arrow keys navigate (Up=prev, Down=next, Right=enter, Left=back). Press **r** for recent apps. The text surface has `role="application"` so those keys reach the page. Invisible edge pads still exist for VoiceOver (right=enter, left=back, top=prev, bottom=next). On an input node, type in the multiline field (Enter inserts a newline) and activate **Done** (`enter`), **Cancel** (`back`), or **Recent apps**. Password nodes use a masked field. Tab and Escape stay unbound.

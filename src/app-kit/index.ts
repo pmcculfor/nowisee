@@ -9,6 +9,7 @@ export {
   edgeExternal,
   edgeNode,
   edgePop,
+  edgeResume,
   type EdgeFlags,
 } from "./edges.ts";
 

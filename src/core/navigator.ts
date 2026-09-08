@@ -5,6 +5,7 @@ import type { PlatformCapabilities } from "./platform.ts";
 import type { AppRegistry } from "./registry.ts";
 import { isCanonicalPath } from "./router.ts";
 import { isRefreshResult } from "./refreshResult.ts";
+import { SessionPark, type ParkedSession } from "./sessionPark.ts";
 import type { Stack } from "./stack.ts";
 import type {
   AppLocation,
@@ -102,6 +103,9 @@ export class Navigator {
     label: string;
   } | null = null;
   private loadRecovery: LoadRecovery | null = null;
+  private readonly park = new SessionPark();
+  /** Snapshot to `put` after a successful cross-app `open`. */
+  private pendingPark: ParkedSession | null = null;
 
   constructor(options: NavigatorOptions) {
     this.config = options.config;
@@ -146,6 +150,12 @@ export class Navigator {
     if (this.loadRecovery) {
       return this.onLoadRecoveryIntent(intent);
     }
+    if (intent === "recents") {
+      const recentsAppId = this.config.recentsAppId;
+      if (recentsAppId && this.currentAppId !== recentsAppId) {
+        return this.openLocation({ appId: recentsAppId, path: "/" });
+      }
+    }
     const tip = this.stack.tip();
     if (!tip) {
       return;
@@ -163,10 +173,10 @@ export class Navigator {
     const extras: RefreshExtras = {};
     const tipPayload = this.cache.get(tip.nodeId);
     const kind = tipPayload?.kind ?? this.tipKind;
-    if (edge.kind !== "external" && edge.passInputText && kind === "input") {
+    if (edge.kind !== "external" && edge.kind !== "resume" && edge.passInputText && kind === "input") {
       extras.inputText = this.display.getInputText();
     }
-    if (edge.kind !== "external" && edge.action) {
+    if (edge.kind !== "external" && edge.kind !== "resume" && edge.action) {
       extras.action = true;
     }
 
@@ -177,6 +187,10 @@ export class Navigator {
       this.preemptReadOnly();
       this.handOffExternal(edge.href);
       return;
+    }
+
+    if (edge.kind === "resume") {
+      return this.resumeApp(edge.appId);
     }
 
     if (edge.kind === "app") {
@@ -205,6 +219,9 @@ export class Navigator {
       return;
     }
 
+    this.pendingPark =
+      this.currentAppId && this.currentAppId !== appId ? this.snapshotCurrent() : null;
+
     this.transitionToken += 1;
     const token = this.transitionToken;
     this.preemptReadOnly();
@@ -216,6 +233,46 @@ export class Navigator {
       invoke: (callExtras) => app.open(path, callExtras),
       baseExtras: extras,
       applyAs: { kind: "open", appId },
+    });
+  }
+
+  private resumeApp(appId: string): void | Promise<void> {
+    const parked = this.park.peek(appId);
+    if (!parked || parked.stack.length === 0) {
+      return this.openLocation({ appId, path: "/" });
+    }
+    const outgoing = this.snapshotCurrent();
+    if (outgoing && outgoing.appId !== appId) {
+      this.park.put(outgoing);
+    }
+    this.park.drop(appId);
+
+    const dest = this.registry.get(appId) ?? this.resolveApp?.(appId) ?? null;
+    if (!dest) {
+      return this.openLocation({ appId: this.config.rootAppId, path: "/" });
+    }
+
+    this.transitionToken += 1;
+    const token = this.transitionToken;
+    this.preemptReadOnly();
+
+    this.currentAppId = appId;
+    this.stack.restore(parked.stack);
+    this.cache.clear();
+    this.map.replace({});
+    this.displayed = null;
+    this.paintParked(parked);
+    this.blocked = true;
+
+    const stackBefore = parked.stack;
+    const previous = this.payloadForParked(parked);
+    return this.startCall({
+      token,
+      isAction: false,
+      invoke: (callExtras) => dest.refresh(this.stack.snapshot(), callExtras),
+      baseExtras: {},
+      applyAs: { kind: "refresh" },
+      enterRecoveryOnFailure: { stackBefore, previous },
     });
   }
 
@@ -495,6 +552,11 @@ export class Navigator {
     } else {
       delete callExtras.action;
     }
+    if (this.shouldSendParkedIds(args.applyAs)) {
+      callExtras.parkedAppIds = this.parkedAppIdsForRecents();
+    } else {
+      delete callExtras.parkedAppIds;
+    }
 
     try {
       const result = await args.invoke(callExtras);
@@ -504,6 +566,7 @@ export class Navigator {
       const settled = await this.fulfillClipboardText(result, args.isAction);
       if (args.token === this.transitionToken) {
         this.applyResult(settled, args.applyAs);
+        this.pendingPark = null;
         this.blocked = false;
       } else if (
         !args.isAction &&
@@ -520,6 +583,7 @@ export class Navigator {
       if (args.enterRecoveryOnFailure) {
         this.enterLoadRecovery(args.enterRecoveryOnFailure);
       }
+      this.pendingPark = null;
       this.blocked = false;
     } finally {
       if (args.isAction) {
@@ -561,6 +625,11 @@ export class Navigator {
   private applyResult(result: RefreshResult, applyAs: ApplyAs): void {
     this.loadRecovery = null;
     if (applyAs.kind === "open") {
+      if (this.pendingPark && this.pendingPark.appId !== applyAs.appId) {
+        this.park.put(this.pendingPark);
+      }
+      this.park.drop(applyAs.appId);
+      this.pendingPark = null;
       this.stack.clear();
       this.cache.clear();
       this.map.replace({});
@@ -605,6 +674,88 @@ export class Navigator {
       this.setAddressBar(result.location);
     }
   }
+
+  private shouldSendParkedIds(applyAs: ApplyAs): boolean {
+    const recentsAppId = this.config.recentsAppId;
+    if (!recentsAppId) {
+      return false;
+    }
+    if (applyAs.kind === "open") {
+      return applyAs.appId === recentsAppId;
+    }
+    return this.currentAppId === recentsAppId;
+  }
+
+  private parkedAppIdsForRecents(): readonly string[] {
+    const ids = this.park.list();
+    const pending = this.pendingPark;
+    if (!pending) {
+      return ids;
+    }
+    return [pending.appId, ...ids.filter((id) => id !== pending.appId)];
+  }
+
+  private snapshotCurrent(): ParkedSession | null {
+    if (!this.currentAppId || this.stack.length === 0) {
+      return null;
+    }
+    const tip = this.stack.tip();
+    const payload = tip ? this.cache.get(tip.nodeId) : null;
+    const session: ParkedSession = {
+      appId: this.currentAppId,
+      stack: this.stack.snapshot(),
+      tipKind: this.tipKind,
+    };
+    if (this.tipKind === "input") {
+      return {
+        ...session,
+        inputText: this.display.getInputText(),
+        secret: payload?.secret,
+        autocomplete: payload?.autocomplete,
+      };
+    }
+    return session;
+  }
+
+  private paintParked(session: ParkedSession): void {
+    const tip = session.stack[session.stack.length - 1];
+    if (!tip) {
+      return;
+    }
+    this.tipKind = session.tipKind;
+    this.displayed = {
+      appId: session.appId,
+      id: tip.nodeId,
+      kind: session.tipKind,
+      label: tip.label,
+    };
+    if (session.tipKind === "input") {
+      this.display.showInput(session.inputText ?? tip.label, {
+        secret: session.secret,
+        autocomplete: session.autocomplete,
+      });
+    } else {
+      this.display.showText(tip.label);
+    }
+    const location = locationFromStack(session.stack);
+    if (location) {
+      this.setAddressBar(location);
+    }
+  }
+
+  private payloadForParked(session: ParkedSession): NodePayload | null {
+    const tip = session.stack[session.stack.length - 1];
+    if (!tip) {
+      return null;
+    }
+    return {
+      id: tip.nodeId,
+      label: tip.label,
+      kind: session.tipKind,
+      secret: session.secret,
+      autocomplete: session.autocomplete,
+    };
+  }
 }
 
 function withStatusLabel(result: RefreshResult, label: string): RefreshResult {
@@ -622,5 +773,18 @@ function isWellFormedEdge(edge: NavEdge): boolean {
   if (edge.kind === "app") {
     return Boolean(edge.to.appId) && isCanonicalPath(edge.to.path);
   }
+  if (edge.kind === "resume") {
+    return edge.appId.length > 0;
+  }
   return edge.href.length > 0;
+}
+
+function locationFromStack(stack: readonly StackEntry[]): AppLocation | null {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const location = stack[i]?.location;
+    if (location) {
+      return location;
+    }
+  }
+  return null;
 }

@@ -67,16 +67,16 @@ Full definitions live in [`src/core/types.ts`](../src/core/types.ts). The names 
 | Name | Role |
 |------|------|
 | `NavIntent` | `prev` / `next` / `enter` / `back`, plus app-defined symbolic intents |
-| `NavEdge` | `node` (push/replace/pop), `app` (`AppLocation`), or `external` (`href`); optional `action`, `passInputText` |
+| `NavEdge` | `node` (push/replace/pop), `app` (`AppLocation`), `resume` (`appId`), or `external` (`href`); optional `action`, `passInputText` |
 | `NavigationMap` | Nested `fromNodeId → intent → edge` (no delimiter) |
 | `NodePayload` | `id`, `label`, optional `kind` (`text` \| `input`), `secret`, `autocomplete`, `data` (`JsonValue`) |
 | `AppLocation` | `{ appId, path }` with `path` starting `/`. Apps never build `#/…` strings |
-| `RefreshExtras` | `inputText`, `action`, `signal` |
+| `RefreshExtras` | `inputText`, `action`, `parkedAppIds`, `signal` |
 | `RefreshResult` | `navigationMap`, `warm`, `node`, `location` (or `null`), optional `clipboardText` |
 | `AppModule` | `open(path, extras, ctx?)` and `refresh(stack, extras, ctx?)` |
 | `AppServerContext` | Server-only: `userId`, `sessionId`, `accountAppId`, optional `identity` / `lockbox` / `oauth` / `directory` |
 | `PlatformContext` | Client-only clipboard (and reserved `announce` / `requestRefresh`, not provided) |
-| `ShellConfig` | `rootAppId`; optional `keyBindings` |
+| `ShellConfig` | `rootAppId`; optional `recentsAppId`, `keyBindings` |
 
 **Display** currently uses the input node’s `label` as the field value, and the accessible name for a generic input is `"Input"`. A later payload field could name the field without changing the value. Do not add that until a slice needs it.
 
@@ -143,7 +143,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. Read-only refreshes coalesce to one in-flight call and one pending; a covering stale result replaces warm and map without moving the tip. A warm miss moves the stack, keeps the previous label, and blocks until a covering or current-token refresh. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
 
-**Display:** text tips use `role="application"`, remount, and focus, with no `aria-live`. Input tips use a textarea or password field plus Cancel/Done (click only). Hide NavPads while input is open.
+**Display:** text tips use `role="application"`, remount, and focus, with no `aria-live`. Input tips use a textarea or password field plus Cancel/Done/Recent apps (click only). Hide NavPads while input is open.
 
 **Keyboard** owns the physical → intent table. By default, plain arrows apply on text tips only.
 
@@ -151,7 +151,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **NodeCache** stores warm payloads, pins stack ids, and clears on app switch.
 
-**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (`{ id, label }`). The host directory bind may attach pack `homeRole` when granting `ctx.directory`.
+**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (`{ id, label }`). The host directory bind may attach pack `homeRole` and `parkable` when granting `ctx.directory`.
 
 **Platform** owns the clipboard write for `clipboardText` during an action.
 
@@ -198,7 +198,8 @@ The root app lives at `#/` (canonical). `#/<rootAppId>` may alias. Other apps ar
 
 Unit-test without the DOM where possible. The list below is the behavior to cover, not a second spec.
 
-- Map lookup; push/replace/pop; pop omits toNodeId; `app` edge clears stack and switches app.
+- Map lookup; push/replace/pop; pop omits toNodeId; `app` edge clears stack and switches app; `resume` restores then refresh.
+- `recents` intent opens the recents app with `parkedAppIds`; Home-fresh drops that app's park.
 - Warm hit vs warm miss (block); warm-miss failure recovery copy; refresh failure clears busy.
 - Transition token: an A → B → A sequence discards the first A's in-flight result.
 - Read-only: one in-flight refresh plus one pending; a covering stale result replaces warm and map without moving the tip. A later read-only intent does not abort the in-flight call. An action call is never aborted.
