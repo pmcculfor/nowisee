@@ -74,14 +74,6 @@ export function optionId(
   return `bible:o:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:${option}`;
 }
 
-export function copyStatusId(versionId: number, ref: CanonRef): string {
-  return `bible:s:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:copy`;
-}
-
-export function bookmarkStatusId(ref: CanonRef): string {
-  return `bible:s:${ref.bookId}:${ref.chapter}:${ref.verse}:bookmark`;
-}
-
 export function verseVersionPickId(versionId: number, ref: CanonRef, targetVersionId: number): string {
   return `bible:vp:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:${targetVersionId}`;
 }
@@ -119,8 +111,6 @@ export type ParsedNode =
   | { kind: "chapter"; version: number; bookId: number; chapter: number }
   | { kind: "verse"; seq: VerseSequence; ref: BibleRef }
   | { kind: "option"; version: number; ref: CanonRef; option: "copy" | "bookmark" | "versions" | "commentary" }
-  | { kind: "copy-status"; version: number; ref: CanonRef }
-  | { kind: "bookmark-status"; ref: CanonRef }
   | { kind: "verse-version-pick"; version: number; ref: CanonRef; targetVersionId: number }
   | { kind: "commentary-list"; version: number; ref: CanonRef }
   | { kind: "commentary-work"; version: number; ref: CanonRef; commentaryId: number }
@@ -228,16 +218,6 @@ export function parseNodeId(id: string): ParsedNode | null {
       ref: canonRef(o[2]!, o[3]!, o[4]!),
       option: o[5] as "copy" | "bookmark" | "versions" | "commentary",
     };
-  }
-
-  const s = new RegExp(`^bible:s:${REF}:copy$`).exec(id);
-  if (s) {
-    return { kind: "copy-status", version: Number(s[1]), ref: canonRef(s[2]!, s[3]!, s[4]!) };
-  }
-
-  const bs = new RegExp(`^bible:s:${CANON}:bookmark$`).exec(id);
-  if (bs) {
-    return { kind: "bookmark-status", ref: canonRef(bs[1]!, bs[2]!, bs[3]!) };
   }
 
   const vp = new RegExp(`^bible:vp:${REF}:(\\d+)$`).exec(id);

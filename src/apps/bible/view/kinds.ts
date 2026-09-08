@@ -3,7 +3,6 @@ import type { AppLocation, NodePayload, RefreshResult } from "../../../core/type
 import { testamentLabel } from "../catalog.ts";
 import { bookPathSegment } from "../canon.ts";
 import {
-  bookmarkStatusId,
   bookmarksEmptyId,
   bookmarksId,
   bookId as bookNodeId,
@@ -11,7 +10,6 @@ import {
   commentaryChunkId,
   commentaryWorkId,
   commentaryListId,
-  copyStatusId,
   optionId,
   searchEmptyId,
   searchId,
@@ -28,12 +26,10 @@ import {
 import { addBookLevel, addChapterLevel, addRootLevel } from "./root.ts";
 import { addBookmarksEmpty } from "./bookmarks.ts";
 import { addCommentaryWorks, commentaryChunkLabel } from "./commentary.ts";
-import { idleCopyStatus } from "./copy.ts";
 import {
   activeVersion,
   addNode,
   bookLabel,
-  slotVerseId,
   verseLocation,
   type ViewSession,
 } from "./helpers.ts";
@@ -138,23 +134,6 @@ function addSearchEmpty(
   const id = searchEmptyId(queryId);
   addNode(payloads, { id, label: emptySearchLabel(query) });
   fragments.push({ [id]: { back: edgePop() } });
-}
-
-function bookmarkIdle(session: ViewSession, parsed: ParsedNode): RefreshResult {
-  const ref = asKind(parsed, "bookmark-status").ref;
-  const statusId = bookmarkStatusId(ref);
-  const verseId = slotVerseId(session.deps.store, ref);
-  const bookmarked =
-    Boolean(session.userId) &&
-    verseId !== null &&
-    session.deps.store.isBookmarked(session.userId!, verseId);
-  const label = bookmarked ? "Bookmarked" : "Bookmark removed";
-  return {
-    navigationMap: { [statusId]: { back: edgePop() } },
-    warm: [{ id: statusId, label }],
-    node: { id: statusId, label },
-    location: null,
-  };
 }
 
 /**
@@ -333,27 +312,6 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
       const n = asKind(parsed, "option");
       addOptionLevel(s, pay, frag, n.version, n.ref);
     },
-  },
-  "copy-status": {
-    version: parsedVersion,
-    location: () => null,
-    payload: (_s, parsed) => {
-      const n = asKind(parsed, "copy-status");
-      return { id: copyStatusId(n.version, n.ref), label: "Copied" };
-    },
-    directView: (_s, parsed) => {
-      const n = asKind(parsed, "copy-status");
-      return idleCopyStatus(n.version, n.ref);
-    },
-  },
-  "bookmark-status": {
-    version: active,
-    location: () => null,
-    payload: (_s, parsed) => {
-      const n = asKind(parsed, "bookmark-status");
-      return { id: bookmarkStatusId(n.ref), label: "Bookmarked" };
-    },
-    directView: (s, parsed) => bookmarkIdle(s, parsed),
   },
   "verse-version-pick": {
     version: parsedVersion,

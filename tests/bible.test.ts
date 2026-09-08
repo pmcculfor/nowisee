@@ -16,13 +16,11 @@ import {
 } from "../src/apps/bible/catalog.ts";
 import {
   bookId,
-  bookmarkStatusId,
   bookmarksEmptyId,
   bookmarksId,
   chapterId,
   commentaryChunkId,
   commentaryWorkId,
-  copyStatusId,
   optionId,
   searchId,
   searchInputId,
@@ -209,7 +207,6 @@ describe("Bible app", () => {
     const ctx = signedIn();
     const verseRef = canon(MAT, 5, 3);
     const option = optionId(KJV, verseRef, "bookmark");
-    const status = bookmarkStatusId(verseRef);
     const menu = await refresh(
       instance,
       [{ nodeId: option, label: "Bookmark", location: null }],
@@ -217,15 +214,26 @@ describe("Bible app", () => {
       ctx,
     );
     expect(menu.node.label).toBe("Bookmark");
-    expect(menu.navigationMap[option]?.enter).toMatchObject({ action: true });
+    expect(menu.navigationMap[option]?.enter).toMatchObject({
+      kind: "node",
+      toNodeId: option,
+      stackBehavior: "replace",
+      action: true,
+    });
 
     const added = await refresh(
       instance,
-      [{ nodeId: status, label: "Saving…", location: null }],
+      [{ nodeId: option, label: "Bookmark", location: null }],
       { action: true },
       ctx,
     );
-    expect(added.node.label).toBe("Bookmarked");
+    expect(added.node.id).toBe(option);
+    expect(added.node.label).toBe("Remove bookmark");
+    expect(added.navigationMap[option]?.next).toEqual({
+      kind: "node",
+      toNodeId: optionId(KJV, verseRef, "copy"),
+      stackBehavior: "replace",
+    });
 
     const list = await instance.open("/bookmarks", {}, ctx);
     expect(list.navigationMap[bookmarksId()]?.enter?.kind).toBe("node");
@@ -247,8 +255,14 @@ describe("Bible app", () => {
     );
     expect(first.navigationMap[first.node.id]?.next).toBeUndefined();
 
-    const removed = await refresh(instance, [{ nodeId: status, label: "Bookmarked", location: null }], { action: true }, ctx);
-    expect(removed.node.label).toBe("Bookmark removed");
+    const removed = await refresh(
+      instance,
+      [{ nodeId: option, label: "Remove bookmark", location: null }],
+      { action: true },
+      ctx,
+    );
+    expect(removed.node.id).toBe(option);
+    expect(removed.node.label).toBe("Bookmark");
     const empty = await refresh(
       instance,
       [{ nodeId: bookmarksEmptyId(), label: "No bookmarks yet.", location: null }],
@@ -556,7 +570,6 @@ describe("Bible app", () => {
   it("Copy action returns clipboardText with version, book, and chapter", async () => {
     const instance = bible();
     const verseRef = ref(GEN, 1, 1);
-    const statusId = copyStatusId(KJV, verseRef);
     const copyId = optionId(KJV, verseRef, "copy");
 
     const verse = await instance.open("/kjv/Genesis/1/1", {}, signedOut());
@@ -564,32 +577,44 @@ describe("Bible app", () => {
       "1. In the beginning God created the heaven and the earth.",
     );
 
-    await refresh(instance, [{ nodeId: copyId, label: "Copy", location: null }]);
+    const menu = await refresh(instance, [{ nodeId: copyId, label: "Copy", location: null }]);
+    expect(menu.navigationMap[copyId]?.enter).toMatchObject({
+      kind: "node",
+      toNodeId: copyId,
+      stackBehavior: "replace",
+      action: true,
+    });
 
     const copied = await refresh(
       instance,
-      [
-        { nodeId: copyId, label: "Copy", location: null },
-        { nodeId: statusId, label: "Copying…", location: null },
-      ],
+      [{ nodeId: copyId, label: "Copy", location: null }],
       { action: true },
     );
+    expect(copied.node.id).toBe(copyId);
     expect(copied.node.label).toBe("Copied");
-    expect(copied.location).toBeNull();
+    expect(copied.location).toEqual({ appId: "bible", path: "/kjv/Genesis/1/1" });
     expect(copied.clipboardText).toBe(
       "King James Version. Genesis 1:1. In the beginning God created the heaven and the earth.",
     );
+    expect(copied.navigationMap[copyId]?.next).toEqual({
+      kind: "node",
+      toNodeId: optionId(KJV, verseRef, "versions"),
+      stackBehavior: "replace",
+    });
 
-    const idle = await refresh(instance, [{ nodeId: statusId, label: "Copied", location: null }]);
+    const idle = await refresh(instance, [{ nodeId: copyId, label: "Copied", location: null }]);
+    expect(idle.node.label).toBe("Copy");
     expect(idle.clipboardText).toBeUndefined();
   });
 
   it("Copy without a verse line does not ask the client to copy", async () => {
+    const copyId = optionId(KJV, canon(999, 1, 1), "copy");
     const result = await refresh(
       bible(),
-      [{ nodeId: copyStatusId(KJV, canon(999, 1, 1)), label: "Copying…", location: null }],
+      [{ nodeId: copyId, label: "Copy", location: null }],
       { action: true },
     );
+    expect(result.node.id).toBe(copyId);
     expect(result.node.label).toContain("verse not found");
     expect(result.clipboardText).toBeUndefined();
   });
@@ -750,7 +775,7 @@ describe("Bible packaging", () => {
 
     await refresh(
       bible(),
-      [{ nodeId: copyStatusId(KJV, canon(GEN, 1, 1)), label: "Copying…", location: null }],
+      [{ nodeId: optionId(KJV, canon(GEN, 1, 1), "copy"), label: "Copy", location: null }],
       { action: true },
     );
     expect(clipboardGetter).not.toHaveBeenCalled();

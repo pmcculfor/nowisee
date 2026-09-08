@@ -6,13 +6,12 @@ import type {
   RefreshResult,
 } from "../../../core/types.ts";
 import {
-  bookmarkStatusId,
   parseNodeId,
   searchEmptyId,
   verseNodeId,
 } from "../ids.ts";
 import type { CanonRef } from "../types.ts";
-import { resolveCopyStatus } from "./copy.ts";
+import { resolveCopy } from "./copy.ts";
 import {
   activeVersion,
   addNode,
@@ -20,6 +19,7 @@ import {
   touchCommentaryRecency,
   touchVersionRecency,
   viewSession,
+  withTipLabel,
   type BibleViewDeps,
   type ViewSession,
 } from "./helpers.ts";
@@ -79,11 +79,11 @@ function applyAction(session: ViewSession, tipId: string): RefreshResult | null 
   if (!parsed) {
     return null;
   }
-  if (parsed.kind === "copy-status") {
-    return resolveCopyStatus(session, parsed.version, parsed.ref);
+  if (parsed.kind === "option" && parsed.option === "copy") {
+    return resolveCopy(session, parsed.version, parsed.ref, buildBibleView(session, tipId));
   }
-  if (parsed.kind === "bookmark-status") {
-    return applyBookmarkToggle(session, parsed.ref);
+  if (parsed.kind === "option" && parsed.option === "bookmark") {
+    return applyBookmarkToggle(session, parsed.ref, tipId);
   }
   if (parsed.kind === "search-working") {
     return applySearch(session);
@@ -95,28 +95,16 @@ function applyAction(session: ViewSession, tipId: string): RefreshResult | null 
   return null;
 }
 
-function applyBookmarkToggle(session: ViewSession, ref: CanonRef): RefreshResult {
-  const statusId = bookmarkStatusId(ref);
+function applyBookmarkToggle(session: ViewSession, ref: CanonRef, tipId: string): RefreshResult {
   if (!session.userId) {
     return signInResult(session, { appId: session.deps.appId, path: "/bookmarks" });
   }
   const verseId = slotVerseId(session.deps.store, ref);
   if (verseId === null) {
-    return {
-      navigationMap: { [statusId]: { back: edgePop() } },
-      warm: [{ id: statusId, label: "Bookmark failed: verse not found." }],
-      node: { id: statusId, label: "Bookmark failed: verse not found." },
-      location: null,
-    };
+    return withTipLabel(buildBibleView(session, tipId), "Bookmark failed: verse not found.");
   }
-  const result = session.deps.store.toggleBookmark(session.userId, verseId);
-  const label = result === "added" ? "Bookmarked" : "Bookmark removed";
-  return {
-    navigationMap: { [statusId]: { back: edgePop() } },
-    warm: [{ id: statusId, label }],
-    node: { id: statusId, label },
-    location: null,
-  };
+  session.deps.store.toggleBookmark(session.userId, verseId);
+  return buildBibleView(session, tipId);
 }
 
 function applySearch(session: ViewSession): RefreshResult {

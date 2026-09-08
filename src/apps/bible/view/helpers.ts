@@ -1,4 +1,10 @@
-import type { AppLocation, AppServerContext, NodePayload, RefreshExtras } from "../../../core/types.ts";
+import type {
+  AppLocation,
+  AppServerContext,
+  NodePayload,
+  RefreshExtras,
+  RefreshResult,
+} from "../../../core/types.ts";
 import { bookPathSegment } from "../canon.ts";
 import type { BibleStore, BibleVersion, CanonRef } from "../types.ts";
 
@@ -53,6 +59,14 @@ export function activeVersion(session: ViewSession, pathSlug?: string | null): B
 
 export function addNode(payloads: Map<string, NodePayload>, node: NodePayload): void {
   payloads.set(node.id, node);
+}
+
+export function withTipLabel(result: RefreshResult, label: string): RefreshResult {
+  return {
+    ...result,
+    node: { ...result.node, label },
+    warm: result.warm.map((n) => (n.id === result.node.id ? { ...n, label } : n)),
+  };
 }
 
 export function bookLabel(store: BibleStore, bookId: number): string {

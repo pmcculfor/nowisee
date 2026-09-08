@@ -17,11 +17,9 @@ import {
   verseRefLabel,
 } from "../canon.ts";
 import {
-  bookmarkStatusId,
   chapterId,
   commentaryListId,
   commentaryWorkId,
-  copyStatusId,
   optionId,
   searchLimitedId,
   signInId,
@@ -244,7 +242,7 @@ export function addOptionLevel(
   }
 }
 
-export function addOptionPayloads(
+function addOptionPayloads(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   versionId: number,
@@ -265,13 +263,13 @@ export function optionEnter(
   option: "copy" | "bookmark" | "versions" | "commentary",
 ) {
   if (option === "copy") {
-    return edgeAction(copyStatusId(versionId, ref));
+    return edgeAction(optionId(versionId, ref, "copy"), { stackBehavior: "replace" });
   }
   if (option === "bookmark") {
     if (!session.userId) {
       return edgeNode(signInId(), "push");
     }
-    return edgeAction(bookmarkStatusId(ref));
+    return edgeAction(optionId(versionId, ref, "bookmark"), { stackBehavior: "replace" });
   }
   if (option === "versions") {
     const firstVersion = listedVersions(session)[0];
