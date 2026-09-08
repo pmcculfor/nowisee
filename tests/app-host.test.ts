@@ -75,8 +75,9 @@ describe("app host", () => {
       appId: "notes",
     });
     expect(result.navigationMap[result.node.id]?.prev).toEqual({
-      kind: "app",
-      to: { appId: "home", path: "/" },
+      kind: "node",
+      toNodeId: "recents:home",
+      stackBehavior: "replace",
     });
     expect(result.navigationMap[result.node.id]?.back).toEqual({
       kind: "resume",

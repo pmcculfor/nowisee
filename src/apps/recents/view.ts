@@ -9,7 +9,7 @@ import type {
   RefreshResult,
   StackEntry,
 } from "../../core/types.ts";
-import { appRowId, EMPTY_NODE_ID } from "./ids.ts";
+import { appRowId, EMPTY_NODE_ID, HOME_NODE_ID } from "./ids.ts";
 
 export type RecentsViewDeps = {
   readonly rootAppId: string;
@@ -82,6 +82,7 @@ function listedApps(
 function payloadsFor(rows: readonly AppDescriptor[]): Map<string, NodePayload> {
   const payloads = new Map<string, NodePayload>();
   payloads.set(EMPTY_NODE_ID, { id: EMPTY_NODE_ID, label: EMPTY_LABEL });
+  payloads.set(HOME_NODE_ID, { id: HOME_NODE_ID, label: "Home" });
   for (const app of rows) {
     const id = appRowId(app.id);
     payloads.set(id, { id, label: app.label });
@@ -94,17 +95,25 @@ function recentsMap(
   rows: readonly AppDescriptor[],
   callerId: string | undefined,
 ): NavigationMap {
-  const home = edgeApp({ appId: deps.rootAppId, path: "/" });
-  const back: NavEdge = callerId ? edgeResume(callerId) : home;
+  const openHome = edgeApp({ appId: deps.rootAppId, path: "/" });
+  const back: NavEdge = callerId ? edgeResume(callerId) : openHome;
+  const homeRow = edgeNode(HOME_NODE_ID, "replace");
+  const belowHome = rows.length > 0 ? edgeNode(appRowId(rows[0]!.id), "replace") : edgeNode(EMPTY_NODE_ID, "replace");
+
+  const fragment: Record<string, MapFragment[string]> = {
+    [HOME_NODE_ID]: {
+      enter: openHome,
+      back,
+      next: belowHome,
+    },
+  };
 
   if (rows.length === 0) {
-    return buildMap({
-      [EMPTY_NODE_ID]: { prev: home, back },
-    });
+    fragment[EMPTY_NODE_ID] = { prev: homeRow, back };
+    return buildMap(fragment);
   }
 
   const ids = rows.map((row) => appRowId(row.id));
-  const fragment: Record<string, MapFragment[string]> = {};
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
     const id = ids[i]!;
@@ -113,7 +122,7 @@ function recentsMap(
       back,
     };
     if (i === 0) {
-      edges.prev = home;
+      edges.prev = homeRow;
     } else {
       edges.prev = edgeNode(ids[i - 1]!, "replace");
     }

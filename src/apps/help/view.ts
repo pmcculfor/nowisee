@@ -49,7 +49,7 @@ const ITEM4_LABEL = [
 const RECENTS_LABEL = [
   "Press the r key on a text screen to open recent apps.",
   "On an input screen, find the Recent apps button next to Cancel and Done.",
-  "In that list, navigate up from the first app to go Home, or navigate right to return to an app where you left it.",
+  "In that list, navigate up from the first app to Home, then right to enter. Navigate right on an app to return where you left it.",
   "Navigate right to continue.",
 ].join(" ");
 
