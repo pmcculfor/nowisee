@@ -128,8 +128,6 @@ function recentsMap(
     }
     if (i < ids.length - 1) {
       edges.next = edgeNode(ids[i + 1]!, "replace");
-    } else if (ids.length > 1) {
-      edges.next = edgeNode(ids[0]!, "replace");
     }
     fragment[id] = edges;
   }

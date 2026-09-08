@@ -76,11 +76,7 @@ describe("Recents app", () => {
       toNodeId: notesId,
       stackBehavior: "replace",
     });
-    expect(result.navigationMap[bibleId]?.next).toEqual({
-      kind: "node",
-      toNodeId: notesId,
-      stackBehavior: "replace",
-    });
+    expect(result.navigationMap[bibleId]?.next).toBeUndefined();
     expect(result.navigationMap[notesId]?.next).toEqual({
       kind: "node",
       toNodeId: bibleId,
