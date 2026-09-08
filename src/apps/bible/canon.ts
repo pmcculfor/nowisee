@@ -1,7 +1,7 @@
-import { getCanonBook, resolveBookToken } from "./catalog.ts";
-import type { BibleRef, CanonRef } from "./types.ts";
+import { resolveBookToken } from "./catalog.ts";
+import type { CanonRef } from "./types.ts";
 
-export function formatRef(bookLabel: string, ref: CanonRef | BibleRef): string {
+export function formatRef(bookLabel: string, ref: CanonRef): string {
   return `${bookLabel} ${ref.chapter}:${ref.verse}`;
 }
 
@@ -24,9 +24,12 @@ export function verseRefLabel(bookLabel: string, ref: CanonRef, text: string): s
   return `${formatRef(bookLabel, ref)}. ${text}`;
 }
 
-export function bookPathSegment(bookId: string): string {
-  const book = getCanonBook(bookId);
-  return encodeURIComponent(book?.label ?? bookId);
+export function missingVerseLabel(bookLabel: string, ref: CanonRef, versionLabel: string): string {
+  return `${formatRef(bookLabel, ref)} is not in ${versionLabel}.`;
+}
+
+export function bookPathSegment(label: string): string {
+  return encodeURIComponent(label);
 }
 
 export function decodeBookSegment(segment: string): string | null {
@@ -37,10 +40,10 @@ export function decodeBookSegment(segment: string): string | null {
   }
 }
 
-export function bookIdFromPathSegment(segment: string): string | null {
+export function bookSortFromPathSegment(segment: string): number | null {
   const decoded = decodeBookSegment(segment);
   if (decoded === null) {
     return null;
   }
-  return resolveBookToken(decoded)?.id ?? null;
+  return resolveBookToken(decoded)?.sort ?? null;
 }

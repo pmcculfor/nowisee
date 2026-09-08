@@ -1,5 +1,5 @@
 import { ROOT_ITEMS } from "../catalog.ts";
-import { bookIdFromPathSegment } from "../canon.ts";
+import { bookSortFromPathSegment } from "../canon.ts";
 import {
   bookId as bookNodeId,
   bookmarksId,
@@ -8,8 +8,7 @@ import {
   testamentId,
   verseNodeId,
 } from "../ids.ts";
-import type { BibleStore } from "../types.ts";
-import { activeVersion, clampVerse, type ViewSession } from "./helpers.ts";
+import { activeVersion, type ViewSession } from "./helpers.ts";
 
 export function parseBiblePath(session: ViewSession, path: string): string {
   const store = session.deps.store;
@@ -21,59 +20,60 @@ export function parseBiblePath(session: ViewSession, path: string): string {
     return searchId();
   }
 
-  const pathVersion = parts[0] && store.getVersion(parts[0]) ? parts[0] : null;
-  const version = activeVersion(session, pathVersion);
+  const pathSlug = parts[0] && store.getVersionBySlug(parts[0]) ? parts[0] : null;
+  const version = activeVersion(session, pathSlug);
   if (!version) {
     return emptyId();
   }
 
-  if (!pathVersion) {
-    return firstRootTip(store, version);
+  if (!pathSlug) {
+    return firstRootTip(store, version.id);
   }
   if (parts.length === 1) {
-    return firstRootTip(store, version);
+    return firstRootTip(store, version.id);
   }
 
-  const bookId = bookIdFromPathSegment(parts[1]!);
-  if (!bookId) {
-    return firstRootTip(store, version);
+  const sort = bookSortFromPathSegment(parts[1]!);
+  if (sort === null) {
+    return firstRootTip(store, version.id);
   }
-  const book = store.getBook(version, bookId);
+  const book = store.getBookBySort(sort);
   if (!book) {
-    return firstRootTip(store, version);
+    return firstRootTip(store, version.id);
   }
   if (parts.length === 2) {
-    return bookNodeId(version, book.bookId);
+    return bookNodeId(version.id, book.id);
   }
 
-  const chapter = Number(parts[2]);
-  if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount) {
-    return bookNodeId(version, book.bookId);
+  const chapterNumber = Number(parts[2]);
+  const chapter = store.getChapter(book.id, chapterNumber);
+  if (!Number.isInteger(chapterNumber) || !chapter) {
+    return bookNodeId(version.id, book.id);
   }
   if (parts.length === 3) {
-    return chapterId(version, book.bookId, chapter);
+    return chapterId(version.id, book.id, chapter.number);
   }
 
-  const verse = Number(parts[3]);
-  if (!Number.isInteger(verse) || verse < 1) {
-    return chapterId(version, book.bookId, chapter);
+  const verseNumber = Number(parts[3]);
+  if (!Number.isInteger(verseNumber) || verseNumber < 1) {
+    return chapterId(version.id, book.id, chapter.number);
   }
-  const clamped = clampVerse(store, version, book.bookId, chapter, verse);
-  if (!clamped) {
-    return chapterId(version, book.bookId, chapter);
+  const slot = store.getVerseSlot(book.id, chapter.number, verseNumber);
+  if (!slot) {
+    return chapterId(version.id, book.id, chapter.number);
   }
   return verseNodeId(
-    { type: "chapter", versionId: version, bookId: book.bookId, chapter },
-    clamped,
+    { type: "chapter", versionId: version.id, bookId: book.id, chapter: chapter.number },
+    { bookId: book.id, chapter: chapter.number, verse: slot.number },
   );
 }
 
-function firstRootTip(store: BibleStore, version: string): string {
+function firstRootTip(store: ViewSession["deps"]["store"], versionId: number): string {
   for (const item of ROOT_ITEMS) {
     if (item.type === "testament") {
-      const books = store.listBooks(version, item.testament);
+      const books = store.listBooks(item.testament);
       if (books.length > 0) {
-        return testamentId(version, item.testament);
+        return testamentId(versionId, item.testament);
       }
     }
   }

@@ -1,7 +1,6 @@
 import type { AppLocation, AppServerContext, NodePayload, RefreshExtras } from "../../../core/types.ts";
-import { getCanonBook, type RecencyWorkKind } from "../catalog.ts";
 import { bookPathSegment } from "../canon.ts";
-import type { BibleRef, BibleStore, CanonRef, RecencyOwner } from "../types.ts";
+import type { BibleStore, BibleVersion, CanonRef } from "../types.ts";
 
 export type BibleViewDeps = {
   readonly store: BibleStore;
@@ -31,87 +30,64 @@ export function viewSession(
   };
 }
 
-export function activeVersion(session: ViewSession, pathVersion?: string | null): string | null {
+export function activeVersion(session: ViewSession, pathSlug?: string | null): BibleVersion | null {
   const store = session.deps.store;
-  if (pathVersion && store.getVersion(pathVersion)) {
-    return pathVersion;
+  if (pathSlug) {
+    const fromPath = store.getVersionBySlug(pathSlug);
+    if (fromPath) {
+      return fromPath;
+    }
   }
   if (session.userId) {
     const pref = store.getActiveVersionId(session.userId);
-    if (pref && store.getVersion(pref)) {
-      return pref;
+    if (pref !== null) {
+      const fromPref = store.getVersion(pref);
+      if (fromPref) {
+        return fromPref;
+      }
     }
   }
-  return store.defaultVersionId();
+  const defaultId = store.defaultVersionId();
+  return defaultId === null ? null : (store.getVersion(defaultId) ?? null);
 }
 
 export function addNode(payloads: Map<string, NodePayload>, node: NodePayload): void {
   payloads.set(node.id, node);
 }
 
-export function bookLabel(store: BibleStore, version: string, bookId: string): string {
-  return store.getBook(version, bookId)?.name ?? getCanonBook(bookId)?.label ?? bookId;
+export function bookLabel(store: BibleStore, bookId: number): string {
+  return store.getBook(bookId)?.label ?? String(bookId);
 }
 
-export function verseLocation(appId: string, version: string, ref: CanonRef): AppLocation {
+export function verseLocation(appId: string, slug: string, bookLabelText: string, ref: CanonRef): AppLocation {
   return {
     appId,
-    path: `/${version}/${bookPathSegment(ref.bookId)}/${ref.chapter}/${ref.verse}`,
+    path: `/${slug}/${bookPathSegment(bookLabelText)}/${ref.chapter}/${ref.verse}`,
   };
 }
 
-export function clampVerse(
-  store: BibleStore,
-  version: string,
-  bookId: string,
-  chapter: number,
-  verse: number,
-): BibleRef | null {
-  const book = store.getBook(version, bookId);
-  if (!book) {
-    return null;
-  }
-  const last = store.lastVerse(version, bookId, chapter);
-  if (last < 1) {
-    return null;
-  }
-  const clamped = Math.min(Math.max(verse, 1), last);
-  return { version, bookId, chapter, verse: clamped };
-}
-
-export function displayedVerse(store: BibleStore, version: string, ref: CanonRef): BibleRef {
-  return (
-    clampVerse(store, version, ref.bookId, ref.chapter, ref.verse) ?? {
-      version,
-      bookId: ref.bookId,
-      chapter: ref.chapter,
-      verse: ref.verse,
-    }
-  );
-}
-
-export function recencyOwner(session: ViewSession): RecencyOwner | null {
-  if (session.userId) {
-    return { kind: "user", id: session.userId };
-  }
-  if (session.sessionId) {
-    return { kind: "session", id: session.sessionId };
-  }
-  return null;
-}
-
 export function listedVersions(session: ViewSession) {
-  return session.deps.store.listVersions(recencyOwner(session));
+  return session.deps.store.listVersions(session.userId);
 }
 
 export function listedCommentaries(session: ViewSession) {
-  return session.deps.store.listCommentaries(recencyOwner(session));
+  return session.deps.store.listCommentaries(session.userId);
 }
 
-export function touchRecency(session: ViewSession, workKind: RecencyWorkKind, workId: string): void {
-  const owner = recencyOwner(session);
-  if (!owner) {
+export function touchVersionRecency(session: ViewSession, versionId: number): void {
+  if (!session.userId) {
     return;
   }
-  session.deps.store.touchRecency(owner, workKind, workId);
+  session.deps.store.touchVersionRecency(session.userId, versionId);
+}
+
+export function touchCommentaryRecency(session: ViewSession, commentaryId: number): void {
+  if (!session.userId) {
+    return;
+  }
+  session.deps.store.touchCommentaryRecency(session.userId, commentaryId);
+}
+
+export function slotVerseId(store: BibleStore, ref: CanonRef): number | null {
+  return store.getVerseSlot(ref.bookId, ref.chapter, ref.verse)?.id ?? null;
 }

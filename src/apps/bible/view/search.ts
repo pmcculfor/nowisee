@@ -3,7 +3,8 @@ import type { NodePayload } from "../../../core/types.ts";
 import { SEARCH_POLICY } from "../catalog.ts";
 import { searchId, searchInputId, searchWorkingId } from "../ids.ts";
 import { tokenize } from "../search.ts";
-import { addNode, displayedVerse, type ViewSession } from "./helpers.ts";
+import type { SearchHit } from "../types.ts";
+import { addNode, type ViewSession } from "./helpers.ts";
 
 export function addSearchInput(
   payloads: Map<string, NodePayload>,
@@ -22,14 +23,12 @@ export function addSearchInput(
   );
 }
 
-export function searchHits(session: ViewSession, version: string, query: string) {
+export function searchHits(session: ViewSession, versionId: number, query: string): readonly SearchHit[] {
   const tokens = tokenize(query);
   if (tokens.length === 0) {
     return [];
   }
-  return session.deps.store
-    .searchVerses(version, tokens, SEARCH_POLICY.maxHits)
-    .map((hit) => displayedVerse(session.deps.store, version, hit));
+  return session.deps.store.searchVerses(versionId, tokens, SEARCH_POLICY.maxHits);
 }
 
 export function emptySearchLabel(query: string): string {

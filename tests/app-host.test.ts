@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { catalogVersionId, VERSION_RECORDS, getCanonBook } from "../src/apps/bible/catalog.ts";
+import { copyStatusId } from "../src/apps/bible/ids.ts";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
@@ -57,7 +59,17 @@ describe("app host", () => {
   it("Copy action returns clipboardText without needing a clipboard on extras", async () => {
     const result = await host().refresh(
       "bible",
-      [{ nodeId: "bible:s:kjv:GEN:1:1:copy", label: "Copying…", location: null }],
+      [
+        {
+          nodeId: copyStatusId(catalogVersionId(VERSION_RECORDS[0]!), {
+            bookId: getCanonBook("GEN")!.sort,
+            chapter: 1,
+            verse: 1,
+          }),
+          label: "Copying…",
+          location: null,
+        },
+      ],
       { action: true },
     );
     expect(result.node.label).toBe("Copied");
