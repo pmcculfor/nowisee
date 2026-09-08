@@ -11,8 +11,9 @@
  * `aria-label`, NVDA announces only "application" and never the node text
  * (the spike that *did* speak used an inner live region; we name the widget
  * with the label instead so we do not put `aria-live` on the focused surface).
- * Input tips are a native `<textarea>` (Enter = newline) plus Cancel (`back`)
- * and Done (`enter`) buttons. Those buttons fire on click only — never on focus.
+ * Input tips are a native `<textarea>` (Enter = newline) plus Cancel (`back`),
+ * Done (`enter`), and Recent apps (`recents`) buttons. Those buttons fire on
+ * click only — never on focus.
  */
 
 import type { InputAutocomplete, NavIntent } from "./types.ts";
@@ -105,7 +106,8 @@ export class Display {
     actions.dataset.inputActions = "";
     const cancel = makeActionButton("cancel", "Cancel");
     const done = makeActionButton("done", "Done");
-    actions.append(cancel, done);
+    const recents = makeActionButton("recents", "Recent apps");
+    actions.append(cancel, done, recents);
 
     this.root.append(input, actions);
     this.inputEl = input;
@@ -116,6 +118,9 @@ export class Display {
     });
     done.addEventListener("click", () => {
       this.fireIntent("enter");
+    });
+    recents.addEventListener("click", () => {
+      this.fireIntent("recents");
     });
 
     input.focus();
@@ -164,7 +169,7 @@ function ariaLabelFor(secret: boolean, autocomplete: InputAutocomplete): string 
 }
 
 function makeActionButton(
-  action: "cancel" | "done",
+  action: "cancel" | "done" | "recents",
   label: string,
 ): HTMLButtonElement {
   const button = document.createElement("button");

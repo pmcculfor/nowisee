@@ -12,8 +12,9 @@ export interface KeyEventLike {
 /**
  * Defaults from MODULES §9.
  * Plain arrows navigate on text tips (`role="application"`). They are unbound
- * on input tips so the caret keeps them. Escape and Tab are never bound.
- * Leave an input via Cancel / Done, not a chord.
+ * on input tips so the caret keeps them. The `r` key opens recents on text
+ * tips only. Escape and Tab are never bound. Leave an input via Cancel / Done
+ * / Recent apps, not a chord.
  */
 export function defaultKeyBindings(): readonly KeyBinding[] {
   return [
@@ -21,6 +22,7 @@ export function defaultKeyBindings(): readonly KeyBinding[] {
     { intent: "next", key: "ArrowDown", whenTip: "text" },
     { intent: "enter", key: "ArrowRight", whenTip: "text" },
     { intent: "back", key: "ArrowLeft", whenTip: "text" },
+    { intent: "recents", key: "r", whenTip: "text" },
   ];
 }
 

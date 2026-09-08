@@ -7,6 +7,7 @@ export const HELP_APP_LABEL =
 export const NODE = {
   welcome: "help:welcome",
   backPractice: "help:back-practice",
+  recents: "help:recents",
   item1: "help:item-1",
   item2: "help:item-2",
   item3: "help:item-3",

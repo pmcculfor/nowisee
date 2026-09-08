@@ -13,7 +13,7 @@ The expensive bets are already in place. They exist so that app number fifty, a 
 - **Apps answer `open` / `refresh`.** Core never computes the next node id. A new app is a module plus a pack row.
 - **Intents, not keystrokes, in app data.** Remapping, right-to-left locales, VoiceOver pads, and a native gesture layer are all one binding table in core.
 - **Message-shaped boundary.** Stack, map, and payloads are plain data. That is what makes a later sandbox — a worker, an iframe, or a server — the same protocol over a different transport. It is a discipline today, not isolation yet.
-- **Per-app stack; Home is an app.** Histories do not mix products. Core identifies Home only as `config.rootAppId`.
+- **Per-app stack; Home is an app.** Histories do not mix products. Core identifies Home only as `config.rootAppId`. Recents restores parked stacks; catalog launch still resets that app.
 - **App-owned stores; host-owned identity.** Core has no database. `ctx.userId` comes from the session cookie. Secrets such as OAuth tokens sit in the host lockbox, not in an app file and not in a `RefreshResult`.
 
 Rapid keys stay local because of the navigation map plus the warm cache. Do not move Navigator or first-party apps onto the server just to add a feature that the cache already covers.

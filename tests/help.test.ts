@@ -29,8 +29,17 @@ describe("Help app", () => {
     });
     expect(result.navigationMap[NODE.backPractice]?.enter).toEqual({
       kind: "node",
+      toNodeId: NODE.recents,
+      stackBehavior: "push",
+    });
+    expect(result.navigationMap[NODE.recents]?.enter).toEqual({
+      kind: "node",
       toNodeId: NODE.item1,
       stackBehavior: "push",
+    });
+    expect(result.navigationMap[NODE.recents]?.back).toEqual({
+      kind: "node",
+      stackBehavior: "pop",
     });
     expect(result.navigationMap[NODE.backPractice]?.back).toEqual({
       kind: "node",
@@ -86,5 +95,13 @@ describe("Help app", () => {
     ) as RefreshResult;
     expect(typed.node.label).toContain('You typed "hello".');
     expect(typed.node.label).toContain("home screen");
+  });
+
+  it("recents node teaches r and the Recent apps button", () => {
+    const result = help().open("/recents") as RefreshResult;
+    expect(result.node.id).toBe(NODE.recents);
+    expect(result.node.label).toMatch(/r key/i);
+    expect(result.node.label).toMatch(/Recent apps/);
+    expect(result.location).toEqual({ appId: "help", path: "/recents" });
   });
 });

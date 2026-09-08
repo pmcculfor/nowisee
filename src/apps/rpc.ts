@@ -6,6 +6,7 @@ import type { RefreshExtras, RefreshResult, StackEntry } from "../core/types.ts"
 export type WireExtras = {
   readonly inputText?: string;
   readonly action?: boolean;
+  readonly parkedAppIds?: readonly string[];
 };
 
 export type AppRpc = {
@@ -24,12 +25,15 @@ export type AppRpc = {
 };
 
 export function toWireExtras(extras: RefreshExtras): WireExtras {
-  const wire: { inputText?: string; action?: boolean } = {};
+  const wire: { inputText?: string; action?: boolean; parkedAppIds?: readonly string[] } = {};
   if (extras.inputText !== undefined) {
     wire.inputText = extras.inputText;
   }
   if (extras.action) {
     wire.action = true;
+  }
+  if (extras.parkedAppIds) {
+    wire.parkedAppIds = extras.parkedAppIds;
   }
   return wire;
 }

@@ -90,8 +90,8 @@ function parseExtras(
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, error: "extras must be an object" };
   }
-  const rec = value as { inputText?: unknown; action?: unknown };
-  const extras: { inputText?: string; action?: boolean } = {};
+  const rec = value as { inputText?: unknown; action?: unknown; parkedAppIds?: unknown };
+  const extras: { inputText?: string; action?: boolean; parkedAppIds?: readonly string[] } = {};
   if (rec.inputText !== undefined) {
     if (typeof rec.inputText !== "string") {
       return { ok: false, error: "extras.inputText must be a string" };
@@ -103,6 +103,12 @@ function parseExtras(
       return { ok: false, error: "extras.action must be true when present" };
     }
     extras.action = true;
+  }
+  if (rec.parkedAppIds !== undefined) {
+    if (!Array.isArray(rec.parkedAppIds) || !rec.parkedAppIds.every((id) => typeof id === "string")) {
+      return { ok: false, error: "extras.parkedAppIds must be an array of strings" };
+    }
+    extras.parkedAppIds = rec.parkedAppIds;
   }
   return { ok: true, extras };
 }

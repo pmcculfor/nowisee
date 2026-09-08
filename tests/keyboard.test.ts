@@ -47,6 +47,13 @@ describe("resolveIntent / defaultKeyBindings", () => {
     expect(resolveIntent(key("ArrowDown", chord), "text", bindings)).toBeUndefined();
   });
 
+  it("maps r to recents on text tips and leaves it unbound on input", () => {
+    expect(resolveIntent(key("r"), "text", bindings)).toBe("recents");
+    expect(resolveIntent(key("r"), "input", bindings)).toBeUndefined();
+    expect(resolveIntent(key("r", { shiftKey: true }), "text", bindings)).toBeUndefined();
+    expect(resolveIntent(key("R"), "text", bindings)).toBeUndefined();
+  });
+
   it("does not bind Escape, Tab, or Enter alone", () => {
     expect(resolveIntent(key("Escape"), "text", bindings)).toBeUndefined();
     expect(resolveIntent(key("Escape"), "input", bindings)).toBeUndefined();

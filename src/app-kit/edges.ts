@@ -37,6 +37,11 @@ export function edgeApp(to: AppLocation, flags: EdgeFlags = {}): NavEdge {
   };
 }
 
+/** Resume a parked app: restore stack, then refresh. */
+export function edgeResume(appId: string): NavEdge {
+  return { kind: "resume", appId };
+}
+
 /** Leave Nowisee entirely. */
 export function edgeExternal(href: string): NavEdge {
   return {

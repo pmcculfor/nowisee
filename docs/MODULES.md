@@ -32,7 +32,7 @@ This document specifies **what each core module owns**, its **inputs and outputs
 └─────────────────────────────────────────────────────────┘
 ```
 
-Only **one app is current** at a time. Stack and warm are scoped to that app. Switching apps always goes through `Navigator.openLocation`. Router only translates between browser URLs and `AppLocation`; it never mutates state.
+Only **one app is current** at a time. Other apps' stacks may sit in the session park. Switching apps via `kind: "app"` goes through `Navigator.openLocation` and resets the destination. `kind: "resume"` restores a parked stack then `refresh`. Router only translates between browser URLs and `AppLocation`; it never mutates state.
 
 ---
 
@@ -44,8 +44,8 @@ Core talks to apps only through `open` / `refresh`. Apps never import Navigator,
 
 | Service | How the app sees it |
 |---------|---------------------|
-| Intents | Edges the app authors (`prev` / `next` / `enter` / `back`). Core maps keys, pads, and Cancel/Done onto those intents. |
-| Stack | `refresh` receives `StackEntry[]` for this app only. `open` resets it. |
+| Intents | Edges the app authors (`prev` / `next` / `enter` / `back`). Core maps keys, pads, and Cancel/Done/Recent apps onto those intents. Reserved `recents` is not a map lookup. |
+| Stack | `refresh` receives `StackEntry[]` for this app only. `open` resets it. `resume` restores a parked stack first. |
 | Warm + map | Core stores whatever the last result returned. It does not invent neighbors. |
 | Display | Renders `result.node` as text or input according to `kind` / `secret`. |
 | Clipboard | The app returns `clipboardText` on an **action** result; core writes. |
@@ -88,7 +88,7 @@ The source file is canonical. The narrative lives in [`ARCHITECTURE.md`](ARCHITE
 
 - Hold `AppModule` instances for this process (host: pack at start; client: lazy RPC stubs).
 - `get(id) → AppModule | null` — **core-internal only**; never handed to an app.
-- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home reads installed apps through `ctx.directory.list()`, never the client registry. The host may add `homeRole` from the pack when building that directory list; `listDescriptors()` itself does not.
+- `listDescriptors() → AppDescriptor[]` — plain `{ id, label }` data. Home and Recents read installed apps through `ctx.directory.list()`, never the client registry. The host may add `homeRole` and `parkable` from the pack when building that directory list; `listDescriptors()` itself does not.
 
 ### Edge cases
 
@@ -220,7 +220,7 @@ An `open` resets the stack, so a shared link lands the user with no ancestry, an
 
 ### Non-goals
 
-- Storing multiple apps’ histories (cleared on app switch by design).
+- Mixing apps on the **current** stack. Other apps' histories live in Navigator's SessionPark (`src/core/sessionPark.ts`), not in this module.
 
 ---
 
@@ -235,7 +235,9 @@ Navigator is the **single owner** of every state transition: stack, cache, map, 
 - Orchestrate intent → map → stack → display → refresh.
 - Own **`blocked`** (intents ignored while true) and the monotonic **transition token**. Specs may say “busy”; that means the same flag.
 - Apply `RefreshResult` to map, cache, stack tip (id, label, location), display, address bar.
-- Read input text from Display when `passInputText` is set.
+- Own **SessionPark**: one stack snapshot per `appId` (plus tip kind and optional input text). Park on successful cross-app `open`. `kind: "resume"` restores then `refresh`. A plain `app` open drops the destination's park.
+- Intercept intent `recents` (opens `config.recentsAppId` with `parkedAppIds`). Missing config or already there: fall through to the map.
+- Read input text from Display when `passInputText` is set, and when parking an input tip.
 - Set `extras.action` on exactly the traversal of an `action: true` edge.
 
 ### Intent handling algorithm
@@ -247,10 +249,14 @@ onIntent(intent):
     if intent == enter: refresh current stack (no extras.action); return
     if intent == back: restore stack+display snapshot; return
     return                                           // prev/next silent no-op
+  if intent == recents and config.recentsAppId and current app is not recents:
+    openLocation({ appId: config.recentsAppId, path: "/" }); return
+    // else fall through (missing config or already there: typically no map edge)
   edge = map.lookup(tip.id, intent)
   if !edge: return                                   // silent no-op
   if edge is malformed (push/replace missing toNodeId,
-     app location path not canonical, empty external href):
+     app location path not canonical, empty external href,
+     resume missing appId):
     return                                           // no token bump
 
   extras = {}
@@ -263,6 +269,8 @@ onIntent(intent):
 
   if edge.kind == "external":
     handOffToBrowser(edge.href); return
+  if edge.kind == "resume":
+    restore parked stack or open("/"); return
   if edge.kind == "app":
     openLocation(edge.to, extras); return
 
@@ -291,7 +299,7 @@ onIntent(intent):
     // on current-token failure: load recovery (below); stack stays on dest
 ```
 
-`openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. If the registry has no module, Navigator asks optional `resolveApp` (bootstrap mints a generic RPC stub). If that is missing or returns null, the id still resolves to `config.rootAppId` with path `/`. A known app with a non-canonical path is a silent no-op.
+`openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it parks the outgoing app (if the destination app id differs), drops any park for the destination, then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. `kind: "resume"` restores a parked stack locally, then `refresh`es — it does not call `open`. If `config.recentsAppId` is set, Recents `open`/`refresh` extras include `parkedAppIds`.
 
 **Local move vs refresh authority:** After a warm hit, display `payload.label` immediately, then refresh may replace the tip with `result.node` (same id or a stale-repair fallback). Core adopts `result.node.id` as the tip id, since subsequent map lookups key off it. Do not teleport to an unrelated workflow destination.
 
@@ -342,11 +350,11 @@ onIntent(intent):
 
 - Render the current tip.
 - `showText(label)` for `kind: "text"` (default) — remount + focus a `role="application"` surface so NVDA / JAWS / VoiceOver pass arrow keys to the page. Set `aria-label` to the same string as the visible text: NVDA treats application as a named widget and otherwise announces only "application".
-- `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`) and **Done** (`enter`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
+- `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`), **Done** (`enter`), and **Recent apps** (`recents`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
 - Optional `skipTextFocus`: the iOS wrapper uses this so VoiceOver is not moved onto the web surface while the Direct Touch overlay owns speech.
-- Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done).
+- Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done / Recent apps).
 
 ### Edge cases
 
@@ -390,19 +398,21 @@ export interface KeyBinding {
 
 ### Default binding table
 
-Plain arrows on **text** tips (`role="application"`). Unbound on **input** tips so the caret keeps them. Leave an input via Cancel / Done.
+Plain arrows on **text** tips (`role="application"`). Unbound on **input** tips so the caret keeps them. Leave an input via Cancel / Done / Recent apps.
 
 | Tip kind | Key | Intent |
 |----------|-----|--------|
 | text | `ArrowUp` / `ArrowDown` | `prev` / `next` |
 | text | `ArrowRight` / `ArrowLeft` | `enter` / `back` |
+| text | `r` | `recents` |
 | input | plain arrows | *unbound* (caret) |
+| input | `r` | *unbound* (caret) |
 | either | Escape, Tab, Enter | *unbound* |
 
 Notes on the defaults:
 
-- `role="application"` on the text surface is what lets these keys reach the page under NVDA / JAWS / desktop VoiceOver. It is not a substitute for Cancel / Done on input tips.
-- `Tab` / `Shift+Tab` must **not** be bound. Consuming Tab would trap the keyboard inside the page (WCAG 2.1.2). Tab moves between the textarea and Cancel / Done.
+- `role="application"` on the text surface is what lets these keys reach the page under NVDA / JAWS / desktop VoiceOver. It is not a substitute for Cancel / Done / Recent apps on input tips.
+- `Tab` / `Shift+Tab` must **not** be bound. Consuming Tab would trap the keyboard inside the page (WCAG 2.1.2). Tab moves between the textarea, Cancel, Done, and Recent apps.
 - Right-to-left locales swap the `enter` / `back` arrows here. Apps are unaffected.
 - Changing defaults is a change to this table only; apps author intents, never keys.
 - Keystrokes that originate in a `<textarea>` or `<input>` are ignored even if a binding would otherwise match.
@@ -429,7 +439,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - Listen for `focusin` and `click` on those buttons only; call `navigator.onIntent(intent)`.
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
-- Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done or fire on explore-by-touch.
+- Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done / Recent apps or fire on explore-by-touch.
 - **Not mounted** when the iOS WKWebView host is present (`webkit.messageHandlers.nowisee`); the native overlay is the intent host then.
 
 | Edge | Intent |
@@ -526,7 +536,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 | Helper | Purpose |
 |--------|---------|
-| `edgeNode / edgePop / edgeApp / edgeExternal` | Construct `NavEdge` values; `edgePop` omits `toNodeId` |
+| `edgeNode / edgePop / edgeApp / edgeResume / edgeExternal` | Construct `NavEdge` values; `edgePop` omits `toNodeId` |
 | `edgeAction(toNodeId)` | `enter` edge with `action: true` — the one-line button press |
 | `siblingListEdges(ids, opts)` | `prev` / `next` `replace` edges; `wrap?: boolean`; `around?: { index, radius }` windows the emitted rows |
 | `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) commits; `back` abandons (`backTo` is a node id or `"pop"`) |
@@ -551,7 +561,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 ### Responsibilities
 
-- Build `ShellConfig` (`rootAppId`, optional `keyBindings`). Core files never name an app.
+- Build `ShellConfig` (`rootAppId`, optional `recentsAppId`, optional `keyBindings`). Core files never name an app.
 - Construct an empty registry. Inject `resolveApp` so Navigator can mint a generic `createRemoteApp` stub for whatever id the URL or an `app` edge names. Do **not** pre-register a product list.
 - Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.

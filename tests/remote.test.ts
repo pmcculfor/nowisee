@@ -24,6 +24,12 @@ describe("toWireExtras", () => {
   it("omits action when absent", () => {
     expect(toWireExtras({})).toEqual({});
   });
+
+  it("keeps parkedAppIds", () => {
+    expect(toWireExtras({ parkedAppIds: ["notes", "home"] })).toEqual({
+      parkedAppIds: ["notes", "home"],
+    });
+  });
 });
 
 describe("createRemoteApp", () => {

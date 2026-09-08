@@ -7,6 +7,7 @@ import {
   edgeExternal,
   edgeNode,
   edgePop,
+  edgeResume,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -16,7 +17,7 @@ import {
 import type { NavEdge, NodePayload } from "../src/core/types.ts";
 
 describe("edge builders", () => {
-  it("edgeNode / edgePop / edgeApp / edgeExternal", () => {
+  it("edgeNode / edgePop / edgeApp / edgeResume / edgeExternal", () => {
     expect(edgeNode("b", "replace")).toEqual({
       kind: "node",
       toNodeId: "b",
@@ -32,6 +33,7 @@ describe("edge builders", () => {
       kind: "external",
       href: "https://example.com",
     });
+    expect(edgeResume("notes")).toEqual({ kind: "resume", appId: "notes" });
   });
 
   it("edgeAction marks action: true and defaults to push", () => {
