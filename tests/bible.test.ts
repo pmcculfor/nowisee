@@ -3,6 +3,7 @@ import { type BibleApp, createBibleApp } from "../src/apps/bible/index.ts";
 import {
   createSqliteBibleStore,
   openBibleDatabase,
+  SEARCH_QUERY_TTL_MS,
   startBibleApp,
 } from "../src/apps/bible/store.ts";
 import { ensureCatalog, parseHelloAoChapter, parseTsk, parseVpl, stripSuppliedWordBrackets } from "../src/apps/bible/import.ts";
@@ -741,6 +742,33 @@ describe("Bible store", () => {
     store.touchVersionRecency("user-1", YLT);
     expect(store.listVersions("user-1").map((v) => v.slug)[0]).toBe("ylt");
     expect(store.listVersions().map((v) => v.slug)[0]).toBe("kjv");
+    store.close();
+  });
+
+  it("keeps one search query per session and drops queries older than a day", () => {
+    const db = openBibleDatabase(":memory:");
+    ensureCatalog(db, { seed: fixtureBible });
+    const store = createSqliteBibleStore(db);
+    const hits = store.searchVerses(KJV, ["blessed"], 1);
+    expect(hits).toHaveLength(1);
+    const first = store.createSearchQuery("s1", "blessed", hits);
+    const second = store.createSearchQuery("s1", "heaven", hits);
+    expect(second).not.toBe(first);
+    expect(store.getSearchQuery(first, "s1")).toBeNull();
+    expect(store.listSearchHits(first, "s1")).toEqual([]);
+    expect(store.listSearchHits(second, "s1")).toEqual(hits);
+    const other = store.createSearchQuery("s2", "blessed", hits);
+    expect(store.listSearchHits(second, "s1")).toEqual(hits);
+    expect(store.listSearchHits(other, "s2")).toEqual(hits);
+    db.run(
+      "UPDATE search_query SET created_at = ? WHERE id = ?",
+      Date.now() - SEARCH_QUERY_TTL_MS - 1,
+      other,
+    );
+    const third = store.createSearchQuery("s1", "earth", hits);
+    expect(store.getSearchQuery(second, "s1")).toBeNull();
+    expect(store.getSearchQuery(other, "s2")).toBeNull();
+    expect(store.listSearchHits(third, "s1")).toEqual(hits);
     store.close();
   });
 

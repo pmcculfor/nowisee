@@ -26,6 +26,9 @@ const HIT_COLUMNS = `v.id AS verseId, b.id AS bookId, c.number AS chapter, v.num
 
 export const DEFAULT_BIBLE_DB_PATH = "data/apps/bible.db";
 
+/** Search result sets are session scratch. One live query per session; drop rows older than this on write. */
+export const SEARCH_QUERY_TTL_MS = 24 * 60 * 60 * 1000;
+
 export function openBibleDatabase(path: string = DEFAULT_BIBLE_DB_PATH): Db {
   return openSqlite({
     path,
@@ -247,11 +250,17 @@ export function createSqliteBibleStore(db: Db): BibleStore {
     },
     createSearchQuery(sessionId, query, hits) {
       return db.transaction(() => {
+        const at = Date.now();
+        db.run(
+          "DELETE FROM search_query WHERE session_id = ? OR created_at < ?",
+          sessionId,
+          at - SEARCH_QUERY_TTL_MS,
+        );
         const result = db.run(
           "INSERT INTO search_query (session_id, query, created_at) VALUES (?, ?, ?)",
           sessionId,
           query,
-          Date.now(),
+          at,
         );
         const id = Number(result.lastInsertRowid);
         const insertHit = db.prepare(

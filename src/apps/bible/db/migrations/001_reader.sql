@@ -96,7 +96,7 @@ CREATE TABLE commentary_xref (
 );
 
 CREATE TABLE search_query (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
   query TEXT NOT NULL,
   created_at INTEGER NOT NULL

@@ -48,7 +48,7 @@ Reading-tree descend and `back` use `replace` (testament ↔ book ↔ chapter �
 
 - **Copy:** `action: true` on enter from Copy, `replace` onto the same node. The label becomes “Copied” (or a failure line) and the result includes `clipboardText`. Core writes the clipboard. prev/next still walk the verse options.
 - **Version:** root and verse-menu lists walk `version` rows, most recently used first when signed in (catalog `sort_order` when signed out). Verse-menu Versions lands on the first pick, the same as root Version. Enter is `action: true` plus a same-app `app` edge (which resets the stack). Prefs and recency write only when `ctx.userId` is set. If the target version has no text for this slot, the verse node says so; **enter** is still the ordinary verse menu (Versions first). The URL keeps the same book/chapter/verse.
-- **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words on `verse_text` (word boundaries, no inverted-index table), canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. If the hit list reaches that cap, the last node is `search limited to N results.` (N is `maxHits`). The query id is session-scoped; hit verse ids are stored with the query (not re-run on each refresh). Refresh warms `SearchPolicy.siblingRadius` neighbors, not the whole list. Enter on a hit pushes a context-sequence verse of the same ref; enter again is the verse menu.
+- **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words on `verse_text` (word boundaries, no inverted-index table), canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. If the hit list reaches that cap, the last node is `search limited to N results.` (N is `maxHits`). The query id is session-scoped; hit verse ids are stored with the query (not re-run on each refresh). One live query per session: a new search deletes that session’s previous rows, and any query older than one day. Refresh warms `SearchPolicy.siblingRadius` neighbors, not the whole list. Enter on a hit pushes a context-sequence verse of the same ref; enter again is the verse menu.
 - **Bookmarks:** `ctx.userId` only. Signed-out enter is a sign-in node (enter → Account). Never store session-id rows. The verse-menu Bookmark option is an in-place toggle (“Bookmark” / “Remove bookmark”).
 - **Commentary:** works listed from the `commentary` table, most recently used first when signed in. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific section covering this verse (`commentary_section_verse`). Chunks do not wrap. TSK xrefs are stored and flattened into the section label.
 
@@ -65,7 +65,7 @@ Migrations live in [`db/migrations/001_reader.sql`](db/migrations/001_reader.sql
 - `version_recency` / `commentary_recency` — MRU for signed-in users
 - `bookmark` (`user_id`, `verse_id`)
 - `commentary`, `commentary_section`, `commentary_section_verse`, `commentary_xref`
-- `search_query` (session-scoped text) plus `search_hit` (verse ids; not re-run on each refresh)
+- `search_query` (one live query per session, 1-day TTL on write) plus `search_hit` (verse ids; not re-run on each refresh)
 
 Commentaries are version-independent. Search scans `verse_text` with whole-word `GLOB`; FTS5 is a later seam.
 
