@@ -17,7 +17,7 @@ function directory(list: AppDescriptor[]): AppServerContext {
 const PACK: AppDescriptor[] = [
   { id: "home", label: "Home", homeRole: "internal" },
   { id: "recents", label: RECENTS_APP_LABEL, homeRole: "internal", parkable: false },
-  { id: "help", label: "Help", homeRole: "default" },
+  { id: "tutorial", label: "Tutorial", homeRole: "default" },
   { id: "notes", label: "Notes", homeRole: "default" },
   { id: "bible", label: "Bible", homeRole: "default" },
 ];

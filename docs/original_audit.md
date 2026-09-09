@@ -86,12 +86,12 @@ Quoted from the docs, contradicted by the tree:
    Gmail and commentaries have landed.
 
 4. **`docs/ARCHITECTURE.md` packaging:** “Path (proposed)” and apps `home, bible, notes, account (and later mail)`.  
-   Layout is real; apps include Help and Gmail.
+   Layout is real; apps include Tutorial and Gmail.
 
 5. **`docs/ARCHITECTURE.md` `AppServerContext`:** omits `directory`; does not define `LockboxCapability` / `OAuthCapability` / `DirectoryCapability`.  
    `src/core/types.ts` has all four.
 
-6. **`docs/MODULES.md` §16:** remote stubs for “Home, Help, Bible, Notes, and Account” — omits Gmail.  
+6. **`docs/MODULES.md` §16:** remote stubs for “Home, Tutorial, Bible, Notes, and Account” — omits Gmail.  
    `src/shell/bootstrap.ts` registers Gmail.
 
 7. **`docs/IDENTITY.md` §4:** KJV seeded “from JSON next to the Bible app.”  
@@ -109,7 +109,7 @@ Quoted from the docs, contradicted by the tree:
 11. **`docs/DESIGN-REVIEW.md`:** “cheap to change today because there is no code”; spike §7 still open-ended.  
     Implementation settled `role="application"` + focus announce + Cancel/Done.
 
-12. **Branding:** HTML title and Help welcome say **“Now I See”**; docs and AGENTS say **Nowisee**. Product decision, not a typo in one place.
+12. **Branding:** HTML title and Tutorial welcome say **“Now I See”**; docs and AGENTS say **Nowisee**. Product decision, not a typo in one place.
 
 13. **`scripts/download-bible-sources.mjs` header:** “Raw files go in … (gitignored).”  
     Import texts are committed; only zips/USFM/SWORD are gitignored.
@@ -129,9 +129,9 @@ Quoted from the docs, contradicted by the tree:
 |--------|------|-----|
 | **Rewrite** | `README.md` | Blocks every newcomer. Status, runbook, doc index. Mirror the AGENTS Cloud section lightly. |
 | **Update in place** | `SPEC.md` | Fix MVP (§1, §4.15), roadmap §6, deferred §7. Keep the UX/locks that are still true. |
-| **Update** | `ARCHITECTURE.md` | Drop “proposed.” Point at `types.ts` instead of pasting full interfaces, **or** regenerate from types. Add `directory` and Help/Gmail. |
+| **Update** | `ARCHITECTURE.md` | Drop “proposed.” Point at `types.ts` instead of pasting full interfaces, **or** regenerate from types. Add `directory` and Tutorial/Gmail. |
 | **Update** | `MODULES.md` §16 | Include Gmail. Move §18 to archive or delete. |
-| **Update** | `IDENTITY.md` §4 / §1 / §14 | VPL seed; app lists include Help and Gmail. |
+| **Update** | `IDENTITY.md` §4 / §1 / §14 | VPL seed; app lists include Tutorial and Gmail. |
 | **Update** | `ENGINEERING.md`, `PREPAREDNESS.md` | Gmail DB; Notes is app-owned, not injected. |
 | **Keep as normative** | `AGENTS.md`, `MODULES.md`, `STORAGE.md`, `IDENTITY.md`, `ENGINEERING.md`, `SOURCES.md` | These are the files people actually follow. |
 | **Banner as historical** | `DESIGN-REVIEW.md` | Reasoning record. Locks live in AGENTS/SPEC/MODULES. Do not treat the body as current API. |
@@ -172,7 +172,7 @@ Nowisee is a **text-node browser**: one unformatted surface, four navigation int
 │  FIRST_PARTY_APPS → real AppModules + ctx grants                │
 └───┬───────────┬───────────┬───────────┬───────────┬─────────────┘
     │           │           │           │           │
-  Home        Help        Bible       Notes       Gmail       Account
+  Home        Tutorial        Bible       Notes       Gmail       Account
   (directory) (static)    bible.db    notes.db    gmail.db    account.db
                           + raw/                  oauth only  identity
 ```
@@ -295,7 +295,7 @@ Apps import these. Navigator never calls them.
 |--------|------|---------------------------|
 | Edge builders | `edges.ts` | Yes — all apps |
 | List / map merge | `lists.ts` | Yes |
-| Input Cancel/Done | `input.ts` | Help, Notes, Account, Gmail, Bible search |
+| Input Cancel/Done | `input.ts` | Tutorial, Notes, Account, Gmail, Bible search |
 | Home URL + root back | `home.ts` | Home, every app root `back` |
 | Signed-out node | `signedOut.ts` | Notes, Gmail (Bible uses a custom sign-in node because the rest of Bible is public) |
 | Neighborhood BFS | `neighborhood.ts` | **Tests only** |
@@ -308,7 +308,7 @@ All six are `AppModule`s. Home is not special in core; it is `config.rootAppId`.
 **Home** — `src/apps/home.ts`  
 Lists peers from `ctx.directory` (not the registry object). Sibling list wraps. `enter` is an `app` edge to `{ appId, path: "/" }`. No `back` (already home). Does not filter by signed-in.
 
-**Help** — `src/apps/help/`  
+**Tutorial** — `src/apps/tutorial/`  
 Fixed tutorial graph: welcome → back practice → wrapping list → type prompt → input → Home. Ignores `ctx`. Welcome copy says “Now I See.”
 
 **Bible** — `src/apps/bible/`  
@@ -541,7 +541,7 @@ Warm neighborhood in `root.ts` uses `.slice(0, 8)` for books/verses. Magic numbe
 | Bible `parseNodeId` | Closed id language | Keep; table-driven optional |
 | Bible `buildBibleView` / `payloadFor` / `locationFor` | Same kinds, four times | **Worth combining** |
 | Gmail `tipIdForPath` / `locationFor` | Path ↔ node | Fine for a small path language |
-| Help `view.ts` node switches | Fixed tutorial | Fine |
+| Tutorial `view.ts` node switches | Fixed tutorial | Fine |
 | Navigator edge kinds | `node` / `app` / `external` | Correct; do not abstract further |
 | Import `record.format` | `helloao-chapter-json` vs `tsk-xref-table` | Correct catalog dispatch |
 | `optionEnter` if/else on option type | Mirrors `VERSE_OPTIONS` | Could be a field on `VerseOption` (`enter: "action-copy" \| …`) so a new option is data |
@@ -626,9 +626,9 @@ Present but **expired/invalid** cookie: `resolve(token)` **mints a new anonymous
 
 **Fix direction:** callback should look up the session without minting, or only mint when it will `Set-Cookie`. Prefer: never mint on the callback.
 
-### 6.5 Help / HTML branding vs product name (low)
+### 6.5 Tutorial / HTML branding vs product name (low)
 
-`index.html` title and Help welcome: “Now I See.” Docs: Nowisee. Screen-reader users hear the Help string. Pick one.
+`index.html` title and Tutorial welcome: “Now I See.” Docs: Nowisee. Screen-reader users hear the Tutorial string. Pick one.
 
 ### 6.6 Commentary xrefs not shown (low / product)
 
@@ -698,7 +698,7 @@ Order for **your** review, not an implementation plan.
 
 1. Rewrite `README.md`.
 2. Fix `SPEC.md` MVP / roadmap / deferred (Gmail and commentaries landed).
-3. Sync `ARCHITECTURE.md` with `types.ts`; add Gmail/Help/`directory`.
+3. Sync `ARCHITECTURE.md` with `types.ts`; add Gmail/Tutorial/`directory`.
 4. Banner `DESIGN-REVIEW.md`; rewrite or archive `BIBLE-PLAN.md`.
 5. Small accuracy: IDENTITY VPL seed, MODULES §16 Gmail, ENGINEERING/PREPAREDNESS Gmail + Notes ownership, GMAIL.md leftover “demo” line, download-script gitignore comment.
 
@@ -757,7 +757,7 @@ src/shell/bootstrap.ts    wires core + remote apps
 src/core/                 generic shell
 src/app-kit/              optional app helpers
 src/apps/home.ts
-src/apps/help/
+src/apps/tutorial/
 src/apps/bible/           graph + SQLite + raw corpus
 src/apps/notes/
 src/apps/gmail/

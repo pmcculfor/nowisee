@@ -4,7 +4,7 @@
 
 This file tracks what is still open after the documentation pass. It is not a third SPEC. The 24 Aug review is saved as [`original_audit.md`](original_audit.md).
 
-Landed since the 25 Aug snapshot: first-party client stubs are generic; Bible view is one kind table; host `ephemeral` is an explicit flag; Navigator rejects a malformed `RefreshResult`; emailed sign-in codes replaced passwords (`adb3670`); user-facing product name is **Now I See** in Help, mail, and `NOWISEE_MAIL_FROM`. `Display.focus` and the CSRF-free `handleAppHttp` helper are gone. Static `decodeURIComponent` throws become 400; OAuth callback looks up sessions without minting; CSRF origin is only `NOWISEE_ORIGIN` (no Host fallback). Warm-miss refresh failure speaks recovery copy (`enter` retries, `back` restores).
+Landed since the 25 Aug snapshot: first-party client stubs are generic; Bible view is one kind table; host `ephemeral` is an explicit flag; Navigator rejects a malformed `RefreshResult`; emailed sign-in codes replaced passwords (`adb3670`); user-facing product name is **Now I See** in Tutorial, mail, and `NOWISEE_MAIL_FROM`. `Display.focus` and the CSRF-free `handleAppHttp` helper are gone. Static `decodeURIComponent` throws become 400; OAuth callback looks up sessions without minting; CSRF origin is only `NOWISEE_ORIGIN` (no Host fallback). Warm-miss refresh failure speaks recovery copy (`enter` retries, `back` restores).
 
 ---
 
@@ -196,7 +196,7 @@ CSRF origin no longer falls back to `Host` / `X-Forwarded-Proto`. Unset `NOWISEE
 
 **Home directory missing → empty list.** Home still shows a synthetic root. If we throw, a host that forgot `ctx.directory` would 500 Home.
 
-**Stale tip id → first / start / welcome / create.** Home, Help, Account, Notes, Gmail, and Bible rebuild or pick a default tip when the requested id is not in this result. That is “repair, not teleport” (MUST #8). If we fail instead, a deleted note, old mail id, or bad Help hash would error the refresh rather than show a live node.
+**Stale tip id → first / start / welcome / create.** Home, Tutorial, Account, Notes, Gmail, and Bible rebuild or pick a default tip when the requested id is not in this result. That is “repair, not teleport” (MUST #8). If we fail instead, a deleted note, old mail id, or bad Tutorial hash would error the refresh rather than show a live node.
 
 **Empty Notes → create node.** Open, unknown path, and empty-stack refresh all land on create. If we show an empty-list node instead, there is no current “no notes” screen. If we throw, first use would fail.
 

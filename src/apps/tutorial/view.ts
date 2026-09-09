@@ -14,27 +14,36 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
-import { HELP_APP_ID, NODE, PRACTICE_IDS } from "./ids.ts";
+import { NODE, PRACTICE_IDS, TUTORIAL_APP_ID } from "./ids.ts";
 
-export type HelpViewDeps = {
+export type TutorialViewDeps = {
   readonly rootAppId: string;
 };
 
 const WELCOME_LABEL = [
   "Welcome to Now I See, an app purpose-built for people using screen readers.",
-  "For simplicity, each page only displays a single item of text.",
-  "You can navigate by tapping the top, bottom, left, or right of the screen, or by using the arrow keys.",
-  "Now navigate right by tapping the right side of the screen or pressing the right arrow key.",
+  "For simplicity, only one chunk of text is displayed on the screen at a time.",
+  "You access neighboring screens by navigating up, down, left, or right.",
+  "Now navigate right by pressing the right arrow key, tapping the right side of the screen, or on the iPhone app, swiping right.",
+].join(" ");
+
+const TREE_LABEL = [
+  "The entire app is structured as a left-to-right tree.",
+  "Depending on your device you will navigate using the arrow keys, tapping the top, bottom, left, or right sides of the screen, or on the iPhone app, swiping up, down, left, or right.",
+  "Navigate right to continue.",
 ].join(" ");
 
 const BACK_PRACTICE_LABEL = [
-  "To go to a previous screen, navigate left by tapping the left side of the screen or pressing the left arrow key.",
+  "To go to a previous screen, navigate left.",
   "Try it now, then return to this screen and navigate right.",
 ].join(" ");
 
-const ITEM1_LABEL =
-  "This is the first item in a list. Navigate down by tapping the bottom of the screen or pressing the down arrow key.";
-const ITEM2_LABEL = "This is the second item in a list. Now navigate down again.";
+const ITEM1_LABEL = "This is the first item in a list. Navigate down to explore the list.";
+const ITEM2_LABEL = [
+  "This is the second item in the list.",
+  "If you are on the iPhone app, a longer swipe can scroll through multiple list items.",
+  "Now navigate down again.",
+].join(" ");
 const ITEM3_LABEL = [
   "This is the third item.",
   "Many lists wrap back to the first item when you get to the end.",
@@ -46,35 +55,32 @@ const ITEM4_LABEL = [
   "Navigate right when you are ready to begin.",
 ].join(" ");
 
-const RECENTS_LABEL = [
-  "Press the r key on a text screen to open recent apps.",
-  "On an input screen, find the Recent apps button next to Cancel and Done.",
-  "In that list, navigate up from the first app to Home, then right to enter. Navigate right on an app to return where you left it.",
-  "Navigate right to continue.",
-].join(" ");
-
 const TYPE_PROMPT_LABEL = [
   "The next page is an input box.",
-  "Enter text in the box, then use the tab key or your native screen gestures to find and click Cancel, Done, or Recent apps.",
+  "Enter text in the box, then use the tab key or your native screen gestures to find and click Cancel or Done.",
 ].join(" ");
 
-export function openHelp(deps: HelpViewDeps, path: string, extras: RefreshExtras = {}): RefreshResult {
+export function openTutorial(
+  deps: TutorialViewDeps,
+  path: string,
+  extras: RefreshExtras = {},
+): RefreshResult {
   return viewFor(deps, tipForPath(path), extras);
 }
 
-export function refreshHelp(
-  deps: HelpViewDeps,
+export function refreshTutorial(
+  deps: TutorialViewDeps,
   tipId: string | undefined,
   extras: RefreshExtras = {},
 ): RefreshResult {
   return viewFor(deps, tipId && isKnown(tipId) ? tipId : NODE.welcome, extras);
 }
 
-function viewFor(deps: HelpViewDeps, tipId: string, extras: RefreshExtras): RefreshResult {
+function viewFor(deps: TutorialViewDeps, tipId: string, extras: RefreshExtras): RefreshResult {
   const payloads = payloadsFor(extras.inputText);
   const tip = payloads.get(tipId) ?? payloads.get(NODE.welcome)!;
   return {
-    navigationMap: helpMap(deps.rootAppId),
+    navigationMap: tutorialMap(deps.rootAppId),
     warm: [...payloads.values()],
     node: tip,
     location: locationFor(tip.id),
@@ -84,8 +90,8 @@ function viewFor(deps: HelpViewDeps, tipId: string, extras: RefreshExtras): Refr
 function payloadsFor(inputText: string | undefined): Map<string, NodePayload> {
   return new Map<string, NodePayload>([
     [NODE.welcome, { id: NODE.welcome, label: WELCOME_LABEL }],
+    [NODE.tree, { id: NODE.tree, label: TREE_LABEL }],
     [NODE.backPractice, { id: NODE.backPractice, label: BACK_PRACTICE_LABEL }],
-    [NODE.recents, { id: NODE.recents, label: RECENTS_LABEL }],
     [NODE.item1, { id: NODE.item1, label: ITEM1_LABEL }],
     [NODE.item2, { id: NODE.item2, label: ITEM2_LABEL }],
     [NODE.item3, { id: NODE.item3, label: ITEM3_LABEL }],
@@ -100,24 +106,28 @@ function doneLabelFor(inputText: string | undefined): string {
   const typed = inputText ?? "";
   return [
     `You typed "${typed}".`,
-    "This concludes the tutorial.",
+    "This is the last screen of this tutorial.",
     "When you navigate right, you will reach the home screen.",
-    "Navigate up or down on the home screen to see available apps, including the help app, which will launch this tutorial again.",
+    "The home screen is a list of apps, including this tutorial app.",
+    "Navigate up or down to access other apps.",
+    'One more thing - to switch between recent apps without navigating back to the home screen, you can use the "r" key or double-tap the screen on the iPhone app.',
+    "On input box screens, there is a Recent Apps button.",
+    "Now navigate right to exit this tutorial.",
   ].join(" ");
 }
 
-function helpMap(rootAppId: string): NavigationMap {
+function tutorialMap(rootAppId: string): NavigationMap {
   return buildMap(
-    rootBackToHome(NODE.welcome, rootAppId, HELP_APP_ID),
+    rootBackToHome(NODE.welcome, rootAppId, TUTORIAL_APP_ID),
     {
       [NODE.welcome]: {
-        enter: edgeNode(NODE.backPractice, "push"),
+        enter: edgeNode(NODE.tree, "push"),
       },
-      [NODE.backPractice]: {
-        enter: edgeNode(NODE.recents, "push"),
+      [NODE.tree]: {
+        enter: edgeNode(NODE.backPractice, "push"),
         back: edgePop(),
       },
-      [NODE.recents]: {
+      [NODE.backPractice]: {
         enter: edgeNode(NODE.item1, "push"),
         back: edgePop(),
       },
@@ -142,8 +152,8 @@ function helpMap(rootAppId: string): NavigationMap {
     }),
     {
       [NODE.done]: {
-        enter: edgeToHome(rootAppId, HELP_APP_ID),
-        back: edgeToHome(rootAppId, HELP_APP_ID),
+        enter: edgeToHome(rootAppId, TUTORIAL_APP_ID),
+        back: edgePop(),
       },
     },
   );
@@ -151,10 +161,10 @@ function helpMap(rootAppId: string): NavigationMap {
 
 function tipForPath(path: string): string {
   switch (path) {
+    case "/tree":
+      return NODE.tree;
     case "/back":
       return NODE.backPractice;
-    case "/recents":
-      return NODE.recents;
     case "/practice/1":
       return NODE.item1;
     case "/practice/2":
@@ -176,34 +186,34 @@ function tipForPath(path: string): string {
 
 function locationFor(tipId: string): AppLocation {
   switch (tipId) {
+    case NODE.tree:
+      return { appId: TUTORIAL_APP_ID, path: "/tree" };
     case NODE.backPractice:
-      return { appId: HELP_APP_ID, path: "/back" };
-    case NODE.recents:
-      return { appId: HELP_APP_ID, path: "/recents" };
+      return { appId: TUTORIAL_APP_ID, path: "/back" };
     case NODE.item1:
-      return { appId: HELP_APP_ID, path: "/practice/1" };
+      return { appId: TUTORIAL_APP_ID, path: "/practice/1" };
     case NODE.item2:
-      return { appId: HELP_APP_ID, path: "/practice/2" };
+      return { appId: TUTORIAL_APP_ID, path: "/practice/2" };
     case NODE.item3:
-      return { appId: HELP_APP_ID, path: "/practice/3" };
+      return { appId: TUTORIAL_APP_ID, path: "/practice/3" };
     case NODE.item4:
-      return { appId: HELP_APP_ID, path: "/practice/4" };
+      return { appId: TUTORIAL_APP_ID, path: "/practice/4" };
     case NODE.typePrompt:
-      return { appId: HELP_APP_ID, path: "/type" };
+      return { appId: TUTORIAL_APP_ID, path: "/type" };
     case NODE.input:
-      return { appId: HELP_APP_ID, path: "/type/input" };
+      return { appId: TUTORIAL_APP_ID, path: "/type/input" };
     case NODE.done:
-      return { appId: HELP_APP_ID, path: "/done" };
+      return { appId: TUTORIAL_APP_ID, path: "/done" };
     default:
-      return { appId: HELP_APP_ID, path: "/" };
+      return { appId: TUTORIAL_APP_ID, path: "/" };
   }
 }
 
 function isKnown(tipId: string): boolean {
   return (
     tipId === NODE.welcome ||
+    tipId === NODE.tree ||
     tipId === NODE.backPractice ||
-    tipId === NODE.recents ||
     tipId === NODE.typePrompt ||
     tipId === NODE.input ||
     tipId === NODE.done ||

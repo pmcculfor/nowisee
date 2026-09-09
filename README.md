@@ -1,6 +1,6 @@
 # Nowisee
 
-Nowisee is an accessibility-first website for people who use a keyboard or a screen reader as their primary way to browse. The page shows **one unformatted text surface** at a time. Navigation uses four intents — `prev`, `next`, `enter`, and `back` — which core binds to keys and to VoiceOver edge pads. Content comes from portable **apps** (Home, Help, Bible, Notes, Gmail, and Account). Core is a generic shell and never special-cases those products.
+Nowisee is an accessibility-first website for people who use a keyboard or a screen reader as their primary way to browse. The page shows **one unformatted text surface** at a time. Navigation uses four intents — `prev`, `next`, `enter`, and `back` — which core binds to keys and to VoiceOver edge pads. Content comes from portable **apps** (Home, Tutorial, Bible, Notes, Gmail, and Account). Core is a generic shell and never special-cases those products.
 
 ## Run
 
@@ -25,7 +25,7 @@ On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an 
 ```text
 src/core/       client shell (navigator, display, keyboard, …)
 src/app-kit/    optional helpers apps import
-src/apps/       Home, Help, Bible, Notes, Gmail, Account (server AppModules)
+src/apps/       Home, Tutorial, Bible, Notes, Gmail, Account (server AppModules)
 src/shell/      browser bootstrap — remote stubs only
 ios/            WKWebView + Direct Touch overlay (build on a Mac; see ios/README.md)
 server/         HTTP, CSRF, identity, lockbox, OAuth; packs first-party apps

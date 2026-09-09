@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { getCanonBook } from "../src/apps/bible/catalog.ts";
 import { optionId } from "../src/apps/bible/ids.ts";
-import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
+import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";
 import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 
@@ -27,16 +27,16 @@ function headers(): Record<string, string> {
 }
 
 describe("app host", () => {
-    it("opens Home with Help first, then Bible, Notes, Account, and Manage Apps", async () => {
+    it("opens Home with Tutorial first, then Bible, Notes, Account, and Manage Apps", async () => {
     const result = await host().open("home", "/", {});
     expect(result.warm.map((n) => n.label)).toEqual([
-      HELP_APP_LABEL,
+      TUTORIAL_APP_LABEL,
       "Bible",
       "Notes",
       "Account",
       "Manage Apps",
     ]);
-    expect(result.node.label).toBe(HELP_APP_LABEL);
+    expect(result.node.label).toBe(TUTORIAL_APP_LABEL);
   });
 
   it("open Home /app/bible lands on the Bible catalog row", async () => {
@@ -117,7 +117,7 @@ describe("app HTTP", () => {
     });
     expect(out.status).toBe(200);
     const body = out.body as { node: { label: string } };
-    expect(body.node.label).toBe(HELP_APP_LABEL);
+    expect(body.node.label).toBe(TUTORIAL_APP_LABEL);
   });
 
   it("unknown app is 404", async () => {

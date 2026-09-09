@@ -63,7 +63,7 @@ describe("Router", () => {
     const router = makeRouter();
     const locations: AppLocation[] = [
       { appId: "home", path: "/" },
-      { appId: "home", path: "/help" },
+      { appId: "home", path: "/catalog" },
       { appId: "fake", path: "/" },
       { appId: "bible", path: "/Matthew/5/8" },
     ];

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 import { NODE } from "../src/apps/account/ids.ts";
-import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
+import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, type CapturingMailer } from "./helpers/signIn.ts";
 
@@ -316,7 +316,7 @@ describe("Account app", () => {
     });
     const home = opened.body as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
-      HELP_APP_LABEL,
+      TUTORIAL_APP_LABEL,
       "Bible",
       "Notes",
       "Account",

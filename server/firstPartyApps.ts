@@ -3,7 +3,7 @@ import { startAccountApp, DEFAULT_ACCOUNT_DB_PATH } from "../src/apps/account/st
 import { startBibleApp, DEFAULT_BIBLE_DB_PATH } from "../src/apps/bible/store.ts";
 import { GMAIL_OAUTH_PROVIDER } from "../src/apps/gmail/oauth.ts";
 import { startGmailApp, DEFAULT_GMAIL_DB_PATH } from "../src/apps/gmail/store.ts";
-import { createHelpApp } from "../src/apps/help/index.ts";
+import { createTutorialApp } from "../src/apps/tutorial/index.ts";
 import { startHomeApp, DEFAULT_HOME_DB_PATH } from "../src/apps/home/store.ts";
 import { startNotesApp, DEFAULT_NOTES_DB_PATH } from "../src/apps/notes/store.ts";
 import { createRecentsApp } from "../src/apps/recents/index.ts";
@@ -54,7 +54,7 @@ export const FIRST_PARTY_APPS: readonly AppPack[] = [
   },
   {
     homeRole: "default",
-    start: (host) => createHelpApp({ rootAppId: host.rootAppId }),
+    start: (host) => createTutorialApp({ rootAppId: host.rootAppId }),
   },
   {
     homeRole: "default",

@@ -6,7 +6,7 @@ import { createHomeApp } from "../src/apps/home/index.ts";
 import { createAppHost } from "../server/host.ts";
 
 describe("shell bootstrap", () => {
-  it("opens Home at #/ with rootAppId home and lists Help first", async () => {
+  it("opens Home at #/ with rootAppId home and lists Tutorial first", async () => {
     window.location.hash = "#/";
     const mount = document.createElement("div");
     document.body.appendChild(mount);
@@ -18,7 +18,7 @@ describe("shell bootstrap", () => {
     await shell.navigator.openLocation({ appId: "home", path: "/" });
 
     expect(shell.registry.listDescriptors()).toEqual([{ id: "home", label: "home" }]);
-    expect(mount.textContent).toContain("Help.");
+    expect(mount.textContent).toContain("Tutorial app.");
     expect(shell.navigator.getCurrentAppId()).toBe("home");
     expect(mount.querySelectorAll("button[data-nav-pad]")).toHaveLength(4);
     expect(mount.querySelector('[data-shell="surface"]')).not.toBeNull();

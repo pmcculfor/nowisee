@@ -29,7 +29,7 @@ const OTHER = "user-2";
 function packList(): AppDescriptor[] {
   return [
     { id: "home", label: "Home", homeRole: "internal" },
-    { id: "help", label: "Help", homeRole: "default" },
+    { id: "tutorial", label: "Tutorial", homeRole: "default" },
     { id: "bible", label: "Bible", homeRole: "default" },
     { id: "notes", label: "Notes", homeRole: "default" },
     { id: "gmail", label: "Gmail" },
@@ -81,13 +81,13 @@ describe("Home app", () => {
   it("signed out lists default ∪ required then Manage Apps; omits Gmail and Home", async () => {
     const result = (await homeApp().open("/", {}, signedOutCtx())) as RefreshResult;
     expect(result.warm.map((n) => n.label)).toEqual([
-      "Help",
+      "Tutorial",
       "Bible",
       "Notes",
       "Account",
       "Manage Apps",
     ]);
-    expect(result.node.label).toBe("Help");
+    expect(result.node.label).toBe("Tutorial");
     expect(result.navigationMap[result.node.id]?.back).toBeUndefined();
     expect(result.navigationMap[MANAGE_NODE_ID]?.enter).toEqual({
       kind: "node",
@@ -319,7 +319,7 @@ describe("Home app", () => {
 
     const home = (await app.open("/", {}, ctx)) as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
-      "Help",
+      "Tutorial",
       "Bible",
       "Notes",
       "Account",
@@ -328,15 +328,15 @@ describe("Home app", () => {
     ]);
   });
 
-  it("removes Help and shows App removed from home screen", async () => {
+  it("removes Tutorial and shows App removed from home screen", async () => {
     const app = homeApp();
     const ctx = signedInCtx();
-    const list = (await app.open("/manage/remove/help", {}, ctx)) as RefreshResult;
-    expect(list.node.label).toBe("Help");
+    const list = (await app.open("/manage/remove/tutorial", {}, ctx)) as RefreshResult;
+    expect(list.node.label).toBe("Tutorial");
     expect(list.warm.map((n) => n.label).includes("Account")).toBe(false);
 
     const removed = (await app.refresh(
-      [{ nodeId: removeRemovedNodeId("help"), label: "App removed from home screen", location: null }],
+      [{ nodeId: removeRemovedNodeId("tutorial"), label: "App removed from home screen", location: null }],
       { action: true },
       ctx,
     )) as RefreshResult;
@@ -355,11 +355,11 @@ describe("Home app", () => {
     });
     const remove = (await app.open("/manage/remove", {}, ctx)) as RefreshResult;
     expect(remove.navigationMap[REMOVE_MENU_ID]?.enter).toMatchObject({
-      toNodeId: removeAppNodeId("help"),
+      toNodeId: removeAppNodeId("tutorial"),
     });
     const reorder = (await app.open("/manage/reorder", {}, ctx)) as RefreshResult;
     expect(reorder.navigationMap[REORDER_MENU_ID]?.enter).toMatchObject({
-      toNodeId: reorderAppNodeId("help"),
+      toNodeId: reorderAppNodeId("tutorial"),
     });
     const order = (await app.open("/manage/reorder/account", {}, ctx)) as RefreshResult;
     expect(order.node.label).toBe("Account");
@@ -412,14 +412,14 @@ describe("Home app", () => {
     )) as RefreshResult;
     expect(moved.node.id).toBe(reorderAppNodeId("bible"));
     expect(moved.node.label).toBe("Bible");
-    const helpId = reorderAppNodeId("help");
+    const tutorialId = reorderAppNodeId("tutorial");
     expect(moved.navigationMap[moved.node.id]?.prev?.toNodeId).toBeUndefined();
-    expect(moved.navigationMap[moved.node.id]?.next?.toNodeId).toBe(helpId);
+    expect(moved.navigationMap[moved.node.id]?.next?.toNodeId).toBe(tutorialId);
 
     const home = (await app.open("/", {}, ctx)) as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
       "Bible",
-      "Help",
+      "Tutorial",
       "Notes",
       "Account",
       "Manage Apps",
@@ -429,17 +429,17 @@ describe("Home app", () => {
   it("first reorder item has no Move up", async () => {
     const app = homeApp();
     const ctx = signedInCtx();
-    const help = (await app.open("/manage/reorder/help", {}, ctx)) as RefreshResult;
-    expect(help.navigationMap[reorderAppNodeId("help")]?.enter).toMatchObject({
-      toNodeId: reorderMoveDownId("help"),
+    const tutorial = (await app.open("/manage/reorder/tutorial", {}, ctx)) as RefreshResult;
+    expect(tutorial.navigationMap[reorderAppNodeId("tutorial")]?.enter).toMatchObject({
+      toNodeId: reorderMoveDownId("tutorial"),
     });
     const move = (await app.refresh(
-      [{ nodeId: reorderMoveDownId("help"), label: "Move down", location: null }],
+      [{ nodeId: reorderMoveDownId("tutorial"), label: "Move down", location: null }],
       {},
       ctx,
     )) as RefreshResult;
     expect(move.node.label).toBe("Move down");
-    expect(move.navigationMap[reorderMoveUpId("help")]).toBeUndefined();
+    expect(move.navigationMap[reorderMoveUpId("tutorial")]).toBeUndefined();
   });
 
   it("store is owner-scoped", async () => {
@@ -459,7 +459,7 @@ describe("Home app", () => {
     const app = startHomeApp({ dbPath: ":memory:" });
     opened.push(app);
     const result = (await app.open("/", {}, signedOutCtx())) as RefreshResult;
-    expect(result.node.label).toBe("Help");
+    expect(result.node.label).toBe("Tutorial");
   });
 });
 

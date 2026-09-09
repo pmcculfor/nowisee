@@ -17,7 +17,7 @@ Typical sites force tabbing through chrome or exploring by touch, so users canno
 
 1. **Home** lists the user’s home apps (and Manage Apps) and links to each by URL.
 2. **Recents** is the session app switcher. It is not on Home. Desktop **r** (and the input **Recent apps** button) opens it.
-3. **Help** is a short tutorial of intents, lists, and typing. It is the first catalog item.
+3. **Tutorial** is a short walkthrough of intents, lists, and typing. It is the first catalog item.
 4. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
 5. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
 6. **Gmail** connects a Google account and shows inbox messages (subject, then from), body chunks, and compose/send. Tokens go through host OAuth/lockbox.
@@ -44,7 +44,7 @@ Apps author **intents**. Core owns which keystroke produces each one (defaults i
 
 Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.
 
-The display is one text blob, or a multiline field plus Cancel / Done / Recent apps. The screen reader announces updates by focusing the remounted text surface (there is no `aria-live` on that surface). Help is a first-class app, not a modal.
+The display is one text blob, or a multiline field plus Cancel / Done / Recent apps. The screen reader announces updates by focusing the remounted text surface (there is no `aria-live` on that surface). Tutorial is a first-class app, not a modal.
 
 A few example paths:
 
