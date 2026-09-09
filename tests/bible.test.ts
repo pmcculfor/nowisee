@@ -201,7 +201,7 @@ describe("Bible app", () => {
     expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(canon(MAT, 5, 8), "versions"),
-      stackBehavior: "push",
+      stackBehavior: "replace",
     });
     expect(landed.location).toEqual({ appId: "bible", path: "/Matthew/5/8" });
   });
@@ -239,6 +239,11 @@ describe("Bible app", () => {
       toNodeId: option,
       stackBehavior: "replace",
       action: true,
+    });
+    expect(menu.navigationMap[option]?.back).toEqual({
+      kind: "node",
+      toNodeId: verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, verseRef),
+      stackBehavior: "replace",
     });
 
     const added = await refresh(
@@ -339,7 +344,7 @@ describe("Bible app", () => {
     expect(context.navigationMap[contextId]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(canon(MAT, 5, 3), "versions", { type: "context", bookId: MAT, chapter: 5 }),
-      stackBehavior: "push",
+      stackBehavior: "replace",
     });
     expect(context.navigationMap[contextId]?.prev).toEqual({
       kind: "node",
@@ -562,14 +567,15 @@ describe("Bible app", () => {
     expect(matthew4.navigationMap[lastOf4]?.next?.toNodeId).not.toBe(firstOf5);
   });
 
-  it("verse enter pushes Versions; option next has no action flag", async () => {
+  it("verse enter replaces onto Versions; option next has no action flag", async () => {
     const instance = bible();
     const verseRef = ref(GEN, 1, 1);
+    const verseId = verseNodeId({ type: "chapter", bookId: GEN, chapter: 1 }, verseRef);
     const verse = await instance.open("/Genesis/1/1", {}, signedOut());
     expect(verse.navigationMap[verse.node.id]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(verseRef, "versions"),
-      stackBehavior: "push",
+      stackBehavior: "replace",
     });
 
     const versionsId = optionId(verseRef, "versions");
@@ -577,8 +583,14 @@ describe("Bible app", () => {
     expect(result.navigationMap[versionsId]?.enter).toEqual({
       kind: "node",
       toNodeId: verseVersionPickId(verseRef, KJV),
-      stackBehavior: "push",
+      stackBehavior: "replace",
     });
+    expect(result.navigationMap[versionsId]?.back).toEqual({
+      kind: "node",
+      toNodeId: verseId,
+      stackBehavior: "replace",
+    });
+    expect(result.warm.some((node) => node.id === verseId)).toBe(true);
     expect(result.navigationMap[versionsId]?.next).toEqual({
       kind: "node",
       toNodeId: optionId(verseRef, "commentary"),
@@ -690,7 +702,7 @@ describe("Bible app", () => {
     expect(menu.navigationMap[option]?.enter).toEqual({
       kind: "node",
       toNodeId: firstPick,
-      stackBehavior: "push",
+      stackBehavior: "replace",
     });
     const list = await refresh(instance, [
       { nodeId: option, label: "Versions", location: null },
@@ -703,6 +715,18 @@ describe("Bible app", () => {
       stackBehavior: "replace",
       action: true,
     });
+    expect(list.navigationMap[firstPick]?.back).toEqual({
+      kind: "node",
+      toNodeId: option,
+      stackBehavior: "replace",
+    });
+    expect(list.warm.some((node) => node.id === option)).toBe(true);
+    expect(
+      list.warm.some(
+        (node) =>
+          node.id === verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, verseRef),
+      ),
+    ).toBe(true);
     expect(list.navigationMap[firstPick]?.next).toEqual({
       kind: "node",
       toNodeId: verseVersionPickId(verseRef, ASV),
@@ -762,6 +786,15 @@ describe("Bible app", () => {
     expect(landed.node.id).toBe(verseNodeId({ type: "bookmarks" }, verseRef));
     expect(landed.node.label).toContain("heavens and the earth");
     expect(landed.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
+    expect(landed.navigationMap[landed.node.id]?.back).toEqual({
+      kind: "node",
+      stackBehavior: "pop",
+    });
+    expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
+      kind: "node",
+      toNodeId: optionId(verseRef, "versions", { type: "bookmarks" }),
+      stackBehavior: "replace",
+    });
     const deep = await instance.open("/bookmarks/Genesis/1/1", {}, ctx);
     expect(deep.node.id).toBe(landed.node.id);
   });

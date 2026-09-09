@@ -35,10 +35,12 @@ import { searchLimitedLabel } from "./search.ts";
 import type { BibleRef, CanonRef, VerseReading } from "../types.ts";
 import {
   addNode,
+  activeVersion,
   bookLabel,
   listedCommentaries,
   listedVersions,
   slotVerseId,
+  withDisplayVersion,
   type ViewSession,
 } from "./helpers.ts";
 
@@ -87,7 +89,7 @@ function verseEnter(seq: VerseSequence, ref: CanonRef) {
     return edgeNode(verseNodeId(contextSeq(ref.bookId, ref.chapter), ref), "push");
   }
   const firstOption = VERSE_OPTIONS[0];
-  return firstOption ? edgeNode(optionId(ref, firstOption.type, seq), "push") : undefined;
+  return firstOption ? edgeNode(optionId(ref, firstOption.type, seq), "replace") : undefined;
 }
 
 function sameCanon(a: CanonRef, b: CanonRef): boolean {
@@ -203,6 +205,19 @@ export function versePayload(session: ViewSession, seq: VerseSequence, ref: Bibl
   };
 }
 
+function warmMenuVerse(
+  session: ViewSession,
+  payloads: Map<string, NodePayload>,
+  seq: VerseSequence,
+  ref: CanonRef,
+): void {
+  const version = activeVersion(session);
+  if (!version) {
+    return;
+  }
+  addNode(payloads, versePayload(session, seq, withDisplayVersion(ref, version.id)));
+}
+
 function verseDisplayText(session: ViewSession, ref: BibleRef, text: string | null): string {
   if (text !== null) {
     return text;
@@ -220,13 +235,14 @@ export function addOptionLevel(
 ): void {
   const optionIds = VERSE_OPTIONS.map((option) => optionId(ref, option.type, seq));
   addOptionPayloads(session, payloads, seq, ref);
+  warmMenuVerse(session, payloads, seq, ref);
   fragments.push(siblingListEdges(optionIds, { wrap: true }));
   for (const option of VERSE_OPTIONS) {
     const id = optionId(ref, option.type, seq);
     fragments.push({
       [id]: {
         enter: optionEnter(session, seq, ref, option.type),
-        back: edgePop(),
+        back: edgeNode(verseNodeId(seq, ref), "replace"),
       },
     });
   }
@@ -266,7 +282,7 @@ export function optionEnter(
     if (!firstVersion) {
       return undefined;
     }
-    return edgeNode(verseVersionPickId(ref, firstVersion.id, seq), "push");
+    return edgeNode(verseVersionPickId(ref, firstVersion.id, seq), "replace");
   }
   const firstWork = listedCommentaries(session)[0];
   if (!firstWork) {
@@ -298,6 +314,8 @@ export function addVerseVersionList(
 ): void {
   const versions = listedVersions(session);
   const ids = versions.map((v) => verseVersionPickId(ref, v.id, seq));
+  addOptionPayloads(session, payloads, seq, ref);
+  warmMenuVerse(session, payloads, seq, ref);
   for (const item of versions) {
     addNode(payloads, {
       id: verseVersionPickId(ref, item.id, seq),
@@ -310,7 +328,7 @@ export function addVerseVersionList(
     fragments.push({
       [id]: {
         enter: edgeAction(id, { stackBehavior: "replace" }),
-        back: edgePop(),
+        back: edgeNode(optionId(ref, "versions", seq), "replace"),
       },
     });
   }
