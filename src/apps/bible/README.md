@@ -1,6 +1,6 @@
 # Bible (`id: "bible"`)
 
-The Bible app is an ordinary server `AppModule`. It owns a public corpus plus signed-in bookmarks and version preferences. Core never knows about verses.
+The Bible app is an ordinary server `AppModule`. It owns a public corpus plus bookmarks and version recency. Core never knows about verses.
 
 Code: [`index.ts`](index.ts), [`store.ts`](store.ts), [`import.ts`](import.ts), [`catalog.ts`](catalog.ts), [`view/`](view/), [`ids.ts`](ids.ts). Corpus files: [`data/SOURCES.md`](data/SOURCES.md). Tests: [`tests/bible.test.ts`](../../../tests/bible.test.ts) (a tiny seed; never the full raw files).
 
@@ -32,9 +32,9 @@ Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name
 - `RootItem[]` — testament headings, bookmarks, search, versions.
 - `VerseOption[]` — versions, commentary, bookmark, copy.
 
-There is one verse renderer and four sibling policies (`VerseSequence`): chapter (wrap), context (wrap, pop back), bookmarks (no wrap), and search (no wrap, neighborhood warm). Sequence is encoded in the node id. Option nodes share a canonical ref.
+There is one verse renderer and four sibling policies (`VerseSequence`): chapter (wrap), context (wrap, pop back), bookmarks (no wrap), and search (no wrap, neighborhood warm). Sequence is encoded in the node id, including verse-menu options and version picks.
 
-**Active version:** a signed-in user reads `reader_pref` keyed by `userId`. A signed-out user uses the URL if present, otherwise the first version by sort. There is no session-pref table. Reading URLs include the version slug. Bookmark and search **display** use the active version; the bookmark **key** is a verse id (canon slot, no version).
+**Active version:** first row of `version` left-joined to `version_recency` (`used_at DESC`, then catalog `sort_order`). Signed-in lookups use `user_id` only. Signed-out lookups use `session_id`. Session recency older than 14 days is deleted on write. Sign-in does not copy session rows; the account’s recency wins (or catalog order if the account has none). Book, chapter, and verse node ids have no version. Reading URLs are `/Matthew/5/3`. Bookmark URLs are `/bookmarks/Matthew/5/3`. Search stays `/search`.
 
 ## Graph
 
@@ -47,10 +47,10 @@ Chapter labels are `N (chapter)` (number first). Chapter-sequence verses are `N.
 Reading-tree descend and `back` use `replace` (testament ↔ book ↔ chapter ↔ verse), so a URL-opened verse walks chapter → book → testament the same way in-session reading does. Bookmark and search verses `back` pop. Context verses (from search) `back` pop to the hit. Options `push`. Root `back` is an `app` edge to Home.
 
 - **Copy:** `action: true` on enter from Copy, `replace` onto the same node. The label becomes “Copied” (or a failure line) and the result includes `clipboardText`. Core writes the clipboard. prev/next still walk the verse options.
-- **Version:** root and verse-menu lists walk `version` rows, most recently used first when signed in (catalog `sort_order` when signed out). Verse-menu Versions lands on the first pick, the same as root Version. Enter is `action: true` plus a same-app `app` edge (which resets the stack). Prefs and recency write only when `ctx.userId` is set. If the target version has no text for this slot, the verse node says so; **enter** is still the ordinary verse menu (Versions first). The URL keeps the same book/chapter/verse.
-- **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words on `verse_text` (word boundaries, no inverted-index table), canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. If the hit list reaches that cap, the last node is `search limited to N results.` (N is `maxHits`). The query id is session-scoped; hit verse ids are stored with the query (not re-run on each refresh). One live query per session: a new search deletes that session’s previous rows, and any query older than one day. Refresh warms `SearchPolicy.siblingRadius` neighbors, not the whole list. Enter on a hit pushes a context-sequence verse of the same ref; enter again is the verse menu.
-- **Bookmarks:** `ctx.userId` only. Signed-out enter is a sign-in node (enter → Account). Never store session-id rows. The verse-menu Bookmark option is an in-place toggle (“Bookmark” / “Remove bookmark”).
-- **Commentary:** works listed from the `commentary` table, most recently used first when signed in. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific section covering this verse (`commentary_section_verse`). Chunks do not wrap. TSK xrefs are stored and flattened into the section label.
+- **Version:** root and verse-menu lists walk `version` rows, most recently used first (catalog `sort_order` for never-picked rows). Verse-menu Versions lands on the first pick, the same as root Version. Enter is `action: true` plus `replace` onto the current-sequence verse (or the first testament at root). Recency writes for `ctx.userId` when signed in, else `ctx.sessionId`. If the target version has no text for this slot, the verse node says so; **enter** is still the ordinary verse menu (Versions first).
+- **Search:** enter pushes an input (Display’s generic `"Input"` name). Done is `action` plus `passInputText`; results replace the input. Tokenize on non-letters, AND of whole words on `verse_text` (word boundaries, no inverted-index table), canon order, cap `SearchPolicy.maxHits`. An empty query or no hits is a text node. If the hit list reaches that cap, the last node is `search limited to N results.` (N is `maxHits`). The query id is session-scoped and stores the version it was run against; hit verse ids are stored with the query (not re-run on each refresh). Hit labels always use that stored version. Enter on a hit pushes a context-sequence verse of the same ref, which uses the **active** version; enter again is the verse menu. One live query per session: a new search deletes that session’s previous rows, and any query older than one day. Refresh warms `SearchPolicy.siblingRadius` neighbors, not the whole list.
+- **Bookmarks:** `ctx.userId` only. Signed-out enter is a sign-in node (enter → Account). Never store session-id bookmark rows. The verse-menu Bookmark option is an in-place toggle (“Bookmark” / “Remove bookmark”). Bookmark **display** uses the active version; the bookmark **key** is a verse id (canon slot).
+- **Commentary:** works listed from the `commentary` table, most recently used first. Enter a work is `action: true` and lands on the first `splitText` chunk of the most specific section covering this verse (`commentary_section_verse`). Chunks do not wrap. TSK xrefs are stored and flattened into the section label.
 
 Warm nearby books, chapters, and verses as appropriate. Search hits warm a sibling window, not every result.
 
@@ -59,13 +59,12 @@ Warm nearby books, chapters, and verses as appropriate. Search hits warm a sibli
 Migrations live in [`db/migrations/001_reader.sql`](db/migrations/001_reader.sql). One file: the product is in development, so existing rows need not be preserved. Delete `data/apps/bible.db` after a schema change.
 
 - `book`, `chapter`, `verse` — canon tree (integer PKs). Books are not per-version.
-- `version` (`id`, unique `slug` for URLs, `label`, `sort_order`, `license`)
+- `version` (`id`, unique `slug`, `label`, `sort_order`, `license`)
 - `verse_text` (`version_id`, `verse_id`, `text`) — the only versioned corpus table
-- `reader_pref` (`user_id` → `active_version_id`)
-- `version_recency` / `commentary_recency` — MRU for signed-in users
+- `version_recency` / `commentary_recency` — MRU; `user_id` **or** `session_id`; first version row is the active version
 - `bookmark` (`user_id`, `verse_id`)
 - `commentary`, `commentary_section`, `commentary_section_verse`, `commentary_xref`
-- `search_query` (one live query per session, 1-day TTL on write) plus `search_hit` (verse ids; not re-run on each refresh)
+- `search_query` (one live query per session, `version_id`, 1-day TTL on write) plus `search_hit` (verse ids; not re-run on each refresh)
 
 Commentaries are version-independent. Search scans `verse_text` with whole-word `GLOB`; FTS5 is a later seam.
 

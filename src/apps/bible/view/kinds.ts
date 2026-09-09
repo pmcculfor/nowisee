@@ -29,8 +29,9 @@ import { addCommentaryWorks, commentaryChunkLabel } from "./commentary.ts";
 import {
   activeVersion,
   addNode,
-  bookLabel,
+  searchQueryVersion,
   verseLocation,
+  withDisplayVersion,
   type ViewSession,
 } from "./helpers.ts";
 import { addSearchInput, emptySearchLabel, searchLimitedLabel } from "./search.ts";
@@ -44,7 +45,6 @@ import {
   optionNodeLabel,
   versePayload,
 } from "./verse.ts";
-import type { BibleRef } from "../types.ts";
 
 type KindRow = {
   version(session: ViewSession, parsed: ParsedNode): number | null;
@@ -71,20 +71,12 @@ function active(session: ViewSession): number | null {
   return activeVersion(session)?.id ?? null;
 }
 
-function parsedVersion(_session: ViewSession, parsed: ParsedNode): number | null {
-  return "version" in parsed ? parsed.version : null;
-}
-
 function loc(session: ViewSession, path: string): AppLocation {
   return { appId: session.deps.appId, path };
 }
 
-function versionSlug(session: ViewSession, versionId: number): string {
-  return session.deps.store.getVersion(versionId)?.slug ?? String(versionId);
-}
-
-function versionRoot(session: ViewSession, _parsed: ParsedNode, version: number): AppLocation {
-  return loc(session, `/${versionSlug(session, version)}`);
+function rootLoc(session: ViewSession): AppLocation {
+  return loc(session, "/");
 }
 
 function bookmarksLoc(session: ViewSession): AppLocation {
@@ -95,30 +87,27 @@ function searchLoc(session: ViewSession): AppLocation {
   return loc(session, "/search");
 }
 
-function verseLocFromParsed(session: ViewSession, parsed: ParsedNode, version: number): AppLocation {
+function seqLocation(session: ViewSession, parsed: ParsedNode): AppLocation {
   if (!("ref" in parsed)) {
     throw new Error("Bible view: expected a verse-tree node");
   }
+  if ("seq" in parsed) {
+    return verseLocation(session.deps.appId, session.deps.store, parsed.seq, parsed.ref);
+  }
   return verseLocation(
     session.deps.appId,
-    versionSlug(session, version),
-    bookLabel(session.deps.store, parsed.ref.bookId),
+    session.deps.store,
+    { type: "chapter", bookId: parsed.ref.bookId, chapter: parsed.ref.chapter },
     parsed.ref,
   );
-}
-
-function withVersion(ref: BibleRef, versionId: number): BibleRef {
-  return ref.versionId ? ref : { ...ref, versionId };
 }
 
 function addRootPlain(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  _parsed: ParsedNode,
-  version: number,
 ): void {
-  addRootLevel(session, payloads, fragments, version);
+  addRootLevel(session, payloads, fragments);
 }
 
 function addSearchEmpty(
@@ -129,11 +118,19 @@ function addSearchEmpty(
 ): void {
   const queryId = asKind(parsed, "search-empty").queryId;
   const query = session.sessionId
-    ? (session.deps.store.getSearchQuery(queryId, session.sessionId) ?? "")
+    ? (session.deps.store.getSearchQuery(queryId, session.sessionId)?.query ?? "")
     : "";
   const id = searchEmptyId(queryId);
   addNode(payloads, { id, label: emptySearchLabel(query) });
   fragments.push({ [id]: { back: edgePop() } });
+}
+
+function verseDisplayVersion(session: ViewSession, parsed: ParsedNode): number | null {
+  const n = asKind(parsed, "verse");
+  if (n.seq.type === "search") {
+    return searchQueryVersion(session, n.seq.queryId) ?? active(session);
+  }
+  return active(session);
 }
 
 /**
@@ -142,25 +139,25 @@ function addSearchEmpty(
  */
 export const KIND: Record<ParsedNode["kind"], KindRow> = {
   testament: {
-    version: parsedVersion,
-    location: versionRoot,
+    version: active,
+    location: rootLoc,
     payload: (_s, parsed) => {
       const n = asKind(parsed, "testament");
-      return { id: testamentId(n.version, n.testament), label: testamentLabel(n.testament) };
+      return { id: testamentId(n.testament), label: testamentLabel(n.testament) };
     },
-    addLevel: (s, pay, frag, parsed, version) => {
-      addRootLevel(s, pay, frag, version, asKind(parsed, "testament").testament);
+    addLevel: (s, pay, frag, parsed) => {
+      addRootLevel(s, pay, frag, asKind(parsed, "testament").testament);
     },
   },
   bookmarks: {
     version: active,
-    location: (s) => bookmarksLoc(s),
+    location: bookmarksLoc,
     payload: () => ({ id: bookmarksId(), label: "Bookmarks" }),
     addLevel: addRootPlain,
   },
   "bookmarks-empty": {
     version: active,
-    location: (s) => bookmarksLoc(s),
+    location: bookmarksLoc,
     payload: () => ({ id: bookmarksEmptyId(), label: "No bookmarks yet." }),
     addLevel: (_s, pay, frag) => {
       addBookmarksEmpty(pay, frag);
@@ -168,13 +165,13 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
   },
   search: {
     version: active,
-    location: (s) => searchLoc(s),
+    location: searchLoc,
     payload: () => ({ id: searchId(), label: "Search" }),
     addLevel: addRootPlain,
   },
   "search-input": {
     version: active,
-    location: (s) => searchLoc(s),
+    location: searchLoc,
     payload: () => ({ id: searchInputId(), label: "", kind: "input" }),
     addLevel: (_s, pay, frag) => {
       addSearchInput(pay, frag);
@@ -182,7 +179,7 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
   },
   "search-working": {
     version: active,
-    location: (s) => searchLoc(s),
+    location: searchLoc,
     payload: () => ({ id: searchWorkingId(), label: "Searching…" }),
     addLevel: (_s, pay, frag) => {
       addNode(pay, { id: searchWorkingId(), label: "Searching…" });
@@ -191,7 +188,7 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
   },
   "search-empty": {
     version: active,
-    location: (s) => searchLoc(s),
+    location: searchLoc,
     payload: (_s, parsed) => ({
       id: searchEmptyId(asKind(parsed, "search-empty").queryId),
       label: "No verses matched.",
@@ -201,8 +198,9 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
   },
   "search-limited": {
-    version: active,
-    location: (s) => searchLoc(s),
+    version: (s, parsed) =>
+      searchQueryVersion(s, asKind(parsed, "search-limited").queryId) ?? active(s),
+    location: searchLoc,
     payload: (_s, parsed) => ({
       id: searchLimitedId(asKind(parsed, "search-limited").queryId),
       label: searchLimitedLabel(),
@@ -213,13 +211,13 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
   },
   "versions-heading": {
     version: active,
-    location: versionRoot,
+    location: rootLoc,
     payload: () => ({ id: versionsHeadingId(), label: "Version" }),
     addLevel: addRootPlain,
   },
   "version-pick": {
     version: active,
-    location: versionRoot,
+    location: rootLoc,
     payload: (s, parsed) => {
       const id = asKind(parsed, "version-pick").versionId;
       return { id: versionPickId(id), label: s.deps.store.getVersion(id)?.label ?? String(id) };
@@ -237,137 +235,124 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
   },
   book: {
-    version: parsedVersion,
-    location: (s, parsed, version) => {
+    version: active,
+    location: (s, parsed) => {
       const n = asKind(parsed, "book");
       const book = s.deps.store.getBook(n.bookId);
-      return loc(s, `/${versionSlug(s, version)}/${bookPathSegment(book?.label ?? String(n.bookId))}`);
+      return loc(s, `/${bookPathSegment(book?.label ?? String(n.bookId))}`);
     },
     payload: (s, parsed) => {
       const n = asKind(parsed, "book");
       return {
-        id: bookNodeId(n.version, n.bookId),
+        id: bookNodeId(n.bookId),
         label: s.deps.store.getBook(n.bookId)?.label ?? String(n.bookId),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
-      const n = asKind(parsed, "book");
-      addBookLevel(s, pay, frag, n.version, n.bookId);
+      addBookLevel(s, pay, frag, asKind(parsed, "book").bookId);
     },
   },
   chapter: {
-    version: parsedVersion,
-    location: (s, parsed, version) => {
+    version: active,
+    location: (s, parsed) => {
       const n = asKind(parsed, "chapter");
       const book = s.deps.store.getBook(n.bookId);
-      return loc(
-        s,
-        `/${versionSlug(s, version)}/${bookPathSegment(book?.label ?? String(n.bookId))}/${n.chapter}`,
-      );
+      return loc(s, `/${bookPathSegment(book?.label ?? String(n.bookId))}/${n.chapter}`);
     },
     payload: (_s, parsed) => {
       const n = asKind(parsed, "chapter");
       return {
-        id: chapterId(n.version, n.bookId, n.chapter),
+        id: chapterId(n.bookId, n.chapter),
         label: `${n.chapter} (chapter)`,
       };
     },
-    addLevel: (s, pay, frag, parsed) => {
+    addLevel: (s, pay, frag, parsed, version) => {
       const n = asKind(parsed, "chapter");
-      addChapterLevel(s, pay, frag, n.version, n.bookId, n.chapter);
+      addChapterLevel(s, pay, frag, version, n.bookId, n.chapter);
     },
   },
   verse: {
-    version: (s, parsed) => asKind(parsed, "verse").ref.versionId || active(s),
-    location: (s, parsed, version) => {
+    version: verseDisplayVersion,
+    location: (s, parsed) => {
       const n = asKind(parsed, "verse");
-      const ref = withVersion(n.ref, version);
-      return verseLocation(
-        s.deps.appId,
-        versionSlug(s, version),
-        bookLabel(s.deps.store, ref.bookId),
-        ref,
-      );
+      return verseLocation(s.deps.appId, s.deps.store, n.seq, n.ref);
     },
     payload: (s, parsed, version) => {
       const n = asKind(parsed, "verse");
-      return versePayload(s, n.seq, withVersion(n.ref, version));
+      return versePayload(s, n.seq, withDisplayVersion(n.ref, version));
     },
     addLevel: (s, pay, frag, parsed, version) => {
       const n = asKind(parsed, "verse");
-      addVerseLevel(s, pay, frag, n.seq, withVersion(n.ref, version));
+      addVerseLevel(s, pay, frag, n.seq, withDisplayVersion(n.ref, version));
     },
   },
   option: {
-    version: parsedVersion,
-    location: verseLocFromParsed,
+    version: active,
+    location: seqLocation,
     payload: (s, parsed) => {
       const n = asKind(parsed, "option");
       return {
-        id: optionId(n.version, n.ref, n.option),
+        id: optionId(n.ref, n.option, n.seq),
         label: optionNodeLabel(s, n.ref, n.option),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
       const n = asKind(parsed, "option");
-      addOptionLevel(s, pay, frag, n.version, n.ref);
+      addOptionLevel(s, pay, frag, n.seq, n.ref);
     },
   },
   "verse-version-pick": {
-    version: parsedVersion,
-    location: verseLocFromParsed,
+    version: active,
+    location: seqLocation,
     payload: (s, parsed) => {
       const n = asKind(parsed, "verse-version-pick");
       return {
-        id: verseVersionPickId(n.version, n.ref, n.targetVersionId),
+        id: verseVersionPickId(n.ref, n.targetVersionId, n.seq),
         label: s.deps.store.getVersion(n.targetVersionId)?.label ?? String(n.targetVersionId),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
       const n = asKind(parsed, "verse-version-pick");
-      addVerseVersionList(s, pay, frag, n.version, n.ref);
+      addVerseVersionList(s, pay, frag, n.seq, n.ref);
     },
   },
   "commentary-list": {
-    version: parsedVersion,
-    location: verseLocFromParsed,
+    version: active,
+    location: seqLocation,
     payload: (_s, parsed) => {
       const n = asKind(parsed, "commentary-list");
-      return { id: commentaryListId(n.version, n.ref), label: "Commentary" };
+      return { id: commentaryListId(n.ref), label: "Commentary" };
     },
     addLevel: (s, pay, frag, parsed) => {
-      const n = asKind(parsed, "commentary-list");
-      addCommentaryWorks(s, pay, frag, n.version, n.ref);
+      addCommentaryWorks(s, pay, frag, asKind(parsed, "commentary-list").ref);
     },
   },
   "commentary-work": {
-    version: parsedVersion,
-    location: verseLocFromParsed,
+    version: active,
+    location: seqLocation,
     payload: (s, parsed) => {
       const n = asKind(parsed, "commentary-work");
       return {
-        id: commentaryWorkId(n.version, n.ref, n.commentaryId),
+        id: commentaryWorkId(n.ref, n.commentaryId),
         label: s.deps.store.getCommentary(n.commentaryId)?.label ?? String(n.commentaryId),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
-      const n = asKind(parsed, "commentary-work");
-      addCommentaryWorks(s, pay, frag, n.version, n.ref);
+      addCommentaryWorks(s, pay, frag, asKind(parsed, "commentary-work").ref);
     },
   },
   "commentary-chunk": {
-    version: parsedVersion,
-    location: verseLocFromParsed,
+    version: active,
+    location: seqLocation,
     payload: (s, parsed) => {
       const n = asKind(parsed, "commentary-chunk");
       return {
-        id: commentaryChunkId(n.version, n.ref, n.commentaryId, n.index),
+        id: commentaryChunkId(n.ref, n.commentaryId, n.index),
         label: commentaryChunkLabel(s, n.ref, n.commentaryId, n.index),
       };
     },
     addLevel: (s, pay, frag, parsed) => {
-      const n = asKind(parsed, "commentary-chunk");
-      addCommentaryWorks(s, pay, frag, n.version, n.ref);
+      addCommentaryWorks(s, pay, frag, asKind(parsed, "commentary-chunk").ref);
     },
   },
 };

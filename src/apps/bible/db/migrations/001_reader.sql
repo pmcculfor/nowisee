@@ -37,19 +37,18 @@ CREATE TABLE verse_text (
   PRIMARY KEY (version_id, verse_id)
 );
 
-CREATE TABLE reader_pref (
-  user_id TEXT PRIMARY KEY,
-  active_version_id INTEGER NOT NULL REFERENCES version (id)
-);
-
 CREATE TABLE version_recency (
-  user_id TEXT NOT NULL,
+  user_id TEXT,
+  session_id TEXT,
   version_id INTEGER NOT NULL REFERENCES version (id),
   used_at INTEGER NOT NULL,
-  PRIMARY KEY (user_id, version_id)
+  CHECK ((user_id IS NULL) <> (session_id IS NULL))
 );
 
-CREATE INDEX version_recency_list ON version_recency (user_id, used_at DESC);
+CREATE UNIQUE INDEX version_recency_user ON version_recency (user_id, version_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX version_recency_session ON version_recency (session_id, version_id) WHERE session_id IS NOT NULL;
+CREATE INDEX version_recency_user_list ON version_recency (user_id, used_at DESC);
+CREATE INDEX version_recency_session_list ON version_recency (session_id, used_at DESC);
 
 CREATE TABLE commentary (
   id INTEGER PRIMARY KEY,
@@ -58,13 +57,17 @@ CREATE TABLE commentary (
 );
 
 CREATE TABLE commentary_recency (
-  user_id TEXT NOT NULL,
+  user_id TEXT,
+  session_id TEXT,
   commentary_id INTEGER NOT NULL REFERENCES commentary (id),
   used_at INTEGER NOT NULL,
-  PRIMARY KEY (user_id, commentary_id)
+  CHECK ((user_id IS NULL) <> (session_id IS NULL))
 );
 
-CREATE INDEX commentary_recency_list ON commentary_recency (user_id, used_at DESC);
+CREATE UNIQUE INDEX commentary_recency_user ON commentary_recency (user_id, commentary_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX commentary_recency_session ON commentary_recency (session_id, commentary_id) WHERE session_id IS NOT NULL;
+CREATE INDEX commentary_recency_user_list ON commentary_recency (user_id, used_at DESC);
+CREATE INDEX commentary_recency_session_list ON commentary_recency (session_id, used_at DESC);
 
 CREATE TABLE bookmark (
   user_id TEXT NOT NULL,
@@ -99,6 +102,7 @@ CREATE TABLE search_query (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
   query TEXT NOT NULL,
+  version_id INTEGER NOT NULL REFERENCES version (id),
   created_at INTEGER NOT NULL
 );
 

@@ -100,15 +100,17 @@ export type BibleSeed = {
   readonly sections?: readonly BibleSeedSection[];
 };
 
+export type SearchQueryRecord = {
+  readonly query: string;
+  readonly versionId: number;
+};
+
 export interface BibleStore {
-  defaultVersionId(): number | null;
   getVersion(id: number): BibleVersion | undefined;
   getVersionBySlug(slug: string): BibleVersion | undefined;
-  listVersions(userId?: string | null): readonly BibleVersion[];
-  getActiveVersionId(userId: string): number | null;
-  setActiveVersionId(userId: string, versionId: number): void;
-  touchVersionRecency(userId: string, versionId: number): void;
-  touchCommentaryRecency(userId: string, commentaryId: number): void;
+  listVersions(userId?: string | null, sessionId?: string | null): readonly BibleVersion[];
+  touchVersionRecency(userId: string | null, sessionId: string | null, versionId: number): void;
+  touchCommentaryRecency(userId: string | null, sessionId: string | null, commentaryId: number): void;
   listBooks(testament: string): readonly BibleBook[];
   getBook(id: number): BibleBook | undefined;
   getBookBySort(sort: number): BibleBook | undefined;
@@ -120,17 +122,18 @@ export interface BibleStore {
   isBookmarked(userId: string, verseId: number): boolean;
   listBookmarks(userId: string): readonly BookmarkRecord[];
   toggleBookmark(userId: string, verseId: number): "added" | "removed";
-  listCommentaries(userId?: string | null): readonly CommentaryWork[];
+  listCommentaries(userId?: string | null, sessionId?: string | null): readonly CommentaryWork[];
   getCommentary(id: number): CommentaryWork | undefined;
   findSection(commentaryId: number, verseId: number): CommentarySection | undefined;
-  createSearchQuery(sessionId: string, query: string, hits: readonly SearchHit[]): number;
-  getSearchQuery(queryId: number, sessionId: string): string | null;
-  listSearchHits(queryId: number, sessionId: string): readonly SearchHit[];
-  listSearchHitReadings(
-    queryId: number,
+  createSearchQuery(
     sessionId: string,
+    query: string,
     versionId: number,
-  ): readonly VerseReading[];
+    hits: readonly SearchHit[],
+  ): number;
+  getSearchQuery(queryId: number, sessionId: string): SearchQueryRecord | null;
+  listSearchHits(queryId: number, sessionId: string): readonly SearchHit[];
+  listSearchHitReadings(queryId: number, sessionId: string): readonly VerseReading[];
   searchVerses(versionId: number, tokens: readonly string[], cap: number): readonly SearchHit[];
   close(): void;
 }

@@ -5,7 +5,7 @@ import {
   type MapFragment,
 } from "../../../app-kit/index.ts";
 import type { NodePayload } from "../../../core/types.ts";
-import { ROOT_ITEMS, testamentLabel } from "../catalog.ts";
+import { ROOT_ITEMS, chapterSeq, testamentLabel } from "../catalog.ts";
 import { chapterLabel, verseNumberLabel } from "../canon.ts";
 import {
   bookId as bookNodeId,
@@ -20,23 +20,22 @@ import {
   versionPickId,
   versionsHeadingId,
 } from "../ids.ts";
-import { addNode, listedVersions, type ViewSession } from "./helpers.ts";
+import { activeVersion, addNode, listedVersions, type ViewSession } from "./helpers.ts";
 import { missingVerseLabel } from "../canon.ts";
 
 export function addRootLevel(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  versionId: number,
   currentTestament?: string,
 ): void {
   const { store, rootAppId } = session.deps;
-  const ids = rootHeadingIds(versionId);
+  const ids = rootHeadingIds();
 
   for (const item of ROOT_ITEMS) {
     if (item.type === "testament") {
       addNode(payloads, {
-        id: testamentId(versionId, item.testament),
+        id: testamentId(item.testament),
         label: testamentLabel(item.testament),
       });
     } else if (item.type === "bookmarks") {
@@ -55,13 +54,13 @@ export function addRootLevel(
     if (item.type !== "testament") {
       continue;
     }
-    const id = testamentId(versionId, item.testament);
+    const id = testamentId(item.testament);
     fragments.push(rootBackToHome(id, rootAppId, session.deps.appId));
     const books = store.listBooks(item.testament);
     const first = books[0];
     if (first) {
       fragments.push({
-        [id]: { enter: edgeNode(bookNodeId(versionId, first.id), "push") },
+        [id]: { enter: edgeNode(bookNodeId(first.id), "push") },
       });
     }
   }
@@ -71,16 +70,16 @@ export function addRootLevel(
 
   if (currentTestament) {
     for (const book of store.listBooks(currentTestament).slice(0, 8)) {
-      addNode(payloads, { id: bookNodeId(versionId, book.id), label: book.label });
+      addNode(payloads, { id: bookNodeId(book.id), label: book.label });
     }
   }
 }
 
-function rootHeadingIds(versionId: number): string[] {
+function rootHeadingIds(): string[] {
   return ROOT_ITEMS.map((item) => {
     switch (item.type) {
       case "testament":
-        return testamentId(versionId, item.testament);
+        return testamentId(item.testament);
       case "bookmarks":
         return bookmarksId();
       case "search":
@@ -117,38 +116,35 @@ export function addBookLevel(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  versionId: number,
   bookPk: number,
 ): void {
   const book = session.deps.store.getBook(bookPk);
   if (!book) {
-    addRootLevel(session, payloads, fragments, versionId);
+    addRootLevel(session, payloads, fragments);
     return;
   }
   const siblings = session.deps.store.listBooks(book.testament);
-  const ids = siblings.map((b) => bookNodeId(versionId, b.id));
+  const ids = siblings.map((b) => bookNodeId(b.id));
   for (const b of siblings) {
-    addNode(payloads, { id: bookNodeId(versionId, b.id), label: b.label });
+    addNode(payloads, { id: bookNodeId(b.id), label: b.label });
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   const chapters = session.deps.store.listChapters(book.id);
   const firstChapter = chapters[0];
   fragments.push({
-    [bookNodeId(versionId, book.id)]: {
-      ...(firstChapter
-        ? { enter: edgeNode(chapterId(versionId, book.id, firstChapter.number), "replace") }
-        : {}),
-      back: edgeNode(testamentId(versionId, book.testament), "replace"),
+    [bookNodeId(book.id)]: {
+      ...(firstChapter ? { enter: edgeNode(chapterId(book.id, firstChapter.number), "replace") } : {}),
+      back: edgeNode(testamentId(book.testament), "replace"),
     },
   });
   for (const chapter of chapters.slice(0, 12)) {
     addNode(payloads, {
-      id: chapterId(versionId, book.id, chapter.number),
+      id: chapterId(book.id, chapter.number),
       label: chapterLabel(chapter.number),
     });
   }
   addNode(payloads, {
-    id: testamentId(versionId, book.testament),
+    id: testamentId(book.testament),
     label: testamentLabel(book.testament),
   });
 }
@@ -164,48 +160,43 @@ export function addChapterLevel(
   const book = session.deps.store.getBook(bookPk);
   const chapter = session.deps.store.getChapter(bookPk, chapterNumber);
   if (!book || !chapter) {
-    addRootLevel(session, payloads, fragments, versionId);
+    addRootLevel(session, payloads, fragments);
     return;
   }
   const chapters = session.deps.store.listChapters(book.id);
-  const ids = chapters.map((ch) => chapterId(versionId, book.id, ch.number));
+  const ids = chapters.map((ch) => chapterId(book.id, ch.number));
   for (const ch of chapters) {
     addNode(payloads, {
-      id: chapterId(versionId, book.id, ch.number),
+      id: chapterId(book.id, ch.number),
       label: chapterLabel(ch.number),
     });
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   const readings = session.deps.store.listVerseReadings(versionId, chapter.id);
   const firstReading = readings[0];
+  const seq = chapterSeq(book.id, chapter.number);
   fragments.push({
-    [chapterId(versionId, book.id, chapter.number)]: {
+    [chapterId(book.id, chapter.number)]: {
       ...(firstReading
         ? {
             enter: edgeNode(
-              verseNodeId(
-                { type: "chapter", versionId, bookId: book.id, chapter: chapter.number },
-                { bookId: book.id, chapter: chapter.number, verse: firstReading.verse },
-              ),
+              verseNodeId(seq, { bookId: book.id, chapter: chapter.number, verse: firstReading.verse }),
               "replace",
             ),
           }
         : {}),
-      back: edgeNode(bookNodeId(versionId, book.id), "replace"),
+      back: edgeNode(bookNodeId(book.id), "replace"),
     },
   });
-  const version = session.deps.store.getVersion(versionId);
+  const version = session.deps.store.getVersion(versionId) ?? activeVersion(session);
   for (const reading of readings.slice(0, 8)) {
+    const ref = { bookId: book.id, chapter: chapter.number, verse: reading.verse };
     const text =
-      reading.text ??
-      missingVerseLabel(book.label, { bookId: book.id, chapter: chapter.number, verse: reading.verse }, version?.label ?? "");
+      reading.text ?? missingVerseLabel(book.label, ref, version?.label ?? "");
     addNode(payloads, {
-      id: verseNodeId(
-        { type: "chapter", versionId, bookId: book.id, chapter: chapter.number },
-        { bookId: book.id, chapter: chapter.number, verse: reading.verse },
-      ),
+      id: verseNodeId(seq, ref),
       label: reading.text ? verseNumberLabel(reading.verse, reading.text) : text,
     });
   }
-  addNode(payloads, { id: bookNodeId(versionId, book.id), label: book.label });
+  addNode(payloads, { id: bookNodeId(book.id), label: book.label });
 }

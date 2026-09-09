@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { catalogVersionId, VERSION_RECORDS, getCanonBook } from "../src/apps/bible/catalog.ts";
+import { getCanonBook } from "../src/apps/bible/catalog.ts";
 import { optionId } from "../src/apps/bible/ids.ts";
 import { HELP_APP_LABEL } from "../src/apps/help/ids.ts";
 import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
@@ -51,9 +51,9 @@ describe("app host", () => {
   });
 
   it("opens a Bible verse", async () => {
-    const result = await host().open("bible", "/kjv/Genesis/1/1", {});
+    const result = await host().open("bible", "/Genesis/1/1", {});
     expect(result.node.label).toContain("In the beginning");
-    expect(result.location).toEqual({ appId: "bible", path: "/kjv/Genesis/1/1" });
+    expect(result.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
   });
 
   it("Copy action returns clipboardText without needing a clipboard on extras", async () => {
@@ -62,7 +62,6 @@ describe("app host", () => {
       [
         {
           nodeId: optionId(
-            catalogVersionId(VERSION_RECORDS[0]!),
             {
               bookId: getCanonBook("GEN")!.sort,
               chapter: 1,

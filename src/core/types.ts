@@ -54,7 +54,7 @@ export interface NodePayload {
  */
 export interface AppLocation {
   readonly appId: string;
-  /** App-owned remainder, normalized to start with "/" (e.g. "/kjv/Matthew/5/8"). */
+  /** App-owned remainder, normalized to start with "/" (e.g. "/Matthew/5/8"). */
   readonly path: string;
 }
 

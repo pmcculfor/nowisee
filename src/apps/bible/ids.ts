@@ -1,8 +1,8 @@
-import type { VerseSequence } from "./catalog.ts";
-import type { BibleRef, CanonRef } from "./types.ts";
+import { chapterSeq, contextSeq, type VerseSequence } from "./catalog.ts";
+import type { CanonRef } from "./types.ts";
 
-export function testamentId(versionId: number, testament: string): string {
-  return `bible:t:${versionId}:${testament}`;
+export function testamentId(testament: string): string {
+  return `bible:t:${testament}`;
 }
 
 export function bookmarksId(): string {
@@ -45,20 +45,20 @@ export function signInId(): string {
   return "bible:signin";
 }
 
-export function bookId(versionId: number, bookId: number): string {
-  return `bible:b:${versionId}:${bookId}`;
+export function bookId(bookId: number): string {
+  return `bible:b:${bookId}`;
 }
 
-export function chapterId(versionId: number, bookId: number, chapter: number): string {
-  return `bible:c:${versionId}:${bookId}:${chapter}`;
+export function chapterId(bookId: number, chapter: number): string {
+  return `bible:c:${bookId}:${chapter}`;
 }
 
 export function verseNodeId(seq: VerseSequence, ref: CanonRef): string {
   switch (seq.type) {
     case "chapter":
-      return `bible:v:${seq.versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
+      return `bible:v:${ref.bookId}:${ref.chapter}:${ref.verse}`;
     case "context":
-      return `bible:vx:${seq.versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
+      return `bible:vx:${ref.bookId}:${ref.chapter}:${ref.verse}`;
     case "bookmarks":
       return `bible:bm:${ref.bookId}:${ref.chapter}:${ref.verse}`;
     case "search":
@@ -67,36 +67,35 @@ export function verseNodeId(seq: VerseSequence, ref: CanonRef): string {
 }
 
 export function optionId(
-  versionId: number,
   ref: CanonRef,
   option: "copy" | "bookmark" | "versions" | "commentary",
+  seq: VerseSequence = chapterSeq(ref.bookId, ref.chapter),
 ): string {
-  return `bible:o:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:${option}`;
+  return `bible:o:${seqPrefix(seq)}:${ref.bookId}:${ref.chapter}:${ref.verse}:${option}`;
 }
 
-export function verseVersionPickId(versionId: number, ref: CanonRef, targetVersionId: number): string {
-  return `bible:vp:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:${targetVersionId}`;
-}
-
-export function commentaryListId(versionId: number, ref: CanonRef): string {
-  return `bible:cl:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
-}
-
-export function commentaryWorkId(versionId: number, ref: CanonRef, commentaryId: number): string {
-  return `bible:cw:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}`;
-}
-
-export function commentaryChunkId(
-  versionId: number,
+export function verseVersionPickId(
   ref: CanonRef,
-  commentaryId: number,
-  index: number,
+  targetVersionId: number,
+  seq: VerseSequence = chapterSeq(ref.bookId, ref.chapter),
 ): string {
-  return `bible:cs:${versionId}:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}:${index}`;
+  return `bible:vp:${seqPrefix(seq)}:${ref.bookId}:${ref.chapter}:${ref.verse}:${targetVersionId}`;
+}
+
+export function commentaryListId(ref: CanonRef): string {
+  return `bible:cl:${ref.bookId}:${ref.chapter}:${ref.verse}`;
+}
+
+export function commentaryWorkId(ref: CanonRef, commentaryId: number): string {
+  return `bible:cw:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}`;
+}
+
+export function commentaryChunkId(ref: CanonRef, commentaryId: number, index: number): string {
+  return `bible:cs:${ref.bookId}:${ref.chapter}:${ref.verse}:${commentaryId}:${index}`;
 }
 
 export type ParsedNode =
-  | { kind: "testament"; version: number; testament: string }
+  | { kind: "testament"; testament: string }
   | { kind: "bookmarks" }
   | { kind: "bookmarks-empty" }
   | { kind: "search" }
@@ -107,17 +106,22 @@ export type ParsedNode =
   | { kind: "versions-heading" }
   | { kind: "version-pick"; versionId: number }
   | { kind: "signin" }
-  | { kind: "book"; version: number; bookId: number }
-  | { kind: "chapter"; version: number; bookId: number; chapter: number }
-  | { kind: "verse"; seq: VerseSequence; ref: BibleRef }
-  | { kind: "option"; version: number; ref: CanonRef; option: "copy" | "bookmark" | "versions" | "commentary" }
-  | { kind: "verse-version-pick"; version: number; ref: CanonRef; targetVersionId: number }
-  | { kind: "commentary-list"; version: number; ref: CanonRef }
-  | { kind: "commentary-work"; version: number; ref: CanonRef; commentaryId: number }
-  | { kind: "commentary-chunk"; version: number; ref: CanonRef; commentaryId: number; index: number };
+  | { kind: "book"; bookId: number }
+  | { kind: "chapter"; bookId: number; chapter: number }
+  | { kind: "verse"; seq: VerseSequence; ref: CanonRef }
+  | {
+      kind: "option";
+      seq: VerseSequence;
+      ref: CanonRef;
+      option: "copy" | "bookmark" | "versions" | "commentary";
+    }
+  | { kind: "verse-version-pick"; seq: VerseSequence; ref: CanonRef; targetVersionId: number }
+  | { kind: "commentary-list"; ref: CanonRef }
+  | { kind: "commentary-work"; ref: CanonRef; commentaryId: number }
+  | { kind: "commentary-chunk"; ref: CanonRef; commentaryId: number; index: number };
 
-const REF = "(\\d+):(\\d+):(\\d+):(\\d+)";
 const CANON = "(\\d+):(\\d+):(\\d+)";
+const SEQ = "(v|vx|bm)";
 
 export function parseNodeId(id: string): ParsedNode | null {
   if (id === bookmarksId()) {
@@ -157,39 +161,31 @@ export function parseNodeId(id: string): ParsedNode | null {
     return { kind: "version-pick", versionId: Number(ver[1]) };
   }
 
-  const t = /^bible:t:(\d+):(.+)$/.exec(id);
+  const t = /^bible:t:(.+)$/.exec(id);
   if (t) {
-    return { kind: "testament", version: Number(t[1]), testament: t[2]! };
+    return { kind: "testament", testament: t[1]! };
   }
 
-  const b = /^bible:b:(\d+):(\d+)$/.exec(id);
+  const b = /^bible:b:(\d+)$/.exec(id);
   if (b) {
-    return { kind: "book", version: Number(b[1]), bookId: Number(b[2]) };
+    return { kind: "book", bookId: Number(b[1]) };
   }
 
-  const c = /^bible:c:(\d+):(\d+):(\d+)$/.exec(id);
+  const c = /^bible:c:(\d+):(\d+)$/.exec(id);
   if (c) {
-    return { kind: "chapter", version: Number(c[1]), bookId: Number(c[2]), chapter: Number(c[3]) };
+    return { kind: "chapter", bookId: Number(c[1]), chapter: Number(c[2]) };
   }
 
-  const v = new RegExp(`^bible:v:${REF}$`).exec(id);
+  const v = new RegExp(`^bible:v:${CANON}$`).exec(id);
   if (v) {
-    const ref = bibleRef(v[1]!, v[2]!, v[3]!, v[4]!);
-    return {
-      kind: "verse",
-      seq: { type: "chapter", versionId: ref.versionId, bookId: ref.bookId, chapter: ref.chapter },
-      ref,
-    };
+    const ref = canonRef(v[1]!, v[2]!, v[3]!);
+    return { kind: "verse", seq: chapterSeq(ref.bookId, ref.chapter), ref };
   }
 
-  const vx = new RegExp(`^bible:vx:${REF}$`).exec(id);
+  const vx = new RegExp(`^bible:vx:${CANON}$`).exec(id);
   if (vx) {
-    const ref = bibleRef(vx[1]!, vx[2]!, vx[3]!, vx[4]!);
-    return {
-      kind: "verse",
-      seq: { type: "context", versionId: ref.versionId, bookId: ref.bookId, chapter: ref.chapter },
-      ref,
-    };
+    const ref = canonRef(vx[1]!, vx[2]!, vx[3]!);
+    return { kind: "verse", seq: contextSeq(ref.bookId, ref.chapter), ref };
   }
 
   const bm = new RegExp(`^bible:bm:${CANON}$`).exec(id);
@@ -197,7 +193,7 @@ export function parseNodeId(id: string): ParsedNode | null {
     return {
       kind: "verse",
       seq: { type: "bookmarks" },
-      ref: { versionId: 0, bookId: Number(bm[1]), chapter: Number(bm[2]), verse: Number(bm[3]) },
+      ref: canonRef(bm[1]!, bm[2]!, bm[3]!),
     };
   }
 
@@ -206,66 +202,78 @@ export function parseNodeId(id: string): ParsedNode | null {
     return {
       kind: "verse",
       seq: { type: "search", queryId: Number(q[1]) },
-      ref: { versionId: 0, bookId: Number(q[2]), chapter: Number(q[3]), verse: Number(q[4]) },
+      ref: canonRef(q[2]!, q[3]!, q[4]!),
     };
   }
 
-  const o = new RegExp(`^bible:o:${REF}:(copy|bookmark|versions|commentary)$`).exec(id);
+  const o = new RegExp(`^bible:o:${SEQ}:${CANON}:(copy|bookmark|versions|commentary)$`).exec(id);
   if (o) {
+    const ref = canonRef(o[2]!, o[3]!, o[4]!);
     return {
       kind: "option",
-      version: Number(o[1]),
-      ref: canonRef(o[2]!, o[3]!, o[4]!),
+      seq: seqFromPrefix(o[1]!, ref),
+      ref,
       option: o[5] as "copy" | "bookmark" | "versions" | "commentary",
     };
   }
 
-  const vp = new RegExp(`^bible:vp:${REF}:(\\d+)$`).exec(id);
+  const vp = new RegExp(`^bible:vp:${SEQ}:${CANON}:(\\d+)$`).exec(id);
   if (vp) {
+    const ref = canonRef(vp[2]!, vp[3]!, vp[4]!);
     return {
       kind: "verse-version-pick",
-      version: Number(vp[1]),
-      ref: canonRef(vp[2]!, vp[3]!, vp[4]!),
+      seq: seqFromPrefix(vp[1]!, ref),
+      ref,
       targetVersionId: Number(vp[5]),
     };
   }
 
-  const cl = new RegExp(`^bible:cl:${REF}$`).exec(id);
+  const cl = new RegExp(`^bible:cl:${CANON}$`).exec(id);
   if (cl) {
-    return { kind: "commentary-list", version: Number(cl[1]), ref: canonRef(cl[2]!, cl[3]!, cl[4]!) };
+    return { kind: "commentary-list", ref: canonRef(cl[1]!, cl[2]!, cl[3]!) };
   }
 
-  const cw = new RegExp(`^bible:cw:${REF}:(\\d+)$`).exec(id);
+  const cw = new RegExp(`^bible:cw:${CANON}:(\\d+)$`).exec(id);
   if (cw) {
     return {
       kind: "commentary-work",
-      version: Number(cw[1]),
-      ref: canonRef(cw[2]!, cw[3]!, cw[4]!),
-      commentaryId: Number(cw[5]),
+      ref: canonRef(cw[1]!, cw[2]!, cw[3]!),
+      commentaryId: Number(cw[4]),
     };
   }
 
-  const cs = new RegExp(`^bible:cs:${REF}:(\\d+):(\\d+)$`).exec(id);
+  const cs = new RegExp(`^bible:cs:${CANON}:(\\d+):(\\d+)$`).exec(id);
   if (cs) {
     return {
       kind: "commentary-chunk",
-      version: Number(cs[1]),
-      ref: canonRef(cs[2]!, cs[3]!, cs[4]!),
-      commentaryId: Number(cs[5]),
-      index: Number(cs[6]),
+      ref: canonRef(cs[1]!, cs[2]!, cs[3]!),
+      commentaryId: Number(cs[4]),
+      index: Number(cs[5]),
     };
   }
 
   return null;
 }
 
-function bibleRef(version: string, bookId: string, chapter: string, verse: string): BibleRef {
-  return {
-    versionId: Number(version),
-    bookId: Number(bookId),
-    chapter: Number(chapter),
-    verse: Number(verse),
-  };
+function seqPrefix(seq: VerseSequence): "v" | "vx" | "bm" {
+  switch (seq.type) {
+    case "context":
+      return "vx";
+    case "bookmarks":
+      return "bm";
+    default:
+      return "v";
+  }
+}
+
+function seqFromPrefix(prefix: string, ref: CanonRef): VerseSequence {
+  if (prefix === "vx") {
+    return contextSeq(ref.bookId, ref.chapter);
+  }
+  if (prefix === "bm") {
+    return { type: "bookmarks" };
+  }
+  return chapterSeq(ref.bookId, ref.chapter);
 }
 
 function canonRef(bookId: string, chapter: string, verse: string): CanonRef {

@@ -14,32 +14,30 @@ export function addCommentaryWorks(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  versionId: number,
   ref: CanonRef,
 ): void {
   const works = listedCommentaries(session);
-  const ids = works.map((work) => commentaryWorkId(versionId, ref, work.id));
+  const ids = works.map((work) => commentaryWorkId(ref, work.id));
   fragments.push(siblingListEdges(ids, { wrap: true }));
   const verseId = slotVerseId(session.deps.store, ref);
 
   for (const work of works) {
     addNode(payloads, {
-      id: commentaryWorkId(versionId, ref, work.id),
+      id: commentaryWorkId(ref, work.id),
       label: work.label,
     });
-    const section =
-      verseId === null ? undefined : session.deps.store.findSection(work.id, verseId);
+    const section = verseId === null ? undefined : session.deps.store.findSection(work.id, verseId);
     const chunks = splitText(commentaryLabel(section, work.label));
-    const chunkIds = chunks.map((_, index) => commentaryChunkId(versionId, ref, work.id, index));
+    const chunkIds = chunks.map((_, index) => commentaryChunkId(ref, work.id, index));
     fragments.push({
-      [commentaryWorkId(versionId, ref, work.id)]: {
+      [commentaryWorkId(ref, work.id)]: {
         ...(chunkIds[0] ? { enter: edgeAction(chunkIds[0]) } : {}),
         back: edgePop(),
       },
     });
     fragments.push(siblingListEdges(chunkIds, { wrap: false }));
     chunks.forEach((label, index) => {
-      const id = commentaryChunkId(versionId, ref, work.id, index);
+      const id = commentaryChunkId(ref, work.id, index);
       addNode(payloads, { id, label });
       fragments.push({
         [id]: { back: edgePop() },
@@ -63,8 +61,7 @@ export function commentaryChunkLabel(
 ): string {
   const work = session.deps.store.getCommentary(commentaryId);
   const verseId = slotVerseId(session.deps.store, ref);
-  const section =
-    verseId === null ? undefined : session.deps.store.findSection(commentaryId, verseId);
+  const section = verseId === null ? undefined : session.deps.store.findSection(commentaryId, verseId);
   const fallback = work?.label ?? String(commentaryId);
   const chunks = splitText(commentaryLabel(section, fallback));
   return chunks[index] ?? chunks[0] ?? commentaryLabel(section, fallback);

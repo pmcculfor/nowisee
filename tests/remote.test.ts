@@ -46,10 +46,10 @@ describe("createRemoteApp", () => {
       },
     };
     const app = createRemoteApp({ id: "bible", label: "Bible", rpc });
-    await app.open("/kjv", { action: true });
+    await app.open("/", { action: true });
     await app.refresh([{ nodeId: "a", label: "A", location: null }], { inputText: "x" });
     expect(calls).toEqual([
-      { method: "open", appId: "bible", path: "/kjv", extras: { action: true } },
+      { method: "open", appId: "bible", path: "/", extras: { action: true } },
       {
         method: "refresh",
         appId: "bible",

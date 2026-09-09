@@ -15,6 +15,7 @@ import type {
   CommentarySection,
   CommentaryWork,
   SearchHit,
+  SearchQueryRecord,
   VerseReading,
 } from "./types.ts";
 
@@ -29,6 +30,9 @@ export const DEFAULT_BIBLE_DB_PATH = "data/apps/bible.db";
 /** Search result sets are session scratch. One live query per session; drop rows older than this on write. */
 export const SEARCH_QUERY_TTL_MS = 24 * 60 * 60 * 1000;
 
+/** Session-owned recency. User rows are not expired. */
+export const RECENCY_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
 export function openBibleDatabase(path: string = DEFAULT_BIBLE_DB_PATH): Db {
   return openSqlite({
     path,
@@ -38,12 +42,6 @@ export function openBibleDatabase(path: string = DEFAULT_BIBLE_DB_PATH): Db {
 
 export function createSqliteBibleStore(db: Db): BibleStore {
   return {
-    defaultVersionId() {
-      const row = db.get<{ id: number }>(
-        "SELECT id FROM version ORDER BY sort_order ASC, id ASC LIMIT 1",
-      );
-      return row?.id ?? null;
-    },
     getVersion(id) {
       return db.get<BibleVersion>(
         `SELECT ${VERSION_COLUMNS} FROM version WHERE id = ?`,
@@ -56,55 +54,34 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         slug,
       );
     },
-    listVersions(userId) {
-      if (!userId) {
+    listVersions(userId, sessionId) {
+      if (userId) {
         return db.all<BibleVersion>(
-          `SELECT ${VERSION_COLUMNS} FROM version ORDER BY sort_order ASC, id ASC`,
+          `SELECT v.id, v.slug, v.label, v.license
+           FROM version v
+           LEFT JOIN version_recency r ON r.user_id = ? AND r.version_id = v.id
+           ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,
+          userId,
+        );
+      }
+      if (sessionId) {
+        return db.all<BibleVersion>(
+          `SELECT v.id, v.slug, v.label, v.license
+           FROM version v
+           LEFT JOIN version_recency r ON r.session_id = ? AND r.version_id = v.id
+           ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,
+          sessionId,
         );
       }
       return db.all<BibleVersion>(
-        `SELECT v.id, v.slug, v.label, v.license
-         FROM version v
-         LEFT JOIN version_recency r ON r.user_id = ? AND r.version_id = v.id
-         ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,
-        userId,
+        `SELECT ${VERSION_COLUMNS} FROM version ORDER BY sort_order ASC, id ASC`,
       );
     },
-    getActiveVersionId(userId) {
-      const row = db.get<{ active_version_id: number }>(
-        "SELECT active_version_id FROM reader_pref WHERE user_id = ?",
-        userId,
-      );
-      return row?.active_version_id ?? null;
+    touchVersionRecency(userId, sessionId, versionId) {
+      touchRecency(db, "version_recency", "version_id", userId, sessionId, versionId);
     },
-    setActiveVersionId(userId, versionId) {
-      db.run(
-        "INSERT INTO reader_pref (user_id, active_version_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET active_version_id = excluded.active_version_id",
-        userId,
-        versionId,
-      );
-    },
-    touchVersionRecency(userId, versionId) {
-      db.run(
-        `INSERT INTO version_recency (user_id, version_id, used_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(user_id, version_id)
-         DO UPDATE SET used_at = excluded.used_at`,
-        userId,
-        versionId,
-        Date.now(),
-      );
-    },
-    touchCommentaryRecency(userId, commentaryId) {
-      db.run(
-        `INSERT INTO commentary_recency (user_id, commentary_id, used_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(user_id, commentary_id)
-         DO UPDATE SET used_at = excluded.used_at`,
-        userId,
-        commentaryId,
-        Date.now(),
-      );
+    touchCommentaryRecency(userId, sessionId, commentaryId) {
+      touchRecency(db, "commentary_recency", "commentary_id", userId, sessionId, commentaryId);
     },
     listBooks(testament) {
       return db.all<BibleBook>(
@@ -197,18 +174,27 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       );
       return "added";
     },
-    listCommentaries(userId) {
-      if (!userId) {
+    listCommentaries(userId, sessionId) {
+      if (userId) {
         return db.all<CommentaryWork>(
-          "SELECT id, label, sort_order AS sortOrder FROM commentary ORDER BY sort_order ASC, id ASC",
+          `SELECT c.id, c.label, c.sort_order AS sortOrder
+           FROM commentary c
+           LEFT JOIN commentary_recency r ON r.user_id = ? AND r.commentary_id = c.id
+           ORDER BY r.used_at DESC, c.sort_order ASC, c.id ASC`,
+          userId,
+        );
+      }
+      if (sessionId) {
+        return db.all<CommentaryWork>(
+          `SELECT c.id, c.label, c.sort_order AS sortOrder
+           FROM commentary c
+           LEFT JOIN commentary_recency r ON r.session_id = ? AND r.commentary_id = c.id
+           ORDER BY r.used_at DESC, c.sort_order ASC, c.id ASC`,
+          sessionId,
         );
       }
       return db.all<CommentaryWork>(
-        `SELECT c.id, c.label, c.sort_order AS sortOrder
-         FROM commentary c
-         LEFT JOIN commentary_recency r ON r.user_id = ? AND r.commentary_id = c.id
-         ORDER BY r.used_at DESC, c.sort_order ASC, c.id ASC`,
-        userId,
+        "SELECT id, label, sort_order AS sortOrder FROM commentary ORDER BY sort_order ASC, id ASC",
       );
     },
     getCommentary(id) {
@@ -248,7 +234,7 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         xrefs: xrefs.map((x) => x.refs),
       } satisfies CommentarySection;
     },
-    createSearchQuery(sessionId, query, hits) {
+    createSearchQuery(sessionId, query, versionId, hits) {
       return db.transaction(() => {
         const at = Date.now();
         db.run(
@@ -257,9 +243,10 @@ export function createSqliteBibleStore(db: Db): BibleStore {
           at - SEARCH_QUERY_TTL_MS,
         );
         const result = db.run(
-          "INSERT INTO search_query (session_id, query, created_at) VALUES (?, ?, ?)",
+          "INSERT INTO search_query (session_id, query, version_id, created_at) VALUES (?, ?, ?, ?)",
           sessionId,
           query,
+          versionId,
           at,
         );
         const id = Number(result.lastInsertRowid);
@@ -273,12 +260,13 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       });
     },
     getSearchQuery(queryId, sessionId) {
-      const row = db.get<{ query: string }>(
-        "SELECT query FROM search_query WHERE id = ? AND session_id = ?",
-        queryId,
-        sessionId,
+      return (
+        db.get<SearchQueryRecord>(
+          "SELECT query, version_id AS versionId FROM search_query WHERE id = ? AND session_id = ?",
+          queryId,
+          sessionId,
+        ) ?? null
       );
-      return row?.query ?? null;
     },
     listSearchHits(queryId, sessionId) {
       return db.all<SearchHit>(
@@ -294,7 +282,7 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         sessionId,
       );
     },
-    listSearchHitReadings(queryId, sessionId, versionId) {
+    listSearchHitReadings(queryId, sessionId) {
       return db.all<VerseReading>(
         `SELECT ${HIT_COLUMNS}, t.text
          FROM search_hit h
@@ -302,10 +290,9 @@ export function createSqliteBibleStore(db: Db): BibleStore {
          JOIN verse v ON v.id = h.verse_id
          JOIN chapter c ON c.id = v.chapter_id
          JOIN book b ON b.id = c.book_id
-         LEFT JOIN verse_text t ON t.verse_id = v.id AND t.version_id = ?
+         LEFT JOIN verse_text t ON t.verse_id = v.id AND t.version_id = q.version_id
          WHERE h.query_id = ? AND q.session_id = ?
          ORDER BY h.position ASC`,
-        versionId,
         queryId,
         sessionId,
       );
@@ -338,6 +325,48 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       db.close();
     },
   };
+}
+
+function purgeExpiredSessionRecency(db: Db): void {
+  const cutoff = Date.now() - RECENCY_TTL_MS;
+  db.run("DELETE FROM version_recency WHERE session_id IS NOT NULL AND used_at < ?", cutoff);
+  db.run("DELETE FROM commentary_recency WHERE session_id IS NOT NULL AND used_at < ?", cutoff);
+}
+
+function touchRecency(
+  db: Db,
+  table: "version_recency" | "commentary_recency",
+  idColumn: "version_id" | "commentary_id",
+  userId: string | null,
+  sessionId: string | null,
+  id: number,
+): void {
+  purgeExpiredSessionRecency(db);
+  const at = Date.now();
+  if (userId) {
+    db.run(
+      `INSERT INTO ${table} (user_id, session_id, ${idColumn}, used_at)
+       VALUES (?, NULL, ?, ?)
+       ON CONFLICT(user_id, ${idColumn}) WHERE user_id IS NOT NULL
+       DO UPDATE SET used_at = excluded.used_at`,
+      userId,
+      id,
+      at,
+    );
+    return;
+  }
+  if (!sessionId) {
+    return;
+  }
+  db.run(
+    `INSERT INTO ${table} (user_id, session_id, ${idColumn}, used_at)
+     VALUES (NULL, ?, ?, ?)
+     ON CONFLICT(session_id, ${idColumn}) WHERE session_id IS NOT NULL
+     DO UPDATE SET used_at = excluded.used_at`,
+    sessionId,
+    id,
+    at,
+  );
 }
 
 function wholeWordSql(column: string): string {

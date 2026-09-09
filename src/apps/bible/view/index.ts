@@ -5,26 +5,22 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../../core/types.ts";
-import {
-  parseNodeId,
-  searchEmptyId,
-  verseNodeId,
-} from "../ids.ts";
+import { parseNodeId, searchEmptyId, verseNodeId } from "../ids.ts";
 import type { CanonRef } from "../types.ts";
 import { resolveCopy } from "./copy.ts";
 import {
-  activeVersion,
   addNode,
   slotVerseId,
   touchCommentaryRecency,
   touchVersionRecency,
   viewSession,
   withTipLabel,
+  activeVersion,
   type BibleViewDeps,
   type ViewSession,
 } from "./helpers.ts";
 import { KIND } from "./kinds.ts";
-import { emptyId, parseBiblePath } from "./path.ts";
+import { emptyId, firstTestamentId, parseBiblePath } from "./path.ts";
 import { emptySearchLabel, searchHits } from "./search.ts";
 import { signInResult } from "./signin.ts";
 
@@ -37,9 +33,6 @@ export function openBibleView(
   ctx?: AppServerContext,
 ): RefreshResult {
   const session = viewSession(deps, extras, ctx);
-  if (extras.action) {
-    writePrefFromPath(session, path);
-  }
   return buildBibleView(session, parseBiblePath(session, path));
 }
 
@@ -59,28 +52,13 @@ export function refreshBibleView(
   return buildBibleView(session, tipId);
 }
 
-function writePrefFromPath(session: ViewSession, path: string): void {
-  const slug = path.replace(/^\/+/, "").split("/").filter(Boolean)[0];
-  if (!slug) {
-    return;
-  }
-  const version = session.deps.store.getVersionBySlug(slug);
-  if (!version) {
-    return;
-  }
-  if (session.userId) {
-    session.deps.store.setActiveVersionId(session.userId, version.id);
-  }
-  touchVersionRecency(session, version.id);
-}
-
 function applyAction(session: ViewSession, tipId: string): RefreshResult | null {
   const parsed = parseNodeId(tipId);
   if (!parsed) {
     return null;
   }
   if (parsed.kind === "option" && parsed.option === "copy") {
-    return resolveCopy(session, parsed.version, parsed.ref, buildBibleView(session, tipId));
+    return resolveCopy(session, parsed.ref, buildBibleView(session, tipId));
   }
   if (parsed.kind === "option" && parsed.option === "bookmark") {
     return applyBookmarkToggle(session, parsed.ref, tipId);
@@ -92,7 +70,18 @@ function applyAction(session: ViewSession, tipId: string): RefreshResult | null 
     touchCommentaryRecency(session, parsed.commentaryId);
     return null;
   }
+  if (parsed.kind === "version-pick") {
+    return applyVersionPick(session, parsed.versionId, firstTestamentId(session.deps.store));
+  }
+  if (parsed.kind === "verse-version-pick") {
+    return applyVersionPick(session, parsed.targetVersionId, verseNodeId(parsed.seq, parsed.ref));
+  }
   return null;
+}
+
+function applyVersionPick(session: ViewSession, versionId: number, destId: string): RefreshResult {
+  touchVersionRecency(session, versionId);
+  return buildBibleView(session, destId);
 }
 
 function applyBookmarkToggle(session: ViewSession, ref: CanonRef, tipId: string): RefreshResult {
@@ -124,7 +113,7 @@ function applySearch(session: ViewSession): RefreshResult {
     };
   }
   const hits = searchHits(session, version.id, query);
-  const queryId = session.deps.store.createSearchQuery(session.sessionId, query, hits);
+  const queryId = session.deps.store.createSearchQuery(session.sessionId, query, version.id, hits);
   if (hits.length === 0) {
     const id = searchEmptyId(queryId);
     const label = emptySearchLabel(query);
@@ -136,10 +125,7 @@ function applySearch(session: ViewSession): RefreshResult {
     };
   }
   const first = hits[0]!;
-  return buildBibleView(
-    session,
-    verseNodeId({ type: "search", queryId }, first),
-  );
+  return buildBibleView(session, verseNodeId({ type: "search", queryId }, first));
 }
 
 export function buildBibleView(session: ViewSession, tipId: string): RefreshResult {

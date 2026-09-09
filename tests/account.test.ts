@@ -330,11 +330,11 @@ describe("Account app", () => {
       method: "POST",
       url: "/api/apps/bible/open",
       headers: headers(),
-      body: { path: "/kjv/Genesis/1/1" },
+      body: { path: "/Genesis/1/1" },
     });
     expect(out.status).toBe(200);
     const body = out.body as RefreshResult;
     expect(body.node.label).toContain("In the beginning");
-    expect(body.location).toEqual({ appId: "bible", path: "/kjv/Genesis/1/1" });
+    expect(body.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
   });
 });

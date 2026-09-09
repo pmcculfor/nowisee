@@ -5,6 +5,7 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../../core/types.ts";
+import type { VerseSequence } from "../catalog.ts";
 import { bookPathSegment } from "../canon.ts";
 import type { BibleStore, BibleVersion, CanonRef } from "../types.ts";
 
@@ -36,25 +37,15 @@ export function viewSession(
   };
 }
 
-export function activeVersion(session: ViewSession, pathSlug?: string | null): BibleVersion | null {
-  const store = session.deps.store;
-  if (pathSlug) {
-    const fromPath = store.getVersionBySlug(pathSlug);
-    if (fromPath) {
-      return fromPath;
-    }
+export function activeVersion(session: ViewSession): BibleVersion | null {
+  return listedVersions(session)[0] ?? null;
+}
+
+export function searchQueryVersion(session: ViewSession, queryId: number): number | null {
+  if (!session.sessionId) {
+    return null;
   }
-  if (session.userId) {
-    const pref = store.getActiveVersionId(session.userId);
-    if (pref !== null) {
-      const fromPref = store.getVersion(pref);
-      if (fromPref) {
-        return fromPref;
-      }
-    }
-  }
-  const defaultId = store.defaultVersionId();
-  return defaultId === null ? null : (store.getVersion(defaultId) ?? null);
+  return session.deps.store.getSearchQuery(queryId, session.sessionId)?.versionId ?? null;
 }
 
 export function addNode(payloads: Map<string, NodePayload>, node: NodePayload): void {
@@ -73,35 +64,40 @@ export function bookLabel(store: BibleStore, bookId: number): string {
   return store.getBook(bookId)?.label ?? String(bookId);
 }
 
-export function verseLocation(appId: string, slug: string, bookLabelText: string, ref: CanonRef): AppLocation {
-  return {
-    appId,
-    path: `/${slug}/${bookPathSegment(bookLabelText)}/${ref.chapter}/${ref.verse}`,
-  };
+export function canonPath(store: BibleStore, ref: CanonRef): string {
+  return `/${bookPathSegment(bookLabel(store, ref.bookId))}/${ref.chapter}/${ref.verse}`;
+}
+
+export function verseLocation(appId: string, store: BibleStore, seq: VerseSequence, ref: CanonRef): AppLocation {
+  if (seq.type === "bookmarks") {
+    return { appId, path: `/bookmarks${canonPath(store, ref)}` };
+  }
+  if (seq.type === "search") {
+    return { appId, path: "/search" };
+  }
+  return { appId, path: canonPath(store, ref) };
 }
 
 export function listedVersions(session: ViewSession) {
-  return session.deps.store.listVersions(session.userId);
+  return session.deps.store.listVersions(session.userId, session.sessionId);
 }
 
 export function listedCommentaries(session: ViewSession) {
-  return session.deps.store.listCommentaries(session.userId);
+  return session.deps.store.listCommentaries(session.userId, session.sessionId);
 }
 
 export function touchVersionRecency(session: ViewSession, versionId: number): void {
-  if (!session.userId) {
-    return;
-  }
-  session.deps.store.touchVersionRecency(session.userId, versionId);
+  session.deps.store.touchVersionRecency(session.userId, session.sessionId, versionId);
 }
 
 export function touchCommentaryRecency(session: ViewSession, commentaryId: number): void {
-  if (!session.userId) {
-    return;
-  }
-  session.deps.store.touchCommentaryRecency(session.userId, commentaryId);
+  session.deps.store.touchCommentaryRecency(session.userId, session.sessionId, commentaryId);
 }
 
 export function slotVerseId(store: BibleStore, ref: CanonRef): number | null {
   return store.getVerseSlot(ref.bookId, ref.chapter, ref.verse)?.id ?? null;
+}
+
+export function withDisplayVersion(ref: CanonRef, versionId: number) {
+  return { ...ref, versionId };
 }

@@ -1,15 +1,19 @@
 import {
   edgeAction,
-  edgeApp,
   edgeNode,
   edgePop,
   siblingListEdges,
   type MapFragment,
 } from "../../../app-kit/index.ts";
 import type { NodePayload } from "../../../core/types.ts";
-import { SEARCH_POLICY, VERSE_OPTIONS, optionLabel, type VerseSequence } from "../catalog.ts";
 import {
-  bookPathSegment,
+  SEARCH_POLICY,
+  VERSE_OPTIONS,
+  contextSeq,
+  optionLabel,
+  type VerseSequence,
+} from "../catalog.ts";
+import {
   chapterLabel,
   missingVerseLabel,
   verseContextLabel,
@@ -57,39 +61,33 @@ export function addVerseLevel(
   fragments.push(siblingListEdges(ids, { wrap: seq.type === "chapter" || seq.type === "context", around }));
 
   const tip = verseNodeId(seq, ref);
-  const enter = verseEnter(seq, versionId, ref);
+  const enter = verseEnter(seq, ref);
   fragments.push({
     [tip]: {
       ...(enter ? { enter } : {}),
       back:
-        seq.type === "chapter"
-          ? edgeNode(chapterId(versionId, ref.bookId, ref.chapter), "replace")
-          : edgePop(),
+        seq.type === "chapter" ? edgeNode(chapterId(ref.bookId, ref.chapter), "replace") : edgePop(),
     },
   });
   if (seq.type === "search") {
-    addVerseLevel(session, payloads, fragments, contextSeq(ref), ref);
+    addVerseLevel(session, payloads, fragments, contextSeq(ref.bookId, ref.chapter), ref);
   } else {
-    addOptionPayloads(session, payloads, versionId, ref);
+    addOptionPayloads(session, payloads, seq, ref);
   }
   if (seq.type === "chapter") {
     addNode(payloads, {
-      id: chapterId(versionId, ref.bookId, ref.chapter),
+      id: chapterId(ref.bookId, ref.chapter),
       label: chapterLabel(ref.chapter),
     });
   }
 }
 
-function verseEnter(seq: VerseSequence, versionId: number, ref: BibleRef) {
+function verseEnter(seq: VerseSequence, ref: CanonRef) {
   if (seq.type === "search") {
-    return edgeNode(verseNodeId(contextSeq(ref), ref), "push");
+    return edgeNode(verseNodeId(contextSeq(ref.bookId, ref.chapter), ref), "push");
   }
   const firstOption = VERSE_OPTIONS[0];
-  return firstOption ? edgeNode(optionId(versionId, ref, firstOption.type), "push") : undefined;
-}
-
-function contextSeq(ref: BibleRef): VerseSequence {
-  return { type: "context", versionId: ref.versionId, bookId: ref.bookId, chapter: ref.chapter };
+  return firstOption ? edgeNode(optionId(ref, firstOption.type, seq), "push") : undefined;
 }
 
 function sameCanon(a: CanonRef, b: CanonRef): boolean {
@@ -166,7 +164,7 @@ function siblingReadings(session: ViewSession, seq: VerseSequence, versionId: nu
     if (!chapter) {
       return [];
     }
-    return [...store.listVerseReadings(seq.versionId, chapter.id)];
+    return [...store.listVerseReadings(versionId, chapter.id)];
   }
   if (seq.type === "bookmarks" && session.userId) {
     return store.listBookmarks(session.userId).map((b) => ({
@@ -178,16 +176,12 @@ function siblingReadings(session: ViewSession, seq: VerseSequence, versionId: nu
     }));
   }
   if (seq.type === "search" && session.sessionId) {
-    return [...store.listSearchHitReadings(seq.queryId, session.sessionId, versionId)];
+    return [...store.listSearchHitReadings(seq.queryId, session.sessionId)];
   }
   return [];
 }
 
-export function versePayload(
-  session: ViewSession,
-  seq: VerseSequence,
-  ref: BibleRef,
-): NodePayload {
+export function versePayload(session: ViewSession, seq: VerseSequence, ref: BibleRef): NodePayload {
   const slot = session.deps.store.getVerseSlot(ref.bookId, ref.chapter, ref.verse);
   const text = slot ? session.deps.store.getVerseText(ref.versionId, slot.id) : null;
   const labelText = verseDisplayText(session, ref, text);
@@ -214,28 +208,24 @@ function verseDisplayText(session: ViewSession, ref: BibleRef, text: string | nu
     return text;
   }
   const version = session.deps.store.getVersion(ref.versionId);
-  return missingVerseLabel(
-    bookLabel(session.deps.store, ref.bookId),
-    ref,
-    version?.label ?? "",
-  );
+  return missingVerseLabel(bookLabel(session.deps.store, ref.bookId), ref, version?.label ?? "");
 }
 
 export function addOptionLevel(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  versionId: number,
+  seq: VerseSequence,
   ref: CanonRef,
 ): void {
-  const optionIds = VERSE_OPTIONS.map((option) => optionId(versionId, ref, option.type));
-  addOptionPayloads(session, payloads, versionId, ref);
+  const optionIds = VERSE_OPTIONS.map((option) => optionId(ref, option.type, seq));
+  addOptionPayloads(session, payloads, seq, ref);
   fragments.push(siblingListEdges(optionIds, { wrap: true }));
   for (const option of VERSE_OPTIONS) {
-    const id = optionId(versionId, ref, option.type);
+    const id = optionId(ref, option.type, seq);
     fragments.push({
       [id]: {
-        enter: optionEnter(session, versionId, ref, option.type),
+        enter: optionEnter(session, seq, ref, option.type),
         back: edgePop(),
       },
     });
@@ -245,12 +235,12 @@ export function addOptionLevel(
 function addOptionPayloads(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
-  versionId: number,
+  seq: VerseSequence,
   ref: CanonRef,
 ): void {
   for (const option of VERSE_OPTIONS) {
     addNode(payloads, {
-      id: optionId(versionId, ref, option.type),
+      id: optionId(ref, option.type, seq),
       label: optionNodeLabel(session, ref, option.type),
     });
   }
@@ -258,31 +248,31 @@ function addOptionPayloads(
 
 export function optionEnter(
   session: ViewSession,
-  versionId: number,
+  seq: VerseSequence,
   ref: CanonRef,
   option: "copy" | "bookmark" | "versions" | "commentary",
 ) {
   if (option === "copy") {
-    return edgeAction(optionId(versionId, ref, "copy"), { stackBehavior: "replace" });
+    return edgeAction(optionId(ref, "copy", seq), { stackBehavior: "replace" });
   }
   if (option === "bookmark") {
     if (!session.userId) {
       return edgeNode(signInId(), "push");
     }
-    return edgeAction(optionId(versionId, ref, "bookmark"), { stackBehavior: "replace" });
+    return edgeAction(optionId(ref, "bookmark", seq), { stackBehavior: "replace" });
   }
   if (option === "versions") {
     const firstVersion = listedVersions(session)[0];
     if (!firstVersion) {
       return undefined;
     }
-    return edgeNode(verseVersionPickId(versionId, ref, firstVersion.id), "push");
+    return edgeNode(verseVersionPickId(ref, firstVersion.id, seq), "push");
   }
   const firstWork = listedCommentaries(session)[0];
   if (!firstWork) {
-    return edgeNode(commentaryListId(versionId, ref), "push");
+    return edgeNode(commentaryListId(ref), "push");
   }
-  return edgeNode(commentaryWorkId(versionId, ref, firstWork.id), "push");
+  return edgeNode(commentaryWorkId(ref, firstWork.id), "push");
 }
 
 export function optionNodeLabel(
@@ -303,29 +293,23 @@ export function addVerseVersionList(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
   fragments: MapFragment[],
-  versionId: number,
+  seq: VerseSequence,
   ref: CanonRef,
 ): void {
   const versions = listedVersions(session);
-  const ids = versions.map((v) => verseVersionPickId(versionId, ref, v.id));
-  const book = session.deps.store.getBook(ref.bookId);
+  const ids = versions.map((v) => verseVersionPickId(ref, v.id, seq));
   for (const item of versions) {
     addNode(payloads, {
-      id: verseVersionPickId(versionId, ref, item.id),
+      id: verseVersionPickId(ref, item.id, seq),
       label: item.label,
     });
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   for (const item of versions) {
+    const id = verseVersionPickId(ref, item.id, seq);
     fragments.push({
-      [verseVersionPickId(versionId, ref, item.id)]: {
-        enter: edgeApp(
-          {
-            appId: session.deps.appId,
-            path: `/${item.slug}/${bookPathSegment(book?.label ?? String(ref.bookId))}/${ref.chapter}/${ref.verse}`,
-          },
-          { action: true },
-        ),
+      [id]: {
+        enter: edgeAction(id, { stackBehavior: "replace" }),
         back: edgePop(),
       },
     });
@@ -344,9 +328,10 @@ export function addRootVersionList(
   }
   fragments.push(siblingListEdges(ids, { wrap: true }));
   for (const item of versions) {
+    const id = versionPickId(item.id);
     fragments.push({
-      [versionPickId(item.id)]: {
-        enter: edgeApp({ appId: session.deps.appId, path: `/${item.slug}` }, { action: true }),
+      [id]: {
+        enter: edgeAction(id, { stackBehavior: "replace" }),
         back: edgePop(),
       },
     });

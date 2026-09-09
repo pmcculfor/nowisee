@@ -4,6 +4,7 @@ import {
   createSqliteBibleStore,
   openBibleDatabase,
   SEARCH_QUERY_TTL_MS,
+  RECENCY_TTL_MS,
   startBibleApp,
 } from "../src/apps/bible/store.ts";
 import { ensureCatalog, parseHelloAoChapter, parseTsk, parseVpl, stripSuppliedWordBrackets } from "../src/apps/bible/import.ts";
@@ -103,19 +104,19 @@ async function refresh(
 describe("Bible app", () => {
   it("open / lands on Old Testament with home back", async () => {
     const result = await bible().open("/", {}, signedOut());
-    expect(result.node.id).toBe(testamentId(KJV, "OT"));
+    expect(result.node.id).toBe(testamentId("OT"));
     expect(result.node.label).toBe("Old Testament");
-    expect(result.navigationMap[testamentId(KJV, "OT")]?.back).toEqual({
+    expect(result.navigationMap[testamentId("OT")]?.back).toEqual({
       kind: "app",
       to: { appId: "home", path: "/app/bible" },
     });
-    expect(result.location).toEqual({ appId: "bible", path: "/kjv" });
+    expect(result.location).toEqual({ appId: "bible", path: "/" });
   });
 
   it("root list is Old Testament, New Testament, Bookmarks, Search, Version", async () => {
     const result = await bible().open("/", {}, signedOut());
-    const ot = testamentId(KJV, "OT");
-    const nt = testamentId(KJV, "NT");
+    const ot = testamentId("OT");
+    const nt = testamentId("NT");
     expect(result.navigationMap[ot]?.next).toEqual({
       kind: "node",
       toNodeId: nt,
@@ -143,7 +144,7 @@ describe("Bible app", () => {
     });
   });
 
-  it("root Version action opens OT of that version", async () => {
+  it("root Version action lands on OT and remembers recency", async () => {
     const instance = bible();
     const opened = await instance.open("/", {}, signedOut());
     const asvPick = versionPickId(ASV);
@@ -154,37 +155,55 @@ describe("Bible app", () => {
     });
     const list = await refresh(instance, [{ nodeId: asvPick, label: "American Standard Version", location: null }]);
     expect(list.navigationMap[asvPick]?.enter).toEqual({
-      kind: "app",
-      to: { appId: "bible", path: "/asv" },
+      kind: "node",
+      toNodeId: asvPick,
+      stackBehavior: "replace",
       action: true,
     });
-    const ot = await instance.open("/asv", { action: true }, signedIn());
-    expect(ot.node.id).toBe(testamentId(ASV, "OT"));
-    expect(ot.location).toEqual({ appId: "bible", path: "/asv" });
+    const ot = await refresh(
+      instance,
+      [{ nodeId: asvPick, label: "American Standard Version", location: null }],
+      { action: true },
+      signedIn(),
+    );
+    expect(ot.node.id).toBe(testamentId("OT"));
+    expect(ot.location).toEqual({ appId: "bible", path: "/" });
     const remembered = await instance.open("/", {}, signedIn());
-    expect(remembered.location).toEqual({ appId: "bible", path: "/asv" });
+    expect(remembered.location).toEqual({ appId: "bible", path: "/" });
+    expect(remembered.navigationMap[versionsHeadingId()]?.enter).toEqual({
+      kind: "node",
+      toNodeId: versionPickId(ASV),
+      stackBehavior: "push",
+    });
   });
 
   it("verse-context version switch keeps a missing verse and uses the standard menu", async () => {
     const instance = bible();
-    const from = ref(MAT, 5, 8);
-    const pick = verseVersionPickId(KJV, from, ASV);
+    const from = canon(MAT, 5, 8);
+    const pick = verseVersionPickId(from, ASV);
     const result = await refresh(instance, [{ nodeId: pick, label: "American Standard Version", location: null }]);
     expect(result.navigationMap[pick]?.enter).toEqual({
-      kind: "app",
-      to: { appId: "bible", path: "/asv/Matthew/5/8" },
+      kind: "node",
+      toNodeId: pick,
+      stackBehavior: "replace",
       action: true,
     });
-    const landed = await instance.open("/asv/Matthew/5/8", { action: true }, signedOut());
+    const landed = await refresh(
+      instance,
+      [{ nodeId: pick, label: "American Standard Version", location: null }],
+      { action: true },
+      signedOut(),
+    );
     expect(landed.node.id).toBe(
-      verseNodeId({ type: "chapter", versionId: ASV, bookId: MAT, chapter: 5 }, canon(MAT, 5, 8)),
+      verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, canon(MAT, 5, 8)),
     );
     expect(landed.node.label).toContain("not in American Standard Version");
     expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
       kind: "node",
-      toNodeId: optionId(ASV, canon(MAT, 5, 8), "versions"),
+      toNodeId: optionId(canon(MAT, 5, 8), "versions"),
       stackBehavior: "push",
     });
+    expect(landed.location).toEqual({ appId: "bible", path: "/Matthew/5/8" });
   });
 
   it("signed-out Bookmarks enter is a sign-in node", async () => {
@@ -207,7 +226,7 @@ describe("Bible app", () => {
     const instance = bible();
     const ctx = signedIn();
     const verseRef = canon(MAT, 5, 3);
-    const option = optionId(KJV, verseRef, "bookmark");
+    const option = optionId(verseRef, "bookmark");
     const menu = await refresh(
       instance,
       [{ nodeId: option, label: "Bookmark", location: null }],
@@ -232,7 +251,7 @@ describe("Bible app", () => {
     expect(added.node.label).toBe("Remove bookmark");
     expect(added.navigationMap[option]?.next).toEqual({
       kind: "node",
-      toNodeId: optionId(KJV, verseRef, "copy"),
+      toNodeId: optionId(verseRef, "copy"),
       stackBehavior: "replace",
     });
 
@@ -300,7 +319,7 @@ describe("Bible app", () => {
       "Matthew 5:3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
     );
     const contextId = verseNodeId(
-      { type: "context", versionId: KJV, bookId: MAT, chapter: 5 },
+      { type: "context", bookId: MAT, chapter: 5 },
       canon(MAT, 5, 3),
     );
     expect(hits.navigationMap[hits.node.id]?.enter).toEqual({
@@ -319,13 +338,13 @@ describe("Bible app", () => {
     expect(context.navigationMap[contextId]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
     expect(context.navigationMap[contextId]?.enter).toEqual({
       kind: "node",
-      toNodeId: optionId(KJV, canon(MAT, 5, 3), "versions"),
+      toNodeId: optionId(canon(MAT, 5, 3), "versions", { type: "context", bookId: MAT, chapter: 5 }),
       stackBehavior: "push",
     });
     expect(context.navigationMap[contextId]?.prev).toEqual({
       kind: "node",
       toNodeId: verseNodeId(
-        { type: "context", versionId: KJV, bookId: MAT, chapter: 5 },
+        { type: "context", bookId: MAT, chapter: 5 },
         canon(MAT, 5, 2),
       ),
       stackBehavior: "replace",
@@ -333,7 +352,7 @@ describe("Bible app", () => {
     expect(context.navigationMap[contextId]?.next).toEqual({
       kind: "node",
       toNodeId: verseNodeId(
-        { type: "context", versionId: KJV, bookId: MAT, chapter: 5 },
+        { type: "context", bookId: MAT, chapter: 5 },
         canon(MAT, 5, 4),
       ),
       stackBehavior: "replace",
@@ -435,11 +454,11 @@ describe("Bible app", () => {
 
   it("commentary range is shared and split into chunks", async () => {
     const instance = bible();
-    const chunk0 = commentaryChunkId(KJV, canon(MAT, 5, 1), HENRY, 0);
-    const chunk1 = commentaryChunkId(KJV, canon(MAT, 5, 1), HENRY, 1);
+    const chunk0 = commentaryChunkId(canon(MAT, 5, 1), HENRY, 0);
+    const chunk1 = commentaryChunkId(canon(MAT, 5, 1), HENRY, 1);
     const first = await refresh(instance, [{ nodeId: chunk0, label: "x", location: null }]);
     const last = await refresh(instance, [
-      { nodeId: commentaryChunkId(KJV, canon(MAT, 5, 8), HENRY, 0), label: "x", location: null },
+      { nodeId: commentaryChunkId(canon(MAT, 5, 8), HENRY, 0), label: "x", location: null },
     ]);
     expect(first.node.label).toBe("Henry on the Beatitudes, covering verses 1 through 8.");
     expect(last.node.label).toBe(first.node.label);
@@ -450,37 +469,37 @@ describe("Bible app", () => {
     });
     expect(first.navigationMap[chunk1]?.next).toBeUndefined();
     const work = await refresh(instance, [
-      { nodeId: commentaryWorkId(KJV, canon(MAT, 5, 3), HENRY), label: "Matthew Henry", location: null },
+      { nodeId: commentaryWorkId(canon(MAT, 5, 3), HENRY), label: "Matthew Henry", location: null },
     ]);
     expect(work.node.label).toBe("Matthew Henry");
     expect(work.navigationMap[work.node.id]?.enter).toEqual({
       kind: "node",
-      toNodeId: commentaryChunkId(KJV, canon(MAT, 5, 3), HENRY, 0),
+      toNodeId: commentaryChunkId(canon(MAT, 5, 3), HENRY, 0),
       stackBehavior: "push",
       action: true,
     });
   });
 
   it("open deep verse path resolves tip and location", async () => {
-    const result = await bible().open("/kjv/Matthew/5/3", {}, signedOut());
+    const result = await bible().open("/Matthew/5/3", {}, signedOut());
     expect(result.node.id).toBe(
-      verseNodeId({ type: "chapter", versionId: KJV, bookId: MAT, chapter: 5 }, canon(MAT, 5, 3)),
+      verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, canon(MAT, 5, 3)),
     );
     expect(result.node.label).toBe(
       "3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
     );
     expect(result.location).toEqual({
       appId: "bible",
-      path: "/kjv/Matthew/5/3",
+      path: "/Matthew/5/3",
     });
   });
 
   it("books and chapters wrap at list ends", async () => {
     const instance = bible();
-    const first = chapterId(KJV, MAT, 1);
-    const last = chapterId(KJV, MAT, 5);
+    const first = chapterId(MAT, 1);
+    const last = chapterId(MAT, 5);
     const chList = await refresh(instance, [
-      { nodeId: bookId(KJV, MAT), label: "Matthew", location: null },
+      { nodeId: bookId(MAT), label: "Matthew", location: null },
       { nodeId: first, label: "1 (chapter)", location: null },
     ]);
     expect(chList.node.label).toBe("1 (chapter)");
@@ -495,13 +514,13 @@ describe("Bible app", () => {
       stackBehavior: "replace",
     });
 
-    const books = await instance.open("/kjv/Matthew", {}, signedOut());
-    expect(books.navigationMap[bookId(KJV, MAT)]?.next).toEqual({
+    const books = await instance.open("/Matthew", {}, signedOut());
+    expect(books.navigationMap[bookId(MAT)]?.next).toEqual({
       kind: "node",
-      toNodeId: bookId(KJV, MRK),
+      toNodeId: bookId(MRK),
       stackBehavior: "replace",
     });
-    expect(books.navigationMap[bookId(KJV, MAT)]?.enter).toEqual({
+    expect(books.navigationMap[bookId(MAT)]?.enter).toEqual({
       kind: "node",
       toNodeId: first,
       stackBehavior: "replace",
@@ -510,13 +529,13 @@ describe("Bible app", () => {
 
   it("verses wrap within the chapter; last verse next does not leave the chapter", async () => {
     const instance = bible();
-    const genesis = await instance.open("/kjv/Genesis/1/3", {}, signedOut());
+    const genesis = await instance.open("/Genesis/1/3", {}, signedOut());
     const first = verseNodeId(
-      { type: "chapter", versionId: KJV, bookId: GEN, chapter: 1 },
+      { type: "chapter", bookId: GEN, chapter: 1 },
       canon(GEN, 1, 1),
     );
     const last = verseNodeId(
-      { type: "chapter", versionId: KJV, bookId: GEN, chapter: 1 },
+      { type: "chapter", bookId: GEN, chapter: 1 },
       canon(GEN, 1, 3),
     );
     expect(genesis.navigationMap[last]?.next).toEqual({
@@ -530,13 +549,13 @@ describe("Bible app", () => {
       stackBehavior: "replace",
     });
 
-    const matthew4 = await instance.open("/kjv/Matthew/4/1", {}, signedOut());
+    const matthew4 = await instance.open("/Matthew/4/1", {}, signedOut());
     const lastOf4 = verseNodeId(
-      { type: "chapter", versionId: KJV, bookId: MAT, chapter: 4 },
+      { type: "chapter", bookId: MAT, chapter: 4 },
       canon(MAT, 4, 1),
     );
     const firstOf5 = verseNodeId(
-      { type: "chapter", versionId: KJV, bookId: MAT, chapter: 5 },
+      { type: "chapter", bookId: MAT, chapter: 5 },
       canon(MAT, 5, 1),
     );
     expect(matthew4.navigationMap[lastOf4]?.next).toBeUndefined();
@@ -546,23 +565,23 @@ describe("Bible app", () => {
   it("verse enter pushes Versions; option next has no action flag", async () => {
     const instance = bible();
     const verseRef = ref(GEN, 1, 1);
-    const verse = await instance.open("/kjv/Genesis/1/1", {}, signedOut());
+    const verse = await instance.open("/Genesis/1/1", {}, signedOut());
     expect(verse.navigationMap[verse.node.id]?.enter).toEqual({
       kind: "node",
-      toNodeId: optionId(KJV, verseRef, "versions"),
+      toNodeId: optionId(verseRef, "versions"),
       stackBehavior: "push",
     });
 
-    const versionsId = optionId(KJV, verseRef, "versions");
+    const versionsId = optionId(verseRef, "versions");
     const result = await refresh(instance, [{ nodeId: versionsId, label: "Versions", location: null }]);
     expect(result.navigationMap[versionsId]?.enter).toEqual({
       kind: "node",
-      toNodeId: verseVersionPickId(KJV, verseRef, KJV),
+      toNodeId: verseVersionPickId(verseRef, KJV),
       stackBehavior: "push",
     });
     expect(result.navigationMap[versionsId]?.next).toEqual({
       kind: "node",
-      toNodeId: optionId(KJV, verseRef, "commentary"),
+      toNodeId: optionId(verseRef, "commentary"),
       stackBehavior: "replace",
     });
     expect(result.navigationMap[versionsId]?.next).not.toHaveProperty("action");
@@ -571,9 +590,9 @@ describe("Bible app", () => {
   it("Copy action returns clipboardText with version, book, and chapter", async () => {
     const instance = bible();
     const verseRef = ref(GEN, 1, 1);
-    const copyId = optionId(KJV, verseRef, "copy");
+    const copyId = optionId(verseRef, "copy");
 
-    const verse = await instance.open("/kjv/Genesis/1/1", {}, signedOut());
+    const verse = await instance.open("/Genesis/1/1", {}, signedOut());
     expect(verse.node.label).toBe(
       "1. In the beginning God created the heaven and the earth.",
     );
@@ -593,13 +612,13 @@ describe("Bible app", () => {
     );
     expect(copied.node.id).toBe(copyId);
     expect(copied.node.label).toBe("Copied");
-    expect(copied.location).toEqual({ appId: "bible", path: "/kjv/Genesis/1/1" });
+    expect(copied.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
     expect(copied.clipboardText).toBe(
       "King James Version. Genesis 1:1. In the beginning God created the heaven and the earth.",
     );
     expect(copied.navigationMap[copyId]?.next).toEqual({
       kind: "node",
-      toNodeId: optionId(KJV, verseRef, "versions"),
+      toNodeId: optionId(verseRef, "versions"),
       stackBehavior: "replace",
     });
 
@@ -609,7 +628,7 @@ describe("Bible app", () => {
   });
 
   it("Copy without a verse line does not ask the client to copy", async () => {
-    const copyId = optionId(KJV, canon(999, 1, 1), "copy");
+    const copyId = optionId(canon(999, 1, 1), "copy");
     const result = await refresh(
       bible(),
       [{ nodeId: copyId, label: "Copy", location: null }],
@@ -621,13 +640,13 @@ describe("Bible app", () => {
   });
 
   it("RefreshResult survives structuredClone for open", async () => {
-    const result = await bible().open("/kjv/Genesis/1/1", {}, signedOut());
+    const result = await bible().open("/Genesis/1/1", {}, signedOut());
     expect(structuredClone(result)).toEqual(result);
   });
 
   it("empty versions table is the empty-data node, not a kjv fallback", async () => {
     const store = createSqliteBibleStore(openBibleDatabase(":memory:"));
-    expect(store.defaultVersionId()).toBeNull();
+    expect(store.listVersions()).toEqual([]);
     const empty = createBibleApp({ rootAppId: "home", store });
     try {
       const result = await empty.open("/", {}, signedOut());
@@ -640,24 +659,24 @@ describe("Bible app", () => {
 
   it("URL-opened verse back walks chapter, book, then testament", async () => {
     const instance = bible();
-    const verse = await instance.open("/kjv/Matthew/5/3", {}, signedOut());
+    const verse = await instance.open("/Matthew/5/3", {}, signedOut());
     expect(verse.navigationMap[verse.node.id]?.back).toEqual({
       kind: "node",
-      toNodeId: chapterId(KJV, MAT, 5),
+      toNodeId: chapterId(MAT, 5),
       stackBehavior: "replace",
     });
     const chapter = await refresh(instance, [
-      { nodeId: chapterId(KJV, MAT, 5), label: "5 (chapter)", location: null },
+      { nodeId: chapterId(MAT, 5), label: "5 (chapter)", location: null },
     ]);
-    expect(chapter.navigationMap[chapterId(KJV, MAT, 5)]?.back).toEqual({
+    expect(chapter.navigationMap[chapterId(MAT, 5)]?.back).toEqual({
       kind: "node",
-      toNodeId: bookId(KJV, MAT),
+      toNodeId: bookId(MAT),
       stackBehavior: "replace",
     });
-    const book = await refresh(instance, [{ nodeId: bookId(KJV, MAT), label: "Matthew", location: null }]);
-    expect(book.navigationMap[bookId(KJV, MAT)]?.back).toEqual({
+    const book = await refresh(instance, [{ nodeId: bookId(MAT), label: "Matthew", location: null }]);
+    expect(book.navigationMap[bookId(MAT)]?.back).toEqual({
       kind: "node",
-      toNodeId: testamentId(KJV, "NT"),
+      toNodeId: testamentId("NT"),
       stackBehavior: "replace",
     });
   });
@@ -665,8 +684,8 @@ describe("Bible app", () => {
   it("verse Versions enter lands on the first pick, not a list heading", async () => {
     const instance = bible();
     const verseRef = canon(MAT, 5, 3);
-    const option = optionId(KJV, verseRef, "versions");
-    const firstPick = verseVersionPickId(KJV, verseRef, KJV);
+    const option = optionId(verseRef, "versions");
+    const firstPick = verseVersionPickId(verseRef, KJV);
     const menu = await refresh(instance, [{ nodeId: option, label: "Versions", location: null }]);
     expect(menu.navigationMap[option]?.enter).toEqual({
       kind: "node",
@@ -678,10 +697,15 @@ describe("Bible app", () => {
       { nodeId: firstPick, label: "King James Version", location: null },
     ]);
     expect(list.node.id).toBe(firstPick);
-    expect(list.navigationMap[firstPick]?.enter).toMatchObject({ kind: "app", action: true });
+    expect(list.navigationMap[firstPick]?.enter).toMatchObject({
+      kind: "node",
+      toNodeId: firstPick,
+      stackBehavior: "replace",
+      action: true,
+    });
     expect(list.navigationMap[firstPick]?.next).toEqual({
       kind: "node",
-      toNodeId: verseVersionPickId(KJV, verseRef, ASV),
+      toNodeId: verseVersionPickId(verseRef, ASV),
       stackBehavior: "replace",
     });
   });
@@ -689,7 +713,12 @@ describe("Bible app", () => {
   it("version and commentary lists put the most recently used work first", async () => {
     const instance = bible();
     const ctx = signedIn();
-    await instance.open("/asv", { action: true }, ctx);
+    await refresh(
+      instance,
+      [{ nodeId: versionPickId(ASV), label: "American Standard Version", location: null }],
+      { action: true },
+      ctx,
+    );
     const root = await instance.open("/", {}, ctx);
     expect(root.navigationMap[versionsHeadingId()]?.enter).toEqual({
       kind: "node",
@@ -700,27 +729,82 @@ describe("Bible app", () => {
     const verseRef = canon(MAT, 5, 3);
     await refresh(
       instance,
-      [{ nodeId: commentaryChunkId(KJV, verseRef, JFB, 0), label: "x", location: null }],
+      [{ nodeId: commentaryChunkId(verseRef, JFB, 0), label: "x", location: null }],
       { action: true },
       ctx,
     );
-    const option = optionId(KJV, verseRef, "commentary");
+    const option = optionId(verseRef, "commentary");
     const menu = await refresh(instance, [{ nodeId: option, label: "Commentary", location: null }], {}, ctx);
     expect(menu.navigationMap[option]?.enter).toEqual({
       kind: "node",
-      toNodeId: commentaryWorkId(KJV, verseRef, JFB),
+      toNodeId: commentaryWorkId(verseRef, JFB),
       stackBehavior: "push",
     });
   });
 
+  it("bookmark verse version switch stays on the bookmark verse", async () => {
+    const instance = bible();
+    const ctx = signedIn();
+    const verseRef = canon(GEN, 1, 1);
+    await refresh(
+      instance,
+      [{ nodeId: optionId(verseRef, "bookmark"), label: "Bookmark", location: null }],
+      { action: true },
+      ctx,
+    );
+    const pick = verseVersionPickId(verseRef, ASV, { type: "bookmarks" });
+    const landed = await refresh(
+      instance,
+      [{ nodeId: pick, label: "American Standard Version", location: null }],
+      { action: true },
+      ctx,
+    );
+    expect(landed.node.id).toBe(verseNodeId({ type: "bookmarks" }, verseRef));
+    expect(landed.node.label).toContain("heavens and the earth");
+    expect(landed.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
+    const deep = await instance.open("/bookmarks/Genesis/1/1", {}, ctx);
+    expect(deep.node.id).toBe(landed.node.id);
+  });
+
+  it("search hits stay on the searched version after an active-version change", async () => {
+    const instance = bible();
+    const ctx = signedOut();
+    const hits = await refresh(
+      instance,
+      [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
+      { action: true, inputText: "heaven" },
+      ctx,
+    );
+    expect(hits.node.label).toContain("heaven and the earth");
+    const queryId = searchQueryId(hits.node.id);
+    const hitId = verseNodeId({ type: "search", queryId }, canon(GEN, 1, 1));
+    const contextId = verseNodeId({ type: "context", bookId: GEN, chapter: 1 }, canon(GEN, 1, 1));
+    const pick = verseVersionPickId(canon(GEN, 1, 1), ASV, {
+      type: "context",
+      bookId: GEN,
+      chapter: 1,
+    });
+    const context = await refresh(
+      instance,
+      [{ nodeId: pick, label: "American Standard Version", location: null }],
+      { action: true },
+      ctx,
+    );
+    expect(context.node.id).toBe(contextId);
+    expect(context.node.label).toContain("heavens and the earth");
+    const hitAgain = await refresh(instance, [{ nodeId: hitId, label: "x", location: null }], {}, ctx);
+    expect(hitAgain.node.label).toContain("heaven and the earth");
+    expect(hitAgain.node.label).not.toContain("heavens");
+  });
+
   it("unknown path falls back to Old Testament", async () => {
-    const result = await bible().open("/kjv/NotABook/99/1", {}, signedOut());
-    expect(result.node.id).toBe(testamentId(KJV, "OT"));
+    const result = await bible().open("/NotABook/99/1", {}, signedOut());
+    expect(result.node.id).toBe(testamentId("OT"));
   });
 
   it("malformed percent-encoding in a book name uses the same fallback", async () => {
-    const result = await bible().open("/kjv/%E0%A4%A/1/1", {}, signedOut());
-    expect(result.node.id).toBe(testamentId(KJV, "OT"));
+    const result = await bible().open("/%E0%A4%A/1/1", {}, signedOut());
+    expect(result.node.id).toBe(testamentId("OT"));
   });
 });
 
@@ -736,12 +820,34 @@ describe("Bible store", () => {
     expect(store.getVerseText(ASV, slot!.id)).toContain("heavens and the earth");
     const hits = store.searchVerses(KJV, ["blessed"], 1);
     expect(hits).toHaveLength(1);
-    const queryId = store.createSearchQuery("s1", "blessed", hits);
+    const queryId = store.createSearchQuery("s1", "blessed", KJV, hits);
     expect(store.listSearchHits(queryId, "s1")).toEqual(hits);
     expect(store.listSearchHits(queryId, "other")).toEqual([]);
-    store.touchVersionRecency("user-1", YLT);
+    store.touchVersionRecency("user-1", null, YLT);
     expect(store.listVersions("user-1").map((v) => v.slug)[0]).toBe("ylt");
     expect(store.listVersions().map((v) => v.slug)[0]).toBe("kjv");
+    store.touchVersionRecency(null, "s1", ASV);
+    expect(store.listVersions(null, "s1").map((v) => v.slug)[0]).toBe("asv");
+    expect(store.listVersions("user-1", "s1").map((v) => v.slug)[0]).toBe("ylt");
+    store.close();
+  });
+
+  it("drops session recency older than the TTL and ignores it when signed in", async () => {
+    const db = openBibleDatabase(":memory:");
+    ensureCatalog(db, { seed: fixtureBible });
+    const store = createSqliteBibleStore(db);
+    store.touchVersionRecency(null, "s1", ASV);
+    db.run(
+      "UPDATE version_recency SET used_at = ? WHERE session_id = ?",
+      Date.now() - RECENCY_TTL_MS - 1,
+      "s1",
+    );
+    store.touchVersionRecency(null, "s1", KJV);
+    expect(store.listVersions(null, "s1").map((v) => v.slug)[0]).toBe("kjv");
+    expect(
+      db.get<{ n: number }>("SELECT COUNT(*) AS n FROM version_recency WHERE session_id = ? AND version_id = ?", "s1", ASV)
+        ?.n,
+    ).toBe(0);
     store.close();
   });
 
@@ -751,13 +857,13 @@ describe("Bible store", () => {
     const store = createSqliteBibleStore(db);
     const hits = store.searchVerses(KJV, ["blessed"], 1);
     expect(hits).toHaveLength(1);
-    const first = store.createSearchQuery("s1", "blessed", hits);
-    const second = store.createSearchQuery("s1", "heaven", hits);
+    const first = store.createSearchQuery("s1", "blessed", KJV, hits);
+    const second = store.createSearchQuery("s1", "heaven", KJV, hits);
     expect(second).not.toBe(first);
     expect(store.getSearchQuery(first, "s1")).toBeNull();
     expect(store.listSearchHits(first, "s1")).toEqual([]);
     expect(store.listSearchHits(second, "s1")).toEqual(hits);
-    const other = store.createSearchQuery("s2", "blessed", hits);
+    const other = store.createSearchQuery("s2", "blessed", KJV, hits);
     expect(store.listSearchHits(second, "s1")).toEqual(hits);
     expect(store.listSearchHits(other, "s2")).toEqual(hits);
     db.run(
@@ -765,7 +871,7 @@ describe("Bible store", () => {
       Date.now() - SEARCH_QUERY_TTL_MS - 1,
       other,
     );
-    const third = store.createSearchQuery("s1", "earth", hits);
+    const third = store.createSearchQuery("s1", "earth", KJV, hits);
     expect(store.getSearchQuery(second, "s1")).toBeNull();
     expect(store.getSearchQuery(other, "s2")).toBeNull();
     expect(store.listSearchHits(third, "s1")).toEqual(hits);
@@ -803,7 +909,7 @@ describe("Bible packaging", () => {
 
     await refresh(
       bible(),
-      [{ nodeId: optionId(KJV, canon(GEN, 1, 1), "copy"), label: "Copy", location: null }],
+      [{ nodeId: optionId(canon(GEN, 1, 1), "copy"), label: "Copy", location: null }],
       { action: true },
     );
     expect(clipboardGetter).not.toHaveBeenCalled();

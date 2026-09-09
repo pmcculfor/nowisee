@@ -26,9 +26,9 @@ describe("Router", () => {
 
   it("parses app paths without a client catalog", () => {
     const router = makeRouter();
-    expect(router.parse("#/bible/kjv/Matthew/5/8")).toEqual({
+    expect(router.parse("#/bible/Matthew/5/8")).toEqual({
       appId: "bible",
-      path: "/kjv/Matthew/5/8",
+      path: "/Matthew/5/8",
     });
     expect(router.parse("#/fake")).toEqual({ appId: "fake", path: "/" });
     expect(router.parse("#/nope")).toEqual({ appId: "nope", path: "/" });
@@ -65,7 +65,7 @@ describe("Router", () => {
       { appId: "home", path: "/" },
       { appId: "home", path: "/help" },
       { appId: "fake", path: "/" },
-      { appId: "bible", path: "/kjv/Matthew/5/8" },
+      { appId: "bible", path: "/Matthew/5/8" },
     ];
     for (const loc of locations) {
       expect(router.parse(router.hrefFor(loc))).toEqual(loc);
