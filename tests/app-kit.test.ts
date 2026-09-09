@@ -228,8 +228,34 @@ describe("splitText", () => {
     expect(splitText("   \n\n  ")).toEqual([""]);
   });
 
-  it("splits on blank lines", () => {
-    expect(splitText("One.\n\nTwo.\n\nThree.")).toEqual(["One.", "Two.", "Three."]);
+  it("packs a short heading with the following paragraph", () => {
+    expect(
+      splitText("The Beatitudes.\n\nBlessed are the poor in spirit: for theirs is the kingdom of heaven."),
+    ).toEqual([
+      "The Beatitudes.\n\nBlessed are the poor in spirit: for theirs is the kingdom of heaven.",
+    ]);
+  });
+
+  it("keeps paragraphs that already meet the minimum as separate chunks", () => {
+    const first = "A".repeat(200);
+    const second = "B".repeat(200);
+    expect(splitText(`${first}\n\n${second}`)).toEqual([first, second]);
+  });
+
+  it("attaches a trailing short paragraph to the previous chunk", () => {
+    const body = "A".repeat(200);
+    expect(splitText(`${body}\n\nNext: Matthew Chapter 6`)).toEqual([
+      `${body}\n\nNext: Matthew Chapter 6`,
+    ]);
+  });
+
+  it("keeps a short heading on the first chunk of a long following paragraph", () => {
+    const heading = "IDENTITY OF THESE PRINCIPLES WITH THOSE OF THE ANCIENT ECONOMY.";
+    const body = "Word ".repeat(400).trim();
+    const chunks = splitText(`${heading}\n\n${body}`, 80);
+    expect(chunks[0]).toMatch(/^IDENTITY OF THESE PRINCIPLES/);
+    expect(chunks[0]!.length).toBeGreaterThan(heading.length);
+    expect(chunks.every((c) => c.length <= 80)).toBe(true);
   });
 
   it("hard-caps a giant paragraph", () => {

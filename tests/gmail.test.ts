@@ -176,7 +176,12 @@ describe("Gmail app graph", () => {
     const gmail = app(
       fakeClient({
         inbox: [{ id: "m1", from: "Ada", subject: "Hello" }],
-        bodies: { m1: "First paragraph.\n\nSecond paragraph." },
+        bodies: {
+          m1: [
+            `First paragraph. ${"This sentence exists so the body exceeds the split minimum. ".repeat(4).trim()}`,
+            `Second paragraph. ${"This sentence exists so the body exceeds the split minimum. ".repeat(4).trim()}`,
+          ].join("\n\n"),
+        },
       }),
     );
     const inbox = await gmail.open("/", {}, signedIn(oauth));
@@ -185,7 +190,9 @@ describe("Gmail app graph", () => {
       stackBehavior: "push",
     });
     const body = await gmail.open("/msg/m1/p/0", {}, signedIn(oauth));
-    expect(body.node.label).toBe("First paragraph.");
+    expect(body.node.label).toBe(
+      `First paragraph. ${"This sentence exists so the body exceeds the split minimum. ".repeat(4).trim()}`,
+    );
     expect(body.navigationMap[chunkNodeId("m1", 0)]?.next).toMatchObject({
       toNodeId: chunkNodeId("m1", 1),
     });

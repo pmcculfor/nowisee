@@ -545,7 +545,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | `collectNeighborhood({ tipId, neighbors, payload, depth, maxNodes })` | Callback-driven walk → warm payloads + map fragment |
 | `buildMap(fragments)` | Assemble the nested `fromNodeId → intent → edge` structure |
 | `signedOut({ accountAppId, rootAppId, appId, text })` | Complete `RefreshResult` for a signed-out user-scoped app |
-| `splitText` | Chunk a long body into sibling labels |
+| `splitText` | Chunk a long body into sibling labels (pack until a minimum length; then a hard cap) |
 
 ### Non-goals
 

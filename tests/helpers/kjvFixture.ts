@@ -1,6 +1,14 @@
 import type { BibleSeed } from "../../src/apps/bible/types.ts";
 
 /** Tiny corpus for unit tests. Never a full translation. */
+const aboveSplitMin = (lead: string) =>
+  `${lead} ${"This keeps the paragraph above the split-text minimum. ".repeat(4).trim()}`;
+
+export const henryRangeParagraphs = [
+  aboveSplitMin("Henry on the Beatitudes, covering verses 1 through 8."),
+  aboveSplitMin("A second paragraph of the same range."),
+] as const;
+
 export const fixtureBible: BibleSeed = {
   verses: [
     ...kjvGenesis1(),
@@ -16,7 +24,7 @@ export const fixtureBible: BibleSeed = {
       startVerse: 1,
       endChapter: 5,
       endVerse: 8,
-      body: "Henry on the Beatitudes, covering verses 1 through 8.\n\nA second paragraph of the same range.",
+      body: henryRangeParagraphs.join("\n\n"),
     },
     {
       commentaryId: "tsk",

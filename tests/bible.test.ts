@@ -37,7 +37,7 @@ import {
 } from "../src/apps/bible/ids.ts";
 import type { BibleRef, BibleSeed, CanonRef } from "../src/apps/bible/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
-import { fixtureBible } from "./helpers/kjvFixture.ts";
+import { fixtureBible, henryRangeParagraphs } from "./helpers/kjvFixture.ts";
 
 const KJV = catalogVersionId(VERSION_RECORDS[0]!);
 const ASV = catalogVersionId(VERSION_RECORDS[1]!);
@@ -465,7 +465,7 @@ describe("Bible app", () => {
     const last = await refresh(instance, [
       { nodeId: commentaryChunkId(canon(MAT, 5, 8), HENRY, 0), label: "x", location: null },
     ]);
-    expect(first.node.label).toBe("Henry on the Beatitudes, covering verses 1 through 8.");
+    expect(first.node.label).toBe(henryRangeParagraphs[0]);
     expect(last.node.label).toBe(first.node.label);
     expect(first.navigationMap[chunk0]?.next).toEqual({
       kind: "node",
