@@ -110,7 +110,7 @@ function doneLabelFor(inputText: string | undefined): string {
     "When you navigate right, you will reach the home screen.",
     "The home screen is a list of apps, including this tutorial app.",
     "Navigate up or down to access other apps.",
-    'One more thing - to switch between recent apps without navigating back to the home screen, you can use the "r" key or double-tap the screen on the iPhone app.',
+    'One more thing - to switch between recent apps without navigating back to the home screen, you can use the "r" key or, on the iPhone app, tap and hold for one second.',
     "On input box screens, there is a Recent Apps button.",
     "Now navigate right to exit this tutorial.",
   ].join(" ");

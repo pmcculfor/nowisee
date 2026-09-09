@@ -11,6 +11,14 @@ enum NavIntent: String {
   case next
   case enter
   case back
+  case recents
+}
+
+enum RecentsHold {
+  /// One second so a pause while choosing a swipe direction does not open Recents.
+  static let duration: TimeInterval = 1
+  /// Fail the hold if the finger moves this far — that is a swipe starting.
+  static let slop: CGFloat = 20
 }
 
 enum ScrubTicks {

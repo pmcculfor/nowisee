@@ -39,7 +39,7 @@ Apps author **intents**. Core owns which keystroke produces each one (defaults i
 | `enter` | `ArrowRight` on a text tip; VoiceOver pad right; **Done** on an input tip | Enter / follow (`stackBehavior: push`); also the deliberate trigger for actions and input commit |
 | `back` | `ArrowLeft` on a text tip; VoiceOver pad left; **Cancel** on an input tip | Inside an app: usually history back (`stackBehavior: pop`). At app root: **`app` edge to Home**. On an input tip: abandon |
 | plain arrows on an **input** tip | unbound | Caret keeps them. Leave via Done / Cancel / Recent apps, not a chord. |
-| `recents` | `r` on a text tip; **Recent apps** on an input tip. No fifth pad. | Opens the Recents app. Missing `recentsAppId` or already there: silent no-op |
+| `recents` | `r` on a text tip; **Recent apps** on an input tip; **1s hold** on the iPhone overlay. No fifth pad. | Opens the Recents app. Missing `recentsAppId` or already there: silent no-op |
 | Missing map edge | — | Silent no-op (stay) |
 
 Nothing above is visible to an app: an app that ships today keeps working if the bindings change, if the user remaps them, or if edge pads / other modalities deliver the same intents.

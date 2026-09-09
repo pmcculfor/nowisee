@@ -35,7 +35,7 @@ describe("nativeBridge", () => {
     expect(isNativeHostPresent()).toBe(false);
   });
 
-  it("posts state and delivers only the four intents", async () => {
+  it("posts state and delivers only known intents", async () => {
     const handler = installNativeHost();
     const intents: NavIntent[] = [];
     let blocked = false;
@@ -52,8 +52,9 @@ describe("nativeBridge", () => {
     const api = (window as Window & { __nowiseeNative: { onIntent: (i: string) => unknown } })
       .__nowiseeNative;
     api.onIntent("next");
+    api.onIntent("recents");
     api.onIntent("bogus");
-    expect(intents).toEqual(["next"]);
+    expect(intents).toEqual(["next", "recents"]);
 
     blocked = true;
     api.onIntent("enter");

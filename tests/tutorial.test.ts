@@ -120,6 +120,7 @@ describe("Tutorial app", () => {
     expect(typed.node.label).toContain('You typed "hello".');
     expect(typed.node.label).toContain("home screen");
     expect(typed.node.label).toMatch(/"r" key/);
+    expect(typed.node.label).toMatch(/tap and hold for one second/);
     expect(typed.node.label).toMatch(/Recent Apps button/);
   });
 });

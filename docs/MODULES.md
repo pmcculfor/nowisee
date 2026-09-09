@@ -469,11 +469,11 @@ The page attaches the bridge only when `webkit.messageHandlers.nowisee` is prese
 
 ### Page → native
 
-`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done.
+`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done/Recent apps.
 
 ### Native → page
 
-`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back")`. Other strings are ignored.
+`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back"|"recents")`. Other strings are ignored. The iOS overlay maps swipe right/left to `enter`/`back`, pan up/down to `prev`/`next`, and a one-second still hold to `recents`.
 
 ### Non-goals
 

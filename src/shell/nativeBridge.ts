@@ -31,7 +31,7 @@ type WebkitNamespace = {
   };
 };
 
-const INTENTS: readonly NavIntent[] = ["prev", "next", "enter", "back"];
+const INTENTS: readonly NavIntent[] = ["prev", "next", "enter", "back", "recents"];
 
 function webkitOf(win: Window): WebkitNamespace | undefined {
   return (win as Window & { webkit?: WebkitNamespace }).webkit;

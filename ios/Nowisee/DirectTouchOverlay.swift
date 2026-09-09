@@ -36,6 +36,18 @@ final class DirectTouchOverlay: UIView {
     let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
     pan.maximumNumberOfTouches = 1
     addGestureRecognizer(pan)
+
+    let hold = UILongPressGestureRecognizer(target: self, action: #selector(handleHold(_:)))
+    hold.minimumPressDuration = RecentsHold.duration
+    hold.allowableMovement = RecentsHold.slop
+    addGestureRecognizer(hold)
+  }
+
+  @objc private func handleHold(_ gesture: UILongPressGestureRecognizer) {
+    guard gesture.state == .began else {
+      return
+    }
+    delegate?.overlayDidFire(.recents)
   }
 
   @available(*, unavailable)
