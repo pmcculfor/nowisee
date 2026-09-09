@@ -12,10 +12,9 @@ export function resolveCopy(
   const verseId = slotVerseId(session.deps.store, ref);
   const text =
     verseId === null || !version ? null : session.deps.store.getVerseText(version.id, verseId);
-  const versionLabel = version?.label ?? "";
   const line =
-    text !== null
-      ? `${versionLabel}. ${formatRef(bookLabel(session.deps.store, ref.bookId), ref)}. ${text}`
+    text !== null && version
+      ? `${formatRef(bookLabel(session.deps.store, ref.bookId), ref)}. ${text} (${version.abbreviation})`
       : null;
   const labeled = withTipLabel(view, line ? "Copied" : "Copy failed: verse not found.");
   return line ? { ...labeled, clipboardText: line } : labeled;

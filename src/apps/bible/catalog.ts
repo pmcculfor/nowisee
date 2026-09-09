@@ -15,6 +15,8 @@ export type VersionLicense = "public-domain" | "licensed";
 
 export type VersionRecord = {
   readonly id: string;
+  /** Citation token, e.g. KJV. Distinct from catalog `id`. */
+  readonly abbreviation: string;
   readonly label: string;
   readonly sortOrder: number;
   readonly license: VersionLicense;
@@ -92,6 +94,7 @@ export const VERSE_OPTIONS: readonly VerseOption[] = [
 export const VERSION_RECORDS: readonly VersionRecord[] = [
   {
     id: "kjv",
+    abbreviation: "KJV",
     label: "King James Version",
     sortOrder: 0,
     license: "public-domain",
@@ -99,6 +102,7 @@ export const VERSION_RECORDS: readonly VersionRecord[] = [
   },
   {
     id: "asv",
+    abbreviation: "ASV",
     label: "American Standard Version",
     sortOrder: 1,
     license: "public-domain",
@@ -106,6 +110,7 @@ export const VERSION_RECORDS: readonly VersionRecord[] = [
   },
   {
     id: "bbe",
+    abbreviation: "BBE",
     label: "Bible in Basic English",
     sortOrder: 2,
     license: "public-domain",
@@ -113,6 +118,7 @@ export const VERSION_RECORDS: readonly VersionRecord[] = [
   },
   {
     id: "ylt",
+    abbreviation: "YLT",
     label: "Young's Literal Translation",
     sortOrder: 3,
     license: "public-domain",

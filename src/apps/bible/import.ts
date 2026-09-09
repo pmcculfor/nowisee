@@ -48,7 +48,7 @@ function upsertDescriptors(db: Db): void {
     "INSERT INTO book (id, label, testament, sort_order) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, testament = excluded.testament, sort_order = excluded.sort_order",
   );
   const insertVersion = db.prepare(
-    "INSERT INTO version (id, slug, label, sort_order, license) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label, sort_order = excluded.sort_order, license = excluded.license",
+    "INSERT INTO version (id, label, abbreviation, sort_order, license) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, abbreviation = excluded.abbreviation, sort_order = excluded.sort_order, license = excluded.license",
   );
   const insertCommentary = db.prepare(
     "INSERT INTO commentary (id, label, sort_order) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order",
@@ -61,8 +61,8 @@ function upsertDescriptors(db: Db): void {
     for (const version of VERSION_RECORDS) {
       insertVersion.run(
         catalogVersionId(version),
-        version.id,
         version.label,
+        version.abbreviation,
         version.sortOrder,
         version.license,
       );
@@ -157,13 +157,13 @@ function insertVerses(db: Db, verses: readonly BibleSeedVerse[]): void {
   const insertText = db.prepare(
     "INSERT OR IGNORE INTO verse_text (version_id, verse_id, text) VALUES (?, ?, ?)",
   );
-  const versionBySlug = new Map(
-    db.all<{ id: number; slug: string }>("SELECT id, slug FROM version").map((row) => [row.slug, row.id]),
+  const versionByCatalogId = new Map(
+    VERSION_RECORDS.map((record) => [record.id, catalogVersionId(record)]),
   );
 
   for (const row of verses) {
     const canon = getCanonBook(row.bookId);
-    const versionId = versionBySlug.get(row.versionId);
+    const versionId = versionByCatalogId.get(row.versionId);
     if (!canon || versionId === undefined) {
       continue;
     }

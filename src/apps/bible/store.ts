@@ -21,7 +21,7 @@ import type {
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
 
-const VERSION_COLUMNS = "id, slug, label, license";
+const VERSION_COLUMNS = "id, label, abbreviation, license";
 const BOOK_COLUMNS = "id, label, testament, sort_order AS sort";
 const HIT_COLUMNS = `v.id AS verseId, b.id AS bookId, c.number AS chapter, v.number AS verse`;
 
@@ -48,16 +48,10 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         id,
       );
     },
-    getVersionBySlug(slug) {
-      return db.get<BibleVersion>(
-        `SELECT ${VERSION_COLUMNS} FROM version WHERE slug = ?`,
-        slug,
-      );
-    },
     listVersions(userId, sessionId) {
       if (userId) {
         return db.all<BibleVersion>(
-          `SELECT v.id, v.slug, v.label, v.license
+          `SELECT v.id, v.label, v.abbreviation, v.license
            FROM version v
            LEFT JOIN version_recency r ON r.user_id = ? AND r.version_id = v.id
            ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,
@@ -66,7 +60,7 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       }
       if (sessionId) {
         return db.all<BibleVersion>(
-          `SELECT v.id, v.slug, v.label, v.license
+          `SELECT v.id, v.label, v.abbreviation, v.license
            FROM version v
            LEFT JOIN version_recency r ON r.session_id = ? AND r.version_id = v.id
            ORDER BY r.used_at DESC, v.sort_order ASC, v.id ASC`,

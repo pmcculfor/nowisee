@@ -24,8 +24,8 @@ CREATE TABLE verse (
 
 CREATE TABLE version (
   id INTEGER PRIMARY KEY,
-  slug TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL,
+  abbreviation TEXT NOT NULL,
   sort_order INTEGER NOT NULL UNIQUE,
   license TEXT NOT NULL
 );

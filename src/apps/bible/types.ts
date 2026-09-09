@@ -2,7 +2,7 @@ import type { RecencyWorkKind, VersionLicense, VersionRecord } from "./catalog.t
 
 export type BibleVersion = {
   readonly id: number;
-  readonly slug: string;
+  readonly abbreviation: string;
   readonly label: string;
   readonly license: VersionLicense;
 };
@@ -107,7 +107,6 @@ export type SearchQueryRecord = {
 
 export interface BibleStore {
   getVersion(id: number): BibleVersion | undefined;
-  getVersionBySlug(slug: string): BibleVersion | undefined;
   listVersions(userId?: string | null, sessionId?: string | null): readonly BibleVersion[];
   touchVersionRecency(userId: string | null, sessionId: string | null, versionId: number): void;
   touchCommentaryRecency(userId: string | null, sessionId: string | null, commentaryId: number): void;

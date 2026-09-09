@@ -626,7 +626,7 @@ describe("Bible app", () => {
     expect(copied.node.label).toBe("Copied");
     expect(copied.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
     expect(copied.clipboardText).toBe(
-      "King James Version. Genesis 1:1. In the beginning God created the heaven and the earth.",
+      "Genesis 1:1. In the beginning God created the heaven and the earth. (KJV)",
     );
     expect(copied.navigationMap[copyId]?.next).toEqual({
       kind: "node",
@@ -846,7 +846,7 @@ describe("Bible store", () => {
     const db = openBibleDatabase(":memory:");
     ensureCatalog(db, { seed: fixtureBible });
     const store = createSqliteBibleStore(db);
-    expect(store.listVersions().map((v) => v.slug)).toEqual(["kjv", "asv", "bbe", "ylt"]);
+    expect(store.listVersions().map((v) => v.abbreviation)).toEqual(["KJV", "ASV", "BBE", "YLT"]);
     const slot = store.getVerseSlot(GEN, 1, 1);
     expect(slot).toBeDefined();
     expect(store.getVerseText(KJV, slot!.id)).toContain("heaven and the earth");
@@ -857,11 +857,11 @@ describe("Bible store", () => {
     expect(store.listSearchHits(queryId, "s1")).toEqual(hits);
     expect(store.listSearchHits(queryId, "other")).toEqual([]);
     store.touchVersionRecency("user-1", null, YLT);
-    expect(store.listVersions("user-1").map((v) => v.slug)[0]).toBe("ylt");
-    expect(store.listVersions().map((v) => v.slug)[0]).toBe("kjv");
+    expect(store.listVersions("user-1")[0]?.id).toBe(YLT);
+    expect(store.listVersions()[0]?.id).toBe(KJV);
     store.touchVersionRecency(null, "s1", ASV);
-    expect(store.listVersions(null, "s1").map((v) => v.slug)[0]).toBe("asv");
-    expect(store.listVersions("user-1", "s1").map((v) => v.slug)[0]).toBe("ylt");
+    expect(store.listVersions(null, "s1")[0]?.id).toBe(ASV);
+    expect(store.listVersions("user-1", "s1")[0]?.id).toBe(YLT);
     store.close();
   });
 
@@ -876,7 +876,7 @@ describe("Bible store", () => {
       "s1",
     );
     store.touchVersionRecency(null, "s1", KJV);
-    expect(store.listVersions(null, "s1").map((v) => v.slug)[0]).toBe("kjv");
+    expect(store.listVersions(null, "s1")[0]?.id).toBe(KJV);
     expect(
       db.get<{ n: number }>("SELECT COUNT(*) AS n FROM version_recency WHERE session_id = ? AND version_id = ?", "s1", ASV)
         ?.n,

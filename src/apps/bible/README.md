@@ -27,7 +27,7 @@ Import sources under `raw/` that the importer reads are committed. Zips, USFM, a
 Graph builders interpret records in [`catalog.ts`](catalog.ts). They do not name individual works. [`view/kinds.ts`](view/kinds.ts) is one table keyed by `ParsedNode` kind (`addLevel`, `payload`, `version`, `location`) so a new node kind is a row, not four `switch`es.
 
 - `CanonBook` — USFM id, sort, testament **string**, label, aliases (URL names).
-- `VersionRecord` — `id`, `label`, `sortOrder`, `license` (a seam for licensed translations; unused for gating).
+- `VersionRecord` — `id`, `abbreviation` (citation token, e.g. KJV), `label`, `sortOrder`, `license` (a seam for licensed translations; unused for gating).
 - `CommentaryRecord` — import catalog (`id`, `label`, `sortOrder`, `format`, source path). The graph lists rows from the `commentaries` table, most recently used first.
 - `RootItem[]` — testament headings, bookmarks, search, versions.
 - `VerseOption[]` — versions, commentary, bookmark, copy.
@@ -42,7 +42,7 @@ Root (Old Testament, New Testament, Bookmarks, Search, Version) leads to book �
 
 Book lists, chapter lists, and chapter-sequence verses wrap. Context-sequence verses wrap in that chapter the same way. Bookmark and search hits do not. Verse `next` / `prev` in a chapter stay in that chapter.
 
-Chapter labels are `N (chapter)` (number first). Chapter-sequence verses are `N. text`. Search enter lands on a context-sequence verse `N (context). text` so prev/next walk that chapter. Bookmark and search hits are `Book C:V. text`. Copy is `Version. Book C:V. text`.
+Chapter labels are `N (chapter)` (number first). Chapter-sequence verses are `N. text`. Search enter lands on a context-sequence verse `N (context). text` so prev/next walk that chapter. Bookmark and search hits are `Book C:V. text`. Copy is `Book C:V. text (Abbrev)`.
 
 Reading-tree descend and `back` use `replace` (testament ↔ book ↔ chapter ↔ verse), so a URL-opened verse walks chapter → book → testament the same way in-session reading does. Bookmark and search verses `back` pop. Context verses (from search) `back` pop to the hit. The verse menu **replaces** the verse; option Back replaces onto that verse (the ref is in the option id). Versions enter replaces onto the first pick; pick Back replaces onto Versions. Commentary still pushes. Root `back` is an `app` edge to Home.
 
@@ -59,7 +59,7 @@ Warm nearby books, chapters, and verses as appropriate. Search hits warm a sibli
 Migrations live in [`db/migrations/001_reader.sql`](db/migrations/001_reader.sql). One file: the product is in development, so existing rows need not be preserved. Delete `data/apps/bible.db` after a schema change.
 
 - `book`, `chapter`, `verse` — canon tree (integer PKs). Books are not per-version.
-- `version` (`id`, unique `slug`, `label`, `sort_order`, `license`)
+- `version` (`id`, `label`, `abbreviation`, `sort_order`, `license`)
 - `verse_text` (`version_id`, `verse_id`, `text`) — the only versioned corpus table
 - `version_recency` / `commentary_recency` — MRU; `user_id` **or** `session_id`; first version row is the active version
 - `bookmark` (`user_id`, `verse_id`)
