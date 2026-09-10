@@ -5,6 +5,7 @@ import { GMAIL_OAUTH_PROVIDER } from "../src/apps/gmail/oauth.ts";
 import { startGmailApp, DEFAULT_GMAIL_DB_PATH } from "../src/apps/gmail/store.ts";
 import { createTutorialApp } from "../src/apps/tutorial/index.ts";
 import { startHomeApp, DEFAULT_HOME_DB_PATH } from "../src/apps/home/store.ts";
+import { startListsApp, DEFAULT_LISTS_DB_PATH } from "../src/apps/lists/store.ts";
 import { startNotesApp, DEFAULT_NOTES_DB_PATH } from "../src/apps/notes/store.ts";
 import { createRecentsApp } from "../src/apps/recents/index.ts";
 import type { OAuthProviderConfig } from "./oauth/providers.ts";
@@ -70,6 +71,14 @@ export const FIRST_PARTY_APPS: readonly AppPack[] = [
       startNotesApp({
         rootAppId: host.rootAppId,
         dbPath: packStorePath(host, DEFAULT_NOTES_DB_PATH),
+      }),
+  },
+  {
+    homeRole: "default",
+    start: (host) =>
+      startListsApp({
+        rootAppId: host.rootAppId,
+        dbPath: packStorePath(host, DEFAULT_LISTS_DB_PATH),
       }),
   },
   {

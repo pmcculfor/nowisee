@@ -10,7 +10,7 @@ Core never sees a database. There is no `ctx.db`, and there is no client `platfo
 |------|---------|----------|-------|-----------|
 | **Identity** | email, sign-in challenges, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
 | **Secrets** | OAuth tokens | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
-| **App data** | verses, account flow, notes, home list | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
+| **App data** | verses, account flow, notes, lists, home list | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
 | **Large user files** | attachments (later) | Files next to that app's data, not the host db | That app (HTTP upload may pass through the host) | Owner on the metadata row |
 
 This layer does not include the client warm cache (tab-lifetime) or anything in a `RefreshResult` (plain JSON the user is meant to hear).
@@ -28,6 +28,7 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
 | Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/). Graph: [`src/apps/notes/README.md`](../src/apps/notes/README.md) |
+| Lists | `data/apps/lists.db` | [`src/apps/lists/db/migrations/`](../src/apps/lists/db/migrations/). Graph: [`src/apps/lists/README.md`](../src/apps/lists/README.md) |
 | Gmail | `data/apps/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/). Tokens via `ctx.oauth` only. Graph: [`src/apps/gmail/README.md`](../src/apps/gmail/README.md) |
 
 Tests pass `:memory:` for each file that the test needs. `createNowiseeHost` defaults to `ephemeral: true`, which tells each pack's `start` to open `:memory:` (via `packStorePath` in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts)) so tests do not write `data/`. Production (`server/index.ts`, Vite plugin) passes `ephemeral: false`. The flag is intentional — do not infer it from whether `db` is a path string or a `Db` handle. The host still never injects a database into an app; each pack chooses a path and the app opens it.

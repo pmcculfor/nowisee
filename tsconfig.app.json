@@ -27,6 +27,7 @@
     "src/apps/account/store.ts",
     "src/apps/home/store.ts",
     "src/apps/notes/store.ts",
+    "src/apps/lists/store.ts",
     "src/apps/gmail/store.ts",
     "src/apps/gmail/oauth.ts",
     "src/apps/gmail/gmailClient.ts",
