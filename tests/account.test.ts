@@ -319,6 +319,7 @@ describe("Account app", () => {
       TUTORIAL_APP_LABEL,
       "Bible",
       "Notes",
+      "Lists",
       "Account",
       "Manage Apps",
     ]);

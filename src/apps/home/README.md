@@ -15,7 +15,7 @@ It lists installed apps from `ctx.directory.list()`, which the host grants to Ho
 | `default` | until the user removes it | yes | yes |
 | `optional` (omit) | only after the user adds it | yes | yes if on the list |
 
-Home also omits its own module id. Pack today: Home and Recents `internal`; Tutorial, Bible, Notes `default`; Gmail omit; Account `required`. Recents is also `parkable: false` (Recents-list policy, not Home's).
+Home also omits its own module id. Pack today: Home and Recents `internal`; Tutorial, Bible, Notes, Lists `default`; Gmail omit; Account `required`. Recents is also `parkable: false` (Recents-list policy, not Home's).
 
 ## Home list
 

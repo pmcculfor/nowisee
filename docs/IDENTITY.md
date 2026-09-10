@@ -303,6 +303,7 @@ This discipline is also the backstop for §10: with the owner in every query, a 
 |-----|------------------|
 | Bible | Almost nothing. Reading works. Bookmarks and last-place are missing |
 | Notes | Nothing to list. An explanation and a way to sign in |
+| Lists | Nothing to list. An explanation and a way to sign in |
 | Mail | Nothing works at all. An explanation and a way to sign in |
 | Home | A default catalog rather than that user's catalog |
 
