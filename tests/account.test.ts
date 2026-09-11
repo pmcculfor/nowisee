@@ -320,6 +320,7 @@ describe("Account app", () => {
       "Bible",
       "Notes",
       "Lists",
+      "Weather",
       "Account",
       "Manage Apps",
     ]);
