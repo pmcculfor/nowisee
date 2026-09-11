@@ -41,7 +41,7 @@ export interface IdentityService {
   /** Live session for this token, or null. Never mints, never bumps last_seen. */
   lookup(token: string | null): Promise<{ sessionId: string; userId: string | null } | null>;
   requestSignIn(sessionId: string, email: string): Promise<RequestSignInOutcome>;
-  verifySignIn(sessionId: string, code: string): Promise<AuthServiceResult>;
+  verifySignIn(sessionId: string, code: string, ip?: string): Promise<AuthServiceResult>;
   signOut(sessionId: string): Promise<{ issuedToken: null }>;
 }
 
@@ -179,6 +179,23 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
     return true;
   }
 
+  function recordLogin(
+    at: number,
+    userId: string,
+    sessionId: string,
+    ip: string | undefined,
+    kind: "register" | "sign_in" = "sign_in",
+  ): void {
+    db.run(
+      `INSERT INTO login_events (at, user_id, session_id, ip, kind) VALUES (?, ?, ?, ?, ?)`,
+      at,
+      userId,
+      sessionId,
+      ip ?? "",
+      kind,
+    );
+  }
+
   function liveSession(token: string | null, at: number): SessionRow | null {
     sweep(at);
     if (!token) {
@@ -270,7 +287,7 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
       return { ok: true };
     },
 
-    async verifySignIn(sessionId, code) {
+    async verifySignIn(sessionId, code, ip) {
       const at = now();
       sweep(at);
       const compact = normalizeSignInCode(code);
@@ -309,6 +326,7 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
       const user = db.get<{ id: string }>("SELECT id FROM users WHERE email = ?", challenge.email);
       if (user) {
         const issuedToken = rotateOntoUser(sessionId, user.id, at);
+        recordLogin(at, user.id, sessionId, ip);
         return { ok: true, userId: user.id, issuedToken };
       }
       if (!allowRegistration) {
@@ -328,6 +346,7 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
         return { ok: false, reason: "invalid-credentials" };
       }
       const issuedToken = rotateOntoUser(sessionId, userId, at);
+      recordLogin(at, userId, sessionId, ip, "register");
       return { ok: true, userId, issuedToken };
     },
 

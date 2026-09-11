@@ -130,6 +130,34 @@ describe("identity service", () => {
 
     const user = db.get<{ email: string }>("SELECT email FROM users WHERE id = ?", verified.userId);
     expect(user?.email).toBe("ada@example.com");
+
+    const login = db.get<{ kind: string; ip: string; session_id: string }>(
+      "SELECT kind, ip, session_id FROM login_events WHERE user_id = ?",
+      verified.userId,
+    );
+    expect(login).toEqual({ kind: "register", ip: "", session_id: anon.sessionId });
+  });
+
+  it("returning verifySignIn records a sign_in with the given ip", async () => {
+    db = openDatabase({ path: ":memory:" });
+    const { id, mailer } = service(db);
+    const first = await id.resolve(null);
+    await id.requestSignIn(first.sessionId, "a@b.co");
+    const created = await id.verifySignIn(first.sessionId, mailer.lastCode(), "203.0.113.1");
+    expect(created.ok).toBe(true);
+
+    const again = await id.resolve(null);
+    await id.requestSignIn(again.sessionId, "a@b.co");
+    const verified = await id.verifySignIn(again.sessionId, mailer.lastCode(), "198.51.100.9");
+    expect(verified.ok).toBe(true);
+
+    const kinds = db.all<{ kind: string; ip: string }>(
+      "SELECT kind, ip FROM login_events ORDER BY id",
+    );
+    expect(kinds).toEqual([
+      { kind: "register", ip: "203.0.113.1" },
+      { kind: "sign_in", ip: "198.51.100.9" },
+    ]);
   });
 
   it("stores an HMAC of the code, not the digits", async () => {

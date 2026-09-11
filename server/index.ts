@@ -14,6 +14,7 @@
  *   NOWISEE_RESEND_API_KEY       Resend API key
  *   NOWISEE_OTP_PEPPER           32-byte HMAC key, base64 (required for resend)
  *   NOWISEE_OAUTH_<APP>_CLIENT_ID / _CLIENT_SECRET  OAuth app credentials (not lockbox)
+ *   NOWISEE_ADMIN_EMAILS         comma-separated emails allowed to open /admin
  *   NOWISEE_TLS_CERT             optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
  *   NOWISEE_TLS_KEY              optional PEM path
  */
@@ -26,6 +27,8 @@ import { extname, join, normalize, resolve, sep } from "node:path";
 import { createNowiseeHost } from "./host.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
+import { handleAdminHttp, isAdminUrl } from "./admin/http.ts";
+import { adminEmailsFromEnv } from "./admin/emails.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
 const DIST = resolve(process.cwd(), "dist");
@@ -50,12 +53,17 @@ const host = createNowiseeHost({
   db: DB_PATH,
   ephemeral: false,
   configuredOrigin: process.env.NOWISEE_ORIGIN,
+  adminEmails: adminEmailsFromEnv(),
 });
 
 async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url ?? "/";
   if (isOAuthUrl(url)) {
     await handleOAuth(req, res);
+    return;
+  }
+  if (isAdminUrl(url)) {
+    await handleAdmin(req, res);
     return;
   }
   if (isAppApiUrl(url)) {
@@ -65,6 +73,29 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
   await serveStatic(url, res);
 }
 
+async function handleAdmin(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const raw = req.method === "POST" ? await readLimitedBody(req) : "";
+    let body: unknown;
+    if (raw.length > 0) {
+      body = JSON.parse(raw) as unknown;
+    }
+    const out = await handleAdminHttp(host, {
+      method: req.method ?? "GET",
+      url: req.url ?? "/",
+      headers: req.headers,
+      body,
+      remoteAddress: req.socket.remoteAddress,
+    });
+    writeHttp(res, out);
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      writeError(res, 413, "Request body too large");
+      return;
+    }
+    writeError(res, 400, "Invalid JSON");
+  }
+}
 async function handleOAuth(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
     const raw = req.method === "POST" ? await readLimitedBody(req) : "";
@@ -102,6 +133,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
         url: req.url ?? "/",
         headers: req.headers,
         body,
+        remoteAddress: req.socket.remoteAddress,
       });
     const json = JSON.stringify(out.body);
     res.statusCode = out.status;
@@ -148,6 +180,22 @@ async function serveStatic(url: string, res: ServerResponse): Promise<void> {
   } catch {
     writeError(res, 404, "Not found");
   }
+}
+
+function writeHttp(
+  res: ServerResponse,
+  out: { status: number; body: unknown; headers?: Readonly<Record<string, string>> },
+): void {
+  const payload = typeof out.body === "string" ? out.body : JSON.stringify(out.body);
+  res.statusCode = out.status;
+  for (const [key, value] of Object.entries(out.headers ?? {})) {
+    res.setHeader(key, value);
+  }
+  if (!res.getHeader("Content-Type")) {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  }
+  res.setHeader("Content-Length", Buffer.byteLength(payload));
+  res.end(payload);
 }
 
 function writeRaw(res: ServerResponse, status: number, message: string): void {

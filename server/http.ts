@@ -5,6 +5,7 @@ import { checkCsrf, expectedOriginFromRequest } from "./csrf.ts";
 import { AppNotFoundError } from "./errors.ts";
 import type { NowiseeHost } from "./host.ts";
 import type { CookieSlot } from "./identity/context.ts";
+import { clientIpFromRequest } from "./clientIp.ts";
 
 export type AppHttpResponse = {
   readonly status: number;
@@ -17,6 +18,7 @@ export type SessionHttpRequest = {
   readonly url: string;
   readonly headers: HeadersLike;
   readonly body?: unknown;
+  readonly remoteAddress?: string;
 };
 
 export type HeadersLike = {
@@ -171,7 +173,11 @@ export async function handleSessionHttp(
 
   const path = (req.url.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
   const token = readSessionToken(header(req.headers, "cookie"));
-  const slot: CookieSlot = {};
+  const clientIp = clientIpFromRequest({
+    forwardedFor: header(req.headers, "x-forwarded-for"),
+    remoteAddress: req.remoteAddress,
+  });
+  const slot: CookieSlot = { clientIp };
 
   const openMatch = OPEN_RE.exec(path);
   if (openMatch) {
@@ -187,6 +193,7 @@ export async function handleSessionHttp(
         extras: parsed.extras,
         token,
         slot,
+        clientIp,
       }),
     );
   }
@@ -205,6 +212,7 @@ export async function handleSessionHttp(
         extras: parsed.extras,
         token,
         slot,
+        clientIp,
       }),
     );
   }
