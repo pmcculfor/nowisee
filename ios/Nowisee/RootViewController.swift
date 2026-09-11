@@ -13,6 +13,8 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
 
   private var onAppOrigin = true
   private var overlayOwnsVoiceOver = false
+  /// True once a deferred `screenChanged` to the overlay is queued, until it runs.
+  private var voiceOverTakeoverQueued = false
   private var announcedLabel: String?
 
   deinit {
@@ -129,12 +131,11 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
       }
       overlay.accessibilityLabel = label
       if !overlayOwnsVoiceOver {
-        overlayOwnsVoiceOver = true
-        announcedLabel = label
-        DispatchQueue.main.async { [weak self] in
-          guard let self else { return }
-          UIAccessibility.post(notification: .screenChanged, argument: self.overlay)
-        }
+        // Warm working labels (e.g. "Signing in…") can be replaced in the same
+        // turn as the status result. Do not announce, and do not take VoiceOver
+        // until the deferred screenChanged — otherwise that focus move interrupts
+        // the result and speaks the stale working label.
+        queueVoiceOverTakeover()
       } else if label != announcedLabel {
         announcedLabel = label
         UIAccessibility.post(notification: .announcement, argument: label)
@@ -151,6 +152,26 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
         UIAccessibility.post(notification: .screenChanged, argument: self.webView)
       }
     }
+  }
+
+  private func queueVoiceOverTakeover() {
+    guard !voiceOverTakeoverQueued else {
+      return
+    }
+    voiceOverTakeoverQueued = true
+    DispatchQueue.main.async { [weak self] in
+      self?.finishVoiceOverTakeover()
+    }
+  }
+
+  private func finishVoiceOverTakeover() {
+    voiceOverTakeoverQueued = false
+    guard onAppOrigin, !overlay.isHidden, overlay.isAccessibilityElement else {
+      return
+    }
+    overlayOwnsVoiceOver = true
+    announcedLabel = overlay.accessibilityLabel
+    UIAccessibility.post(notification: .screenChanged, argument: overlay)
   }
 
   private func setWebHiddenFromVoiceOver(_ hidden: Bool) {
