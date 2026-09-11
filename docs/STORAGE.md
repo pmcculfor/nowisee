@@ -4,11 +4,12 @@
 
 Core never sees a database. There is no `ctx.db`, and there is no client `platform.storage`.
 
-## Four kinds of durable data
+## Five kinds of durable data
 
 | Kind | Example | Lives in | Owner | Scoped by |
 |------|---------|----------|-------|-----------|
-| **Identity** | email, sign-in challenges, sessions | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
+| **Identity** | email, sign-in challenges, sessions, login events | Host SQLite (`NOWISEE_DB` / `data/nowisee.db`) | Identity service | Cookie → `ctx.userId` |
+| **Admin usage** | hourly opens / refreshes / actions per session, client IP | Same host file (`usage_hourly`) | Host (not an app) | `session_id`; `user_id` when signed in |
 | **Secrets** | OAuth tokens | Host lockbox table + host master key | Host lockbox capability | `(userId, appId, slot)` |
 | **App data** | verses, account flow, notes, lists, home list | That app's own SQLite file | That app | `ctx.userId` when it is user data; unscoped when it is a public corpus |
 | **Large user files** | attachments (later) | Files next to that app's data, not the host db | That app (HTTP upload may pass through the host) | Owner on the metadata row |
@@ -17,13 +18,13 @@ This layer does not include the client warm cache (tab-lifetime) or anything in 
 
 ## Who opens which file
 
-The host opens **only** the host database ([`server/db/`](../server/db/)) — identity, lockbox, and OAuth state. It registers apps; it does not pass them a `Db` or a corpus.
+The host opens **only** the host database ([`server/db/`](../server/db/)) — identity, lockbox, OAuth state, login events, and admin usage. It registers apps; it does not pass them a `Db` or a corpus.
 
 Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a library (`openSqlite`) that turns on WAL, foreign keys, a busy timeout, and numbered migrations for *that* path. Third-party apps do not have to use it.
 
 | Database | Default path | Migrations / detail |
 |----------|----------------|---------------------|
-| Host (identity, lockbox, OAuth state) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql) |
+| Host (identity, lockbox, OAuth state, login events, usage) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql), [`002_usage.sql`](../server/db/migrations/002_usage.sql) |
 | Home | `data/apps/home.db` | [`src/apps/home/db/migrations/`](../src/apps/home/db/migrations/). Per-user home list. Graph: [`src/apps/home/README.md`](../src/apps/home/README.md) |
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
@@ -56,7 +57,7 @@ Bytes do not travel through `open` / `refresh` (JSON, 1 MiB cap). When attach ex
 ## Transfer
 
 1. An app talks to its own store.
-2. A host engine swap is [`server/db/index.ts`](../server/db/index.ts) for the host file (identity, lockbox, OAuth state).
+2. A host engine swap is [`server/db/index.ts`](../server/db/index.ts) for the host file (identity, lockbox, OAuth state, login events, usage).
 3. Account export and deletion are still deferred ([`IDENTITY.md`](IDENTITY.md) §13).
 4. There is no app-to-app `SELECT`.
 

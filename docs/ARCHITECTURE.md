@@ -57,6 +57,7 @@ See [`.env.example`](../.env.example) (local) and [`.env.production.example`](..
 | `NOWISEE_MAIL_FROM` | From: header when using Resend |
 | `NOWISEE_RESEND_API_KEY` | Resend API key |
 | `NOWISEE_OTP_PEPPER` | 32-byte HMAC key, base64. Required for Resend |
+| `NOWISEE_ADMIN_EMAILS` | Comma-separated emails allowed to open `/admin`. Empty disables it. Not an `is_admin` column |
 
 ---
 

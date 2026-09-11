@@ -3,6 +3,8 @@ import type { Connect, Plugin } from "vite";
 import { createNowiseeHost, type NowiseeHost } from "./host.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
+import { handleAdminHttp, isAdminUrl } from "./admin/http.ts";
+import { adminEmailsFromEnv } from "./admin/emails.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
 
 export type NowiseeApiPluginOptions = {
@@ -10,7 +12,7 @@ export type NowiseeApiPluginOptions = {
 };
 
 /**
- * Serves POST /api/apps/:id/open|refresh on the Vite dev and preview servers
+ * Serves POST /api/apps/:id/open|refresh and /admin on the Vite dev and preview servers
  * so the SPA and the app host are same-origin.
  */
 export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin {
@@ -21,6 +23,7 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
       db: options.dbPath ?? process.env.NOWISEE_DB ?? "data/nowisee.db",
       ephemeral: false,
       configuredOrigin: process.env.NOWISEE_ORIGIN,
+      adminEmails: adminEmailsFromEnv(),
     });
     return host;
   }
@@ -54,6 +57,31 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
       }
       return;
     }
+    if (isAdminUrl(url)) {
+      try {
+        const raw = req.method === "POST" ? await readLimitedBody(req) : "";
+        let body: unknown;
+        if (raw.length > 0) {
+          body = JSON.parse(raw) as unknown;
+        }
+        const out = await handleAdminHttp(getHost(), {
+          method: req.method ?? "GET",
+          url,
+          headers: req.headers,
+          body,
+          remoteAddress: req.socket.remoteAddress,
+        });
+        const payload = typeof out.body === "string" ? out.body : JSON.stringify(out.body);
+        writeRaw(res, out.status, payload, out.headers);
+      } catch (err) {
+        if (err instanceof BodyTooLargeError) {
+          writeJson(res, 413, { error: "Request body too large" });
+          return;
+        }
+        writeJson(res, 400, { error: "Invalid JSON" });
+      }
+      return;
+    }
     if (!isAppApiUrl(url)) {
       next();
       return;
@@ -69,6 +97,7 @@ export function nowiseeApiPlugin(options: NowiseeApiPluginOptions = {}): Plugin 
         url,
         headers: req.headers,
         body,
+        remoteAddress: req.socket.remoteAddress,
       });
       writeJson(res, out.status, out.body, out.headers);
     } catch (err) {

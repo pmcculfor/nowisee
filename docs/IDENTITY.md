@@ -1,6 +1,6 @@
 # Nowisee — identity, apps on the server, and secrets
 
-**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). Email sign-in codes **landed** (August 2026). First-party apps run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `login_challenges` / `login_throttles` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). Native clients: [`PREPAREDNESS.md`](PREPAREDNESS.md). Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
+**Status:** Identity slice **landed** (August 2026). Lockbox and the generic host OAuth broker **landed** (August 2026). Email sign-in codes **landed** (August 2026). Admin console usage reporting **landed** (September 2026). First-party apps run on the server host. Host SQLite (`node:sqlite`) holds `users` / `sessions` / `login_challenges` / `login_throttles` / `login_events` / `usage_hourly` / `lockbox` / `oauth_states`. Each app opens its own database — see [`STORAGE.md`](STORAGE.md). Native clients: [`PREPAREDNESS.md`](PREPAREDNESS.md). Product locks: [`SPEC.md`](SPEC.md). Layer ownership: [`../AGENTS.md`](../AGENTS.md).
 
 **Owner deltas applied in this slice**
 
@@ -94,6 +94,7 @@ First-party mail is the first consumer (`ctx.oauth`).
 - **App corpora (landed):** each app seeds its own SQLite file. The host does not import those files. Example: Bible — [`src/apps/bible/README.md`](../src/apps/bible/README.md).
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
 - **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`001_host.sql`](../server/db/migrations/001_host.sql)).
+- **Admin console (landed):** same host file, tables `login_events` and `usage_hourly` ([`002_usage.sql`](../server/db/migrations/002_usage.sql)). Visual `/admin` page; §15.
 - Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Production origin: **https://nowisee.app**. Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS at the reverse proxy (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN=https://nowisee.app` is the CSRF origin when behind a proxy. Env: [`.env.production.example`](../.env.production.example).
 
 ---
@@ -408,7 +409,7 @@ Identity-relevant rules (the Account app implements them; they are not Account-o
 | Pragmas | `foreign_keys = ON`, a `busy_timeout` |
 | Schema changes | A numbered migration runner per database — a `migrations` table plus ordered files, applied in a transaction when *that* file is opened. Not scattered `CREATE TABLE IF NOT EXISTS` |
 | Backups | Required before real user data. "A file on one machine with a disk" is also a file you can lose |
-| Ownership | `users`, `sessions`, `login_challenges`, and `login_throttles` belong to the **identity service** (§6) on the **host** file. `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core per-app repository. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
+| Ownership | `users`, `sessions`, `login_challenges`, and `login_throttles` belong to the **identity service** (§6) on the **host** file. `login_events` is written by the identity service on successful `verifySignIn` (`register` vs `sign_in`). `usage_hourly` is written by the host after a successful `open` / `refresh` (§15). `lockbox` and `oauth_states` belong to the host lockbox / OAuth broker (§3) on the same file. Other app tables belong to that app's own database. Core never sees a database — no core per-app repository. There is no `ctx.db`. See [`STORAGE.md`](STORAGE.md) |
 
 ---
 
@@ -438,3 +439,16 @@ Landed. Kept for context.
 - Apps return `clipboardText` when Copy should happen. Core writes the device clipboard. No fake clipboard on the server.
 - Client registers only generic remote stubs.
 - Browser bootstrap does not bundle app corpora. Each app imports its data on the server. The same modules are unit-tested in-process (that is not a second product path).
+
+---
+
+## 15. Admin console
+
+A visual `/admin` page on the same host (not an `AppModule`, not core). It is gated by the existing session cookie plus `NOWISEE_ADMIN_EMAILS` (normalized emails, env, not a column on `users`). Empty allowlist disables the page. Unknown or non-allowlisted callers get **404**. `/admin` uses `lookup`, not `resolve`, so a GET does not mint an anonymous session.
+
+Successful `verifySignIn` appends `login_events` (who / when / IP / `register` or `sign_in`). `sessions.last_seen_at` is a heartbeat on every `/api` call, not a login history.
+
+After a successful `open` / `refresh`, the host UPSERTs `usage_hourly` keyed by UTC hour × app × session. `user_id` is nullable (filled in if that session signs in mid-hour; never written back to null). One `ip` column, overwritten when the address changes. Client IP comes from the HTTP request (`X-Forwarded-For` last hop behind Caddy, else the socket). Never from the JSON body, stack, or `inputText`.
+
+Admin JSON and CSV are POST with the same CSRF layers as `/api`. CSV is POST, not GET.
+

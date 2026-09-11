@@ -27,6 +27,7 @@ import { createLockboxService, type LockboxService } from "./lockbox/service.ts"
 import { createOAuthBroker, type OAuthBroker } from "./oauth/broker.ts";
 import type { OAuthProviderConfig } from "./oauth/providers.ts";
 import { envOAuthSecrets, type OAuthSecrets } from "./oauth/secrets.ts";
+import { recordUsage, usageKind } from "./usage.ts";
 
 export type AppHostOptions = {
   readonly rootAppId?: string;
@@ -52,6 +53,8 @@ export type AppHostOptions = {
   readonly configuredOrigin?: string;
   readonly mailer?: Mailer;
   readonly otpPepper?: Uint8Array;
+  /** Normalized emails allowed to open /admin. Empty (the default) disables it. */
+  readonly adminEmails?: readonly string[];
 };
 
 export type NowiseeHost = {
@@ -65,6 +68,7 @@ export type NowiseeHost = {
   readonly identity: IdentityService;
   readonly oauth?: OAuthBroker;
   readonly db: Db;
+  isAdmin(userId: string | null): boolean;
   open(
     appId: string,
     path: string,
@@ -90,6 +94,7 @@ export type NowiseeHost = {
       readonly extras: WireExtras;
       readonly token: string | null;
       readonly slot: CookieSlot;
+      readonly clientIp?: string;
     },
   ): Promise<RefreshResult>;
   close(): void;
@@ -112,6 +117,9 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       : mailerFromEnv({ configuredOrigin: options.configuredOrigin, fetch: options.fetch }));
   const otpPepper =
     options.otpPepper ?? (ephemeral ? DEV_OTP_PEPPER : otpPepperFromEnv());
+  const adminEmails = new Set(
+    (options.adminEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean),
+  );
   const identity = createIdentityService({
     db,
     mailer,
@@ -266,6 +274,13 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     identity,
     oauth,
     db,
+    isAdmin(userId) {
+      if (!userId || adminEmails.size === 0) {
+        return false;
+      }
+      const row = db.get<{ email: string }>("SELECT email FROM users WHERE id = ?", userId);
+      return Boolean(row && adminEmails.has(row.email));
+    },
     open,
     refresh,
     async dispatch(kind, args) {
@@ -273,6 +288,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       if (resolved.issuedToken) {
         args.slot.issued = resolved.issuedToken;
       }
+      args.slot.clientIp ??= args.clientIp ?? "";
       const app = registry.get(args.appId);
       if (!app) {
         throw new AppNotFoundError(args.appId);
@@ -292,10 +308,24 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
         oauthAppIds,
         oauth,
       });
-      if (kind === "open") {
-        return app.open(args.path ?? "/", toRefreshExtras(args.extras), ctx);
-      }
-      return app.refresh(args.stack ?? [], toRefreshExtras(args.extras), ctx);
+      const extras = toRefreshExtras(args.extras);
+      const result =
+        kind === "open"
+          ? await app.open(args.path ?? "/", extras, ctx)
+          : await app.refresh(args.stack ?? [], extras, ctx);
+      const after = db.get<{ user_id: string | null }>(
+        "SELECT user_id FROM sessions WHERE id = ?",
+        resolved.sessionId,
+      );
+      recordUsage(db, {
+        at: Date.now(),
+        appId: args.appId,
+        sessionId: resolved.sessionId,
+        userId: after?.user_id ?? resolved.userId,
+        kind: usageKind(kind, extras),
+        ip: args.slot.clientIp ?? "",
+      });
+      return result;
     },
     close() {
       for (const app of started) {

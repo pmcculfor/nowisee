@@ -16,6 +16,7 @@ import type { AuthServiceResult, IdentityService, IssuedToken } from "./service.
 
 export type CookieSlot = {
   issued?: IssuedToken | null;
+  clientIp?: string;
 };
 
 export function bindIdentity(
@@ -38,7 +39,7 @@ export function bindIdentity(
       return service.requestSignIn(sessionId, email);
     },
     async verifySignIn(code: string) {
-      return take(await service.verifySignIn(sessionId, code));
+      return take(await service.verifySignIn(sessionId, code, slot.clientIp));
     },
     async signOut() {
       await service.signOut(sessionId);
