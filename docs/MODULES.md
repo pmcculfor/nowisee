@@ -464,7 +464,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 The iPhone app is a visible `WKWebView` of the production origin plus a transparent touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
 
-The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. It speaks `accessibilityLabel` (and posts an announcement when the label changes). The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay). After an input node, VoiceOver focus is moved back onto the overlay with a screen-changed notification so the page behind it is not still focused. Until that notification runs, further label updates only change `accessibilityLabel` — they do not post a competing announcement, so a warm working label replaced in the same turn (e.g. “Signing in…” → “Sign-in was unsuccessful.”) is spoken once as the final text.
+The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. It speaks `accessibilityLabel` (and posts an announcement when the label changes). The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay). After an input node, VoiceOver focus is moved back onto the overlay with a screen-changed notification so the page behind it is not still focused.
 
 The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
 
