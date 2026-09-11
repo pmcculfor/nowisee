@@ -58,6 +58,14 @@ final class DirectTouchOverlay: UIView {
   func setNavigationEnabled(_ enabled: Bool) {
     isHidden = !enabled
     isUserInteractionEnabled = enabled
+    if !enabled {
+      setVoiceOverElement(false)
+    }
+  }
+
+  /// Direct Touch + modal. Kept separate from navigation so VoiceOver can stay
+  /// off the overlay while a working label may still be replaced.
+  func setVoiceOverElement(_ enabled: Bool) {
     isAccessibilityElement = enabled
     accessibilityViewIsModal = enabled
     if enabled {
