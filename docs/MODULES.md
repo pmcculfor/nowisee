@@ -61,7 +61,7 @@ Core talks to apps only through `open` / `refresh`. Apps never import Navigator,
 4. Run side effects only when `extras.action` is true.
 5. Resolve actions with a status node (including errors). Do not reject an action call — that strands the user on the working label.
 6. Repair a stale stack tip; do not teleport.
-7. Return plain data only. No `#/…` strings, no browser APIs, no live objects.
+7. Return plain data only. No browser URLs, no browser APIs, no live objects.
 8. Scope user data by `ctx.userId` from the cookie, not by an id the client sent on the stack.
 
 Optional helpers live in [`src/app-kit/`](../src/app-kit/) (edge builders, list edges, input edges, a signed-out node, split text, neighborhood walk). Navigator never calls these automatically.
@@ -113,21 +113,21 @@ Router is a **pure boundary**: it translates between browser URLs and `AppLocati
 ### Responsibilities
 
 - `parse(href) → AppLocation`.
-- `hrefFor(location) → string` — **the only place in the codebase that produces a `#/...` string.** `location.path` must already be canonical (non-empty, starts with `/`); hrefFor does not rewrite empty or unslashed paths.
-- `setAddressBar(location)` — write the address bar without triggering a reopen.
-- Subscribe to `hashchange` for external URL changes: parse and hand the location to `Navigator.openLocation`. Deeper interaction with browser Back/Forward is deferred ([`PREPAREDNESS.md`](PREPAREDNESS.md)); do not invent session-stack sync yet.
+- `hrefFor(location) → string` — **the only place in the codebase that produces a browser pathname.** `location.path` must already be canonical (non-empty, starts with `/`); hrefFor does not rewrite empty or unslashed paths.
+- `setAddressBar(location)` — write the address bar with `pushState` (does not fire `popstate`).
+- Subscribe to `popstate` for external URL changes: parse and hand the location to `Navigator.openLocation`. Deeper interaction with browser Back/Forward is deferred ([`PREPAREDNESS.md`](PREPAREDNESS.md)); do not invent session-stack sync yet.
 
-Because apps address `AppLocation` rather than URL strings, moving from hash routes to History API paths, adding a locale segment, or mounting under a sub-path later changes this module and nothing else.
+Because apps address `AppLocation` rather than URL strings, adding a locale segment or mounting under a sub-path later changes this module and nothing else.
 
-### URL shape (MVP)
+### URL shape
 
 | URL | Parsed location |
 |-----|-----------------|
-| `#/` (canonical) | `{ appId: config.rootAppId, path: "/" }` |
-| `#/<rootAppId>` | same as above (alias) |
-| `#/<appId>/rest` | `{ appId, path: "/rest" }` |
+| `/` (canonical) | `{ appId: config.rootAppId, path: "/" }` |
+| `/<rootAppId>` | same as above (alias) |
+| `/<appId>/rest` | `{ appId, path: "/rest" }` |
 
-Paths on `AppLocation` are canonical: non-empty, starting with `/`. `parse` recovers messy hrefs into that shape. Apps must not emit empty or unslashed paths; `hrefFor` rejects them.
+Paths on `AppLocation` are canonical: non-empty, starting with `/`. `parse` recovers messy hrefs into that shape. Apps must not emit empty or unslashed paths; `hrefFor` rejects them. First segments `api`, `oauth`, `admin`, and `assets` are host-owned and parse as the root app.
 
 ### Edge cases
 
@@ -135,9 +135,10 @@ Paths on `AppLocation` are canonical: non-empty, starting with `/`. `parse` reco
 |------|----------|
 | Well-formed app id (`isAppId`) | Keep that id; the server decides whether it exists |
 | Syntactically invalid app id | Resolve to `config.rootAppId`; do not crash |
+| Host-owned first segment | Resolve to `config.rootAppId` |
 | Corrupt or non-matching href | Resolve to `config.rootAppId` |
 | `hrefFor` round-trip | `parse(hrefFor(loc))` must equal `loc` for any location core emits |
-| Address bar written by core | Must not re-enter `openLocation` via `hashchange` |
+| Address bar written by core | `pushState` does not fire `popstate`, so it must not re-enter `openLocation` |
 
 ### Non-goals
 
@@ -307,7 +308,7 @@ onIntent(intent):
 
 ### Transition token
 
-- Every transition (intent, `openLocation`, `hashchange`) increments a monotonic token and records it on the call it starts.
+- Every transition (intent, `openLocation`, `popstate`) increments a monotonic token and records it on the call it starts.
 - On completion, a **current-token** result is a full `applyResult` (tip, display, location, map, warm).
 - A **stale** read-only refresh result still **replaces** map and warm when the live stack tip id is in `result.warm` (or is `result.node.id`). It does not adopt `result.node` as the tip or write the address bar from that result. If the live tip is missing from that warm set, discard the result.
 - Comparing tip ids is *not* sufficient for a full apply: an A → B → A sequence returns to the same id, and the first visit's stale result would pass an id check.
@@ -565,8 +566,8 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 - Construct an empty registry. Inject `resolveApp` so Navigator can mint a generic `createRemoteApp` stub for whatever id the URL or an `app` edge names. Do **not** pre-register a product list.
 - Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
-- Router uses `isAppId` (syntax), not the client registry, to accept a hash segment.
-- Initial `navigator.openLocation(router.parse(location.hash) ?? rootLocation)`.
+- Router uses `isAppId` (syntax), not the client registry, to accept a path segment.
+- Initial `navigator.openLocation(router.parse(location.pathname))`.
 - Do **not** focus the surface again after open resolves — `showText` / `showInput` already focused; a second focus restarts VoiceOver.
 
 ### Non-goals

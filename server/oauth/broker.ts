@@ -111,7 +111,7 @@ export function createOAuthBroker(args: {
   }
 
   function spaLocation(path: string): string {
-    return `${origin}/#${path}`;
+    return `${origin}${path}`;
   }
 
   function readTokens(userId: string, appId: string, slot: string): NormalizedTokens | null {

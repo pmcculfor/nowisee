@@ -6,8 +6,8 @@ import { createHomeApp } from "../src/apps/home/index.ts";
 import { createAppHost } from "../server/host.ts";
 
 describe("shell bootstrap", () => {
-  it("opens Home at #/ with rootAppId home and lists Tutorial first", async () => {
-    window.location.hash = "#/";
+  it("opens Home at / with rootAppId home and lists Tutorial first", async () => {
+    window.history.replaceState(null, "", "/");
     const mount = document.createElement("div");
     document.body.appendChild(mount);
 
@@ -27,7 +27,7 @@ describe("shell bootstrap", () => {
   });
 
   it("opens a server app by id without a client phone book", async () => {
-    window.location.hash = "#/bible";
+    window.history.replaceState(null, "", "/bible");
     const mount = document.createElement("div");
     document.body.appendChild(mount);
 

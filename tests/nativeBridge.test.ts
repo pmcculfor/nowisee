@@ -70,7 +70,7 @@ describe("nativeBridge", () => {
 
   it("skips NavPads when the native host is present", async () => {
     installNativeHost();
-    window.location.hash = "#/";
+    window.history.replaceState(null, "", "/");
     const mount = document.createElement("div");
     document.body.appendChild(mount);
 

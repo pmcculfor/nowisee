@@ -92,7 +92,7 @@ Signed in to Nowisee but no lockbox slot: “Connect Facebook.” Enter is an ex
 | Exchange code | Server | Call `graph.facebook.com/{version}/oauth/access_token` with `client_id`, `client_secret` (from host secrets), `redirect_uri` (must match exactly), and `code`. Result: short-lived user token, about 1–2 hours. |
 | Long-lived token | Server | Exchange with `fb_exchange_token` and the app secret. About 60 days. Store only in the lockbox keyed `(userId, facebook-app-id, slot)`. Never in `RefreshResult`. Optionally store `facebook_user_id` and expiry in the Facebook app’s own SQLite for deletion callbacks — not the token itself. |
 | Inspect | Server | `debug_token` to confirm app id, user id, scopes actually granted (the user can skip optional scopes), and expiry. If `user_posts` was denied, do not pretend the feed works. |
-| Return to Nowisee | Host | 302 to the SPA hash for the Facebook app (Router-owned URL). Next `open`/`refresh` reads the lockbox and builds the feed. |
+| Return to Nowisee | Host | 302 to the SPA path for the Facebook app (Router-owned URL). Next `open`/`refresh` reads the lockbox and builds the feed. |
 
 **Tokens expire, and web Login does not auto-refresh.** Native Facebook SDKs refresh tokens when the user uses the app. Nowisee is a website using the manual flow, so we must extend a still-valid long-lived token ourselves (typically at most once a day). An expired token cannot be exchanged; the user must Connect Facebook again. Data access also expires after about 90 days of inactivity even if the token string looks fine — then we re-prompt for permissions. Unused permissions can expire after 90 days too. Product copy must treat reconnect as normal, not as a bug.
 

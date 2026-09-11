@@ -48,7 +48,7 @@ export async function handleOAuthHttp(
     return { status: 405, body: "", headers: { "Cache-Control": "no-store" } };
   }
   if (!host.oauth) {
-    return redirect(host, "/");
+    return redirectHome(host);
   }
 
   const token = readSessionToken(header(req.headers, "cookie"));
@@ -72,13 +72,13 @@ export async function handleOAuthHttp(
   };
 }
 
-function redirect(host: NowiseeHost, hashPath: string): AppHttpResponse {
+function redirectHome(host: NowiseeHost): AppHttpResponse {
   const origin = (host.configuredOrigin ?? "").replace(/\/+$/, "");
   return {
     status: 302,
     body: "",
     headers: {
-      Location: `${origin}/#${hashPath}`,
+      Location: `${origin}/`,
       "Cache-Control": "no-store",
       "X-Frame-Options": "DENY",
     },

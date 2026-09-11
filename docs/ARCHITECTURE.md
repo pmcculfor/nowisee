@@ -15,7 +15,7 @@ This file covers contracts, packaging, and the stack. Product locks are in [`SPE
 | Where apps run | First-party `open` / `refresh` on the server | Proof of the intended split; large corpora stay off the client bundle |
 | Client apps | Generic `createRemoteApp` stub, minted by app id | Not a phone book of first-party apps |
 | Database | SQLite via `node:sqlite` (`server/sqlite.ts`) | Host identity in `data/nowisee.db`; each app opens `data/apps/*.db`. `:memory:` in tests |
-| URL style | Hash routes behind `AppLocation` | Switching to History API later touches Router only |
+| URL style | Pathnames behind `AppLocation` | Hash routes were an MVP; a locale segment or sub-path mount still touches Router only |
 | Copy | `clipboardText` on the result; Navigator writes | Apps must not think they own the clipboard |
 | Identity | Host-layer service + Account app | See [`IDENTITY.md`](IDENTITY.md) |
 
@@ -71,7 +71,7 @@ Full definitions live in [`src/core/types.ts`](../src/core/types.ts). The names 
 | `NavEdge` | `node` (push/replace/pop), `app` (`AppLocation`), `resume` (`appId`), or `external` (`href`); optional `action`, `passInputText` |
 | `NavigationMap` | Nested `fromNodeId → intent → edge` (no delimiter) |
 | `NodePayload` | `id`, `label`, optional `kind` (`text` \| `input`), `secret`, `autocomplete`, `data` (`JsonValue`) |
-| `AppLocation` | `{ appId, path }` with `path` starting `/`. Apps never build `#/…` strings |
+| `AppLocation` | `{ appId, path }` with `path` starting `/`. Apps never build browser URLs |
 | `RefreshExtras` | `inputText`, `action`, `parkedAppIds`, `signal` |
 | `RefreshResult` | `navigationMap`, `warm`, `node`, `location` (or `null`), optional `clipboardText` |
 | `AppModule` | `open(path, extras, ctx?)` and `refresh(stack, extras, ctx?)` |
@@ -140,7 +140,7 @@ To add an app, implement `AppModule` and add a pack row in [`server/firstPartyAp
 
 See [`MODULES.md`](MODULES.md) for full behavior.
 
-**Router** is a pure boundary: `parse` / `hrefFor` / `setAddressBar`, and `hashchange` → `openLocation`. It never owns stack, cache, map, or busy.
+**Router** is a pure boundary: `parse` / `hrefFor` / `setAddressBar`, and `popstate` → `openLocation`. It never owns stack, cache, map, or busy.
 
 **Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. Read-only refreshes coalesce to one in-flight call and one pending; a covering stale result replaces warm and map without moving the tip. A warm miss moves the stack, keeps the previous label, and blocks until a covering or current-token refresh. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
 
@@ -158,11 +158,11 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 ---
 
-## Addressing (MVP)
+## Addressing
 
-Apps address `AppLocation`; core serializes. Hash routes are used today (`#/…`); a later History API change touches Router only.
+Apps address `AppLocation`; core serializes. Pathnames are used (`/…`). First segments `api`, `oauth`, `admin`, and `assets` belong to the host, not to apps.
 
-The root app lives at `#/` (canonical). `#/<rootAppId>` may alias. Other apps are `#/<appId>/...` with an app-owned remainder. Status tips often return `location: null`.
+The root app lives at `/` (canonical). `/<rootAppId>` may alias. Other apps are `/<appId>/...` with an app-owned remainder. Status tips often return `location: null`.
 
 ---
 
@@ -209,7 +209,7 @@ Unit-test without the DOM where possible. The list below is the behavior to cove
 - `passInputText` included only when flag set from input tip.
 - Home lists apps as `app` edges; app root `back` opens the root app.
 - Rebinding the keyboard table changes behavior with zero app changes.
-- `Router.hrefFor(Router.parse(href))` round-trips; no other module emits a `#` string.
+- `Router.hrefFor(Router.parse(href))` round-trips; no other module emits a pathname.
 - Every `RefreshResult` an app returns survives a `structuredClone` round-trip.
 - Copy with no device clipboard → Navigator shows “clipboard unavailable”; the app still only returned `clipboardText`.
 - `listDescriptors()` returns descriptors; the registry object is not reachable from any app.

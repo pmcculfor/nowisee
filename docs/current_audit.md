@@ -134,13 +134,13 @@ CSRF origin no longer falls back to `Host` / `X-Forwarded-Proto`. Unset `NOWISEE
 
 ### Core and shell
 
-**Unknown or corrupt address → Home.** Router `parse` turns an empty, malformed, or non-id hash into `{ rootAppId, "/" }`. Navigator `openLocation` does the same when the registry (and `resolveApp`) have no module: it opens Home at `/`. If we remove this, a typo in the hash or a bad `app` edge would no-op or crash instead of landing on Home. The well-formed-unknown-id path (POST and let the server 404) stays; this fallback is only for junk ids and missing modules.
+**Unknown or corrupt address → Home.** Router `parse` turns an empty, malformed, or non-id pathname into `{ rootAppId, "/" }`. Navigator `openLocation` does the same when the registry (and `resolveApp`) have no module: it opens Home at `/`. If we remove this, a typo in the path or a bad `app` edge would no-op or crash instead of landing on Home. The well-formed-unknown-id path (POST and let the server 404) stays; this fallback is only for junk ids and missing modules.
 
 **Pop on the last stack entry → open Home.** Spec recovery for a buggy app `pop` at the root. If we remove it, that Back would throw or leave the user nowhere.
 
 **Missing `node.kind` → `"text"`.** Display and keyboard assume a kind. If we require the field, every payload must set it; omitting it would break rendering and arrow bindings.
 
-**`location: null` keeps the previous address.** Specified for status tips. If we stop treating null as “keep,” status nodes would rewrite the hash (and a reload could re-enter an action).
+**`location: null` keeps the previous address.** Specified for status tips. If we stop treating null as “keep,” status nodes would rewrite the pathname (and a reload could re-enter an action).
 
 **Warm miss vs warm hit.** Same `followNodeEdge`: cache hit paints now and revalidates; miss moves the stack, keeps the old label, blocks, then refreshes (failure speaks recovery copy). These are two modes of one function, not a silent substitute. Deleting either mode is a product change.
 
@@ -154,7 +154,7 @@ CSRF origin no longer falls back to `Host` / `X-Forwarded-Proto`. Unset `NOWISEE
 
 **Shell defaults.** `rootAppId` defaults to `"home"`; keyboard bindings default to the arrow table; RPC defaults to `createFetchRpc`. If we require them at the call site, bootstrap and tests must always pass them; production behavior need not change.
 
-**Router / Keyboard injects** (`location`, `eventTarget`, `isKnownApp`, bindings). Production uses `window` and `isAppId`. If we delete the defaults, only tests break unless every constructor is explicit.
+**Router / Keyboard injects** (`location` getPath/pushPath, `eventTarget`, `isKnownApp`, bindings). Production uses `window` / `history` and `isAppId`. If we delete the defaults, only tests break unless every constructor is explicit.
 
 ### Host, identity, HTTP
 
@@ -180,7 +180,7 @@ CSRF origin no longer falls back to `Host` / `X-Forwarded-Proto`. Unset `NOWISEE
 
 **Listen defaults.** `PORT` 3000, `NOWISEE_DB` `data/nowisee.db`, Vite DB the same. If we require env, `npm start` / `npm run dev` without those vars would not listen.
 
-**Static files.** Directory URL serves `index.html`. Unknown extension is `application/octet-stream`. If we remove those, `/` might 404 and odd assets might have no Content-Type.
+**Site files.** GET/HEAD `/assets/…` serves hashed Vite files from `dist/assets` (known MIME only). Every other leftover GET/HEAD serves the one `dist/index.html`. Directory URLs, extra HTML, and unknown extensions are 404. If we go back to mapping the URL onto `dist/`, client routes become files again.
 
 **`decodeAppId`.** A broken `%` sequence keeps the raw string instead of 400. Static files already 400 on the same class of error. If we 400 here too, a bad app id in the URL would not reach the app as a literal.
 

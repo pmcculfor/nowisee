@@ -14,7 +14,7 @@ When `ctx.userId` is null, the tip is **Sign in to use Gmail.** `enter` goes to 
 
 ## Signed in, not connected
 
-The tip is **Connect Gmail.** `enter` is `kind: "external"` to Google’s authorize URL (`ctx.oauth.start`). `back` goes to Home. After Google redirects to `GET /oauth/callback`, the host stores the refresh token and 302s to `/#/gmail`.
+The tip is **Connect Gmail.** `enter` is `kind: "external"` to Google’s authorize URL (`ctx.oauth.start`). `back` goes to Home. After Google redirects to `GET /oauth/callback`, the host stores the refresh token and 302s to `/gmail`.
 
 ## Connected
 

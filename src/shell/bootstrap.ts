@@ -146,7 +146,7 @@ export function startShell(
     navPads.attach();
   }
 
-  const initial = router.parse(window.location.hash || "#/");
+  const initial = router.parse(window.location.pathname || "/");
   void navigator.openLocation(initial).finally(() => {
     nativeNotify?.();
   });
