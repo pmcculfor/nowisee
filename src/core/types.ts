@@ -50,7 +50,7 @@ export interface NodePayload {
 
 /**
  * An address inside Nowisee. Core owns how this becomes a browser URL
- * (Router.hrefFor); apps never build `#/...` strings.
+ * (Router.hrefFor); apps never build browser URLs.
  */
 export interface AppLocation {
   readonly appId: string;

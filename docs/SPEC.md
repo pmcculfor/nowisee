@@ -61,7 +61,7 @@ A few example paths:
 |-------|------|----------------|
 | **Display** | One surface (label or input) + a11y announce | Graphs, apps, keys |
 | **Keyboard** | The physical binding table; resolve keystroke + tip kind → intent | App business rules; which intents exist in a map |
-| **Router** | Translate browser URL ↔ `AppLocation`; the only producer of `#/…` strings | Any state; applying results; app path meaning |
+| **Router** | Translate browser URL ↔ `AppLocation`; the only producer of pathnames | Any state; applying results; app path meaning |
 | **Navigator + stack** | **Every** state transition: per-app stack, map edges, busy/block, transition token, refresh calls, warm/map merge, address bar | Choosing graph content; prefetch depth policy |
 | **NodeCache (client warm)** | Store payloads apps returned; pin stack entries | Server cache; inventing fetches |
 | **Navigation map store** | Current edge table from last refresh | Authoring edges |
@@ -164,7 +164,7 @@ Rapid double-press is naturally safe: after the local move the tip is the status
 
 ### 4.9 Addressing
 
-Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a browser URL, so the hash-vs-path decision, a sub-path mount, or a locale segment never reaches app code.
+Apps address `AppLocation` (`{ appId, path }`). **Core alone** turns that into a browser URL, so a locale segment or a sub-path mount never reaches app code.
 
 Shareable tips **may** return a location from refresh; that is not required for every node. Aliases are fine; the app canonicalizes on open. A null location means core **keeps** the previous address bar. The field is required; omitting it is not the same as null.
 

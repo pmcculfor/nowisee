@@ -258,7 +258,7 @@ describe("oauth broker", () => {
     expect(out.body).toBe("");
     expect(out.headers?.["Cache-Control"]).toBe("no-store");
     expect(out.headers?.["X-Frame-Options"]).toBe("DENY");
-    expect(out.headers?.Location).toBe(`${ORIGIN}/#/probe`);
+    expect(out.headers?.Location).toBe(`${ORIGIN}/probe`);
     expect(JSON.stringify(out)).not.toContain("access-1");
     expect(JSON.stringify(out)).not.toContain("refresh-1");
     expect(idp.tokenPosts[0]?.code_verifier).toBeTruthy();
@@ -286,7 +286,7 @@ describe("oauth broker", () => {
       url: "/oauth/callback?code=ok&state=not-a-real-state",
       headers: { cookie: alice.cookie },
     });
-    expect(bad.headers?.Location).toBe(`${ORIGIN}/#/`);
+    expect(bad.headers?.Location).toBe(`${ORIGIN}/`);
 
     const started = await oauth.start({ slot: "personal" });
     const state = new URL(started.authorizeUrl).searchParams.get("state")!;
@@ -295,7 +295,7 @@ describe("oauth broker", () => {
       url: `/oauth/callback?error=access_denied&state=${state}`,
       headers: { cookie: alice.cookie },
     });
-    expect(denied.headers?.Location).toBe(`${ORIGIN}/#/probe`);
+    expect(denied.headers?.Location).toBe(`${ORIGIN}/probe`);
     expect(await oauth.status("personal")).toBe("missing");
 
     const started2 = await oauth.start({ slot: "personal" });
@@ -305,7 +305,7 @@ describe("oauth broker", () => {
       url: `/oauth/callback?code=ok&state=${state2}`,
       headers: { cookie: bob.cookie },
     });
-    expect(mismatch.headers?.Location).toBe(`${ORIGIN}/#/`);
+    expect(mismatch.headers?.Location).toBe(`${ORIGIN}/`);
     expect(await oauth.status("personal")).toBe("missing");
 
     await handleSessionHttp(h, {
@@ -322,7 +322,7 @@ describe("oauth broker", () => {
       url: `/oauth/callback?code=code-b&state=${stateA}`,
       headers: { cookie: alice.cookie },
     });
-    expect(mix.headers?.Location).toBe(`${ORIGIN}/#/probe`);
+    expect(mix.headers?.Location).toBe(`${ORIGIN}/probe`);
     expect(await oauth.status("personal")).toBe("missing");
     expect(await oauthB.status("personal")).toBe("missing");
 
@@ -333,13 +333,13 @@ describe("oauth broker", () => {
       url: `/oauth/callback?code=ok&state=${state3}`,
       headers: { cookie: alice.cookie },
     });
-    expect(ok.headers?.Location).toBe(`${ORIGIN}/#/probe`);
+    expect(ok.headers?.Location).toBe(`${ORIGIN}/probe`);
     const replay = await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state3}`,
       headers: { cookie: alice.cookie },
     });
-    expect(replay.headers?.Location).toBe(`${ORIGIN}/#/`);
+    expect(replay.headers?.Location).toBe(`${ORIGIN}/`);
   });
 
   it("skips refresh when unexpired and disconnects", async () => {

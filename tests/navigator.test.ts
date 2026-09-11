@@ -113,7 +113,7 @@ function harness(args?: {
   const addressLog: AppLocation[] = [];
   const externalLog: string[] = [];
 
-  let hash = "#/";
+  let path = "/";
   const platform = new PlatformCapabilities({
     clipboard:
       args?.clipboard === null
@@ -149,9 +149,9 @@ function harness(args?: {
       void navigator.openLocation(loc);
     },
     location: {
-      getHash: () => hash,
-      setHash: (next) => {
-        hash = next;
+      getPath: () => path,
+      pushPath: (next) => {
+        path = next;
       },
     },
     eventTarget: new EventTarget(),
@@ -170,7 +170,7 @@ function harness(args?: {
     recents,
     addressLog,
     externalLog,
-    getHash: () => hash,
+    getPath: () => path,
   };
 }
 
@@ -182,7 +182,7 @@ describe("Navigator + Router contracts", () => {
     expect(h.stack.tip()?.nodeId).toBe("root");
     expect(h.map.lookup("root", "next")?.kind).toBe("node");
     expect(h.addressLog.at(-1)).toEqual({ appId: "fake", path: "/" });
-    expect(h.getHash()).toBe("#/fake");
+    expect(h.getPath()).toBe("/fake");
   });
 
   it("unknown appId without resolveApp opens the root app", async () => {
@@ -1069,10 +1069,10 @@ describe("Navigator + Router contracts", () => {
     const h = harness();
     await h.navigator.openLocation({ appId: "fake", path: "/a" });
     await intent(h.navigator, "enter"); // copy
-    const before = h.getHash();
-    expect(before).toBe("#/fake/copy");
+    const before = h.getPath();
+    expect(before).toBe("/fake/copy");
     await intent(h.navigator, "enter"); // copy-status → location null
-    expect(h.getHash()).toBe(before);
+    expect(h.getPath()).toBe(before);
     expect(visibleText(h.root)).toBe("Copied");
   });
 
@@ -1192,13 +1192,13 @@ describe("Navigator + Router contracts", () => {
   });
 });
 
-describe("Router.hrefFor is the only # producer in core open path", () => {
-  it("Navigator does not embed hash strings in results", async () => {
+describe("Router.hrefFor is the only pathname producer in core open path", () => {
+  it("Navigator does not embed path strings in results", async () => {
     const h = harness();
     const spy = vi.spyOn(h.router, "hrefFor");
     await h.navigator.openLocation({ appId: "fake", path: "/" });
     expect(spy).toHaveBeenCalled();
-    expect(h.getHash().startsWith("#/")).toBe(true);
+    expect(h.getPath().startsWith("/")).toBe(true);
   });
 });
 

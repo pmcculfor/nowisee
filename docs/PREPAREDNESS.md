@@ -63,7 +63,7 @@ URL `open` resets the stack (locked), so a shared link starts with one entry. Re
 | `requestRefresh` | Typed, not provided. Implement it before a tip must update without a user intent (for example, new mail on the current subject). |
 | Display port | Three methods. Extract them before a native iOS surface. The seam gets stickier after more Display calls. |
 | Response validation / `apiVersion` / unknown values | Typed, not provided. The single choke point is Navigator `apply()`. Wait until apps you did not write exist. Intended later: unknown edge kind → missing edge; unknown node kind → render as text; unknown intent → never matched. |
-| Browser Back/Forward vs session stack | Hashchange → `openLocation` is enough for now. |
+| Browser Back/Forward vs session stack | `popstate` → `openLocation` is enough for now. |
 | Identity rate limits, password reset, email verify, export/deletion | See [`IDENTITY.md`](IDENTITY.md) §13. |
 | Monetization | Wait. Do not leave an ad hole in core. |
 

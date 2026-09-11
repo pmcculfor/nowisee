@@ -68,7 +68,7 @@ sequenceDiagram
     Google->>Host: GET /oauth/callback?code&state
     Host->>Google: Exchange code (client secret)
     Host->>Lockbox: Save refresh token for this userId
-    Host-->>User: Redirect to #/gmail
+    Host-->>User: Redirect to /gmail
   else Connected
     GmailApp->>Google: messages.list / get with access token
     GmailApp-->>Shell: First subject as tip
@@ -77,7 +77,7 @@ sequenceDiagram
 
 **Required order:** Nowisee session first (`ctx.userId`), then Google connect. The lockbox cannot store a token against `null`. Reuse the existing `signedOut()` helper from app-kit for the Nowisee-signed-out case. The “Connect Gmail” node is a **different** node: enter is `kind: "external"` to Google’s authorize URL, not an `app` edge to Account.
 
-Navigator already leaves the product on `kind: "external"`. That is the correct way to send someone to Google. Apps still must not build `#/…` URLs.
+Navigator already leaves the product on `kind: "external"`. That is the correct way to send someone to Google. Apps still must not build pathnames.
 
 ### OAuth callback is the one new host HTTP surface
 
@@ -85,7 +85,7 @@ Google redirects with **GET + query string**. `/api` stays POST + JSON + Origin.
 
 The session cookie is `SameSite=Lax`, so it **is** sent on this top-level GET. That is what lets the host know which Nowisee user just returned.
 
-After exchanging the code, the host stores the refresh token in the lockbox and **302-redirects** to the SPA hash (e.g. `/#/gmail`). Then `open` runs as usual and the inbox is the tip.
+After exchanging the code, the host stores the refresh token in the lockbox and **302-redirects** to the SPA (e.g. `/gmail`). Then `open` runs as usual and the inbox is the tip.
 
 **Option A (landed): generic host OAuth broker.** Host owns `GET /oauth/callback` (one path for every app; dispatch by `state`). Gmail (and later any OAuth app) is granted `ctx.oauth` / uses host env for that app’s client id/secret. The host does not parse Gmail messages. This matches “host owns HTTP; apps own domain.” Do not add `/oauth/gmail/callback`.
 

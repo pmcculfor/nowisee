@@ -78,10 +78,10 @@ Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `conf
 
 | Outcome | Location |
 |---------|----------|
-| Missing or unknown `state` | `{origin}/#/` (Home) |
-| IdP `error` (or missing `code` after a valid state) | `{origin}/#/{appId}` |
+| Missing or unknown `state` | `{origin}/` (Home) |
+| IdP `error` (or missing `code` after a valid state) | `{origin}/{appId}` |
 | Session / `userId` mismatch | Home; no lockbox write |
-| Success | `{origin}/#{returnPath}` where `returnPath` is `/{appId}` or `/{appId}/...` |
+| Success | `{origin}{returnPath}` where `returnPath` is `/{appId}` or `/{appId}/...` |
 
 `getAccessToken` refreshes under a mutex per `(userId, appId, slot)`. `invalid_grant` deletes the lockbox slot and throws `needs-reconnect`. `disconnect` best-effort revokes then deletes the slot.
 

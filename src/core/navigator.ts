@@ -29,7 +29,7 @@ export interface NavigatorOptions {
   readonly map: NavigationMapStore;
   readonly cache: NodeCache;
   readonly stack: Stack;
-  /** Address-bar writes go through Router.setAddressBar — never mint `#` here. */
+  /** Address-bar writes go through Router.setAddressBar — never mint pathnames here. */
   readonly setAddressBar: (location: AppLocation) => void;
   /**
    * Supply an AppModule when the registry has no entry for this id.

@@ -23,31 +23,18 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { createServer as createHttpsServer } from "node:https";
 import { readFileSync, existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { extname, join, normalize, resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { createNowiseeHost } from "./host.ts";
 import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { handleAdminHttp, isAdminUrl } from "./admin/http.ts";
 import { adminEmailsFromEnv } from "./admin/emails.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
+import { pageFile, siteTarget } from "./site.ts";
 
 const DIST = resolve(process.cwd(), "dist");
 const PORT = Number(process.env.PORT ?? "3000");
 const DB_PATH = process.env.NOWISEE_DB ?? "data/nowisee.db";
-
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".map": "application/json",
-  ".png": "image/png",
-  ".webmanifest": "application/manifest+json",
-};
 
 const host = createNowiseeHost({
   db: DB_PATH,
@@ -70,7 +57,7 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
     await handleApi(req, res);
     return;
   }
-  await serveStatic(url, res);
+  await serveSite(req.method ?? "GET", url, res);
 }
 
 async function handleAdmin(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -154,29 +141,51 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
 }
 
-async function serveStatic(url: string, res: ServerResponse): Promise<void> {
-  let pathOnly: string;
-  try {
-    pathOnly = decodeURIComponent(url.split("?")[0] ?? "/");
-  } catch {
+async function serveSite(method: string, url: string, res: ServerResponse): Promise<void> {
+  if (method !== "GET" && method !== "HEAD") {
+    writeError(res, 405, "Method not allowed");
+    return;
+  }
+  const target = siteTarget(url, DIST);
+  if (target.kind === "bad-request") {
     writeError(res, 400, "Bad request");
     return;
   }
-  const relative = pathOnly === "/" ? "index.html" : pathOnly.replace(/^\/+/, "");
-  const resolved = resolve(DIST, normalize(relative));
-  if (!(resolved === DIST || resolved.startsWith(DIST + sep))) {
+  if (target.kind === "forbidden") {
     writeError(res, 403, "Forbidden");
     return;
   }
+  if (target.kind === "not-found") {
+    writeError(res, 404, "Not found");
+    return;
+  }
+  if (target.kind === "page") {
+    await sendFile(res, pageFile(DIST), "text/html; charset=utf-8", method);
+    return;
+  }
+  await sendFile(res, target.file, target.type, method);
+}
+
+async function sendFile(
+  res: ServerResponse,
+  file: string,
+  type: string,
+  method: string,
+): Promise<void> {
   try {
-    const info = await stat(resolved);
-    const file = info.isDirectory() ? join(resolved, "index.html") : resolved;
-    const data = await readFile(file);
-    const type = MIME[extname(file)] ?? "application/octet-stream";
+    const info = await stat(file);
+    if (info.isDirectory()) {
+      writeError(res, 404, "Not found");
+      return;
+    }
     res.statusCode = 200;
     res.setHeader("Content-Type", type);
-    res.setHeader("Content-Length", data.byteLength);
-    res.end(data);
+    res.setHeader("Content-Length", info.size);
+    if (method === "HEAD") {
+      res.end();
+      return;
+    }
+    res.end(await readFile(file));
   } catch {
     writeError(res, 404, "Not found");
   }

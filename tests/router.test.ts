@@ -4,14 +4,14 @@ import type { AppLocation } from "../src/core/types.ts";
 
 describe("Router", () => {
   function makeRouter(onLocation: (loc: AppLocation) => void = () => undefined) {
-    let hash = "#/";
+    let path = "/";
     return new Router({
       rootAppId: "home",
       onLocation,
       location: {
-        getHash: () => hash,
-        setHash: (next) => {
-          hash = next;
+        getPath: () => path,
+        pushPath: (next) => {
+          path = next;
         },
       },
       eventTarget: new EventTarget(),
@@ -20,26 +20,34 @@ describe("Router", () => {
 
   it("parses canonical root and root alias", () => {
     const router = makeRouter();
-    expect(router.parse("#/")).toEqual({ appId: "home", path: "/" });
-    expect(router.parse("#/home")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/home")).toEqual({ appId: "home", path: "/" });
   });
 
   it("parses app paths without a client catalog", () => {
     const router = makeRouter();
-    expect(router.parse("#/bible/Matthew/5/8")).toEqual({
+    expect(router.parse("/bible/Matthew/5/8")).toEqual({
       appId: "bible",
       path: "/Matthew/5/8",
     });
-    expect(router.parse("#/fake")).toEqual({ appId: "fake", path: "/" });
-    expect(router.parse("#/nope")).toEqual({ appId: "nope", path: "/" });
+    expect(router.parse("/fake")).toEqual({ appId: "fake", path: "/" });
+    expect(router.parse("/nope")).toEqual({ appId: "nope", path: "/" });
+    expect(router.parse("https://nowisee.app/bible/Matthew/5/8")).toEqual({
+      appId: "bible",
+      path: "/Matthew/5/8",
+    });
   });
 
   it("corrupt or syntactically invalid href resolves to root", () => {
     const router = makeRouter();
     expect(router.parse("%%%")).toEqual({ appId: "home", path: "/" });
-    expect(router.parse("#/NOPE")).toEqual({ appId: "home", path: "/" });
-    expect(router.parse("#/nope!")).toEqual({ appId: "home", path: "/" });
-    expect(router.parse("#/9bad")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/NOPE")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/nope!")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/9bad")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/admin")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/api/apps/home/open")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/oauth/callback")).toEqual({ appId: "home", path: "/" });
+    expect(router.parse("/assets/index.js")).toEqual({ appId: "home", path: "/" });
   });
 
   it("isAppId is the default well-formed check", () => {
@@ -47,6 +55,10 @@ describe("Router", () => {
     expect(isAppId("my-app")).toBe(true);
     expect(isAppId("")).toBe(false);
     expect(isAppId("Bible")).toBe(false);
+    expect(isAppId("admin")).toBe(false);
+    expect(isAppId("api")).toBe(false);
+    expect(isAppId("oauth")).toBe(false);
+    expect(isAppId("assets")).toBe(false);
   });
 
   it("hrefFor rejects a path that does not start with /", () => {
@@ -72,50 +84,49 @@ describe("Router", () => {
     }
   });
 
-  it("setAddressBar does not re-enter onLocation via hashchange", () => {
+  it("setAddressBar does not re-enter onLocation", () => {
     const seen: AppLocation[] = [];
     const target = new EventTarget();
-    let hash = "#/";
+    let path = "/";
     const router = new Router({
       rootAppId: "home",
       onLocation: (loc) => {
         seen.push(loc);
       },
       location: {
-        getHash: () => hash,
-        setHash: (next) => {
-          hash = next;
-          target.dispatchEvent(new Event("hashchange"));
+        getPath: () => path,
+        pushPath: (next) => {
+          path = next;
         },
       },
       eventTarget: target,
     });
     router.attach();
     router.setAddressBar({ appId: "fake", path: "/a" });
-    expect(hash).toBe("#/fake/a");
+    expect(path).toBe("/fake/a");
     expect(seen).toEqual([]);
   });
 
-  it("external hashchange forwards parsed location", () => {
+  it("external popstate forwards parsed location", () => {
     const seen: AppLocation[] = [];
     const target = new EventTarget();
-    let hash = "#/";
+    let path = "/";
     const router = new Router({
       rootAppId: "home",
       onLocation: (loc) => {
         seen.push(loc);
       },
       location: {
-        getHash: () => hash,
-        setHash: (next) => {
-          hash = next;
+        getPath: () => path,
+        pushPath: (next) => {
+          path = next;
         },
       },
       eventTarget: target,
     });
     router.attach();
-    hash = "#/fake/x";
-    target.dispatchEvent(new Event("hashchange"));
+    path = "/fake/x";
+    target.dispatchEvent(new Event("popstate"));
     expect(seen).toEqual([{ appId: "fake", path: "/x" }]);
   });
 });

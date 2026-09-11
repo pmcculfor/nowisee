@@ -59,7 +59,7 @@ If any answer is “only our first apps,” it does **not** belong in core. Pref
 - Special `activate()` API or an `action` edge *kind* (actions are ordinary nodes; the trigger is an `action: true` flag on the edge)
 - Side effects on any call that does not carry `extras.action`
 - Keystrokes (`"ctrl+right"`, `"ArrowLeft"`) or directions in app data — apps author intents
-- Any module other than Router producing a `#/…` string
+- Any module other than Router producing a browser pathname
 - Router (or anything but Navigator) mutating stack, cache, map, busy, or display
 - Live objects across the app boundary (handing an app the registry, the DOM, or a class instance)
 - Apps calling `navigator.clipboard`, `localStorage`, or the DOM instead of returning `clipboardText` / using a platform capability
