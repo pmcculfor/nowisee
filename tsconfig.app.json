@@ -32,6 +32,8 @@
     "src/apps/gmail/oauth.ts",
     "src/apps/gmail/gmailClient.ts",
     "src/apps/gmail/mime.ts",
-    "src/apps/gmail/index.ts"
+    "src/apps/gmail/index.ts",
+    "src/apps/weather/store.ts",
+    "src/apps/weather/nwsClient.ts"
   ]
 }

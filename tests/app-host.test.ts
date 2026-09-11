@@ -27,13 +27,14 @@ function headers(): Record<string, string> {
 }
 
 describe("app host", () => {
-    it("opens Home with Tutorial first, then Bible, Notes, Lists, Account, and Manage Apps", async () => {
+    it("opens Home with Tutorial first, then Bible, Notes, Lists, Weather, Account, and Manage Apps", async () => {
     const result = await host().open("home", "/", {});
     expect(result.warm.map((n) => n.label)).toEqual([
       TUTORIAL_APP_LABEL,
       "Bible",
       "Notes",
       "Lists",
+      "Weather",
       "Account",
       "Manage Apps",
     ]);

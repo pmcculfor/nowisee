@@ -8,6 +8,7 @@ import { startHomeApp, DEFAULT_HOME_DB_PATH } from "../src/apps/home/store.ts";
 import { startListsApp, DEFAULT_LISTS_DB_PATH } from "../src/apps/lists/store.ts";
 import { startNotesApp, DEFAULT_NOTES_DB_PATH } from "../src/apps/notes/store.ts";
 import { createRecentsApp } from "../src/apps/recents/index.ts";
+import { startWeatherApp, DEFAULT_WEATHER_DB_PATH } from "../src/apps/weather/store.ts";
 import type { OAuthProviderConfig } from "./oauth/providers.ts";
 
 /** Host-level facts at process start. Apps that own files interpret `ephemeral`. */
@@ -79,6 +80,14 @@ export const FIRST_PARTY_APPS: readonly AppPack[] = [
       startListsApp({
         rootAppId: host.rootAppId,
         dbPath: packStorePath(host, DEFAULT_LISTS_DB_PATH),
+      }),
+  },
+  {
+    homeRole: "default",
+    start: (host) =>
+      startWeatherApp({
+        rootAppId: host.rootAppId,
+        dbPath: packStorePath(host, DEFAULT_WEATHER_DB_PATH),
       }),
   },
   {
