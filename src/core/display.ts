@@ -32,6 +32,11 @@ export interface DisplayHost {
   onSurfaceChange?(): void;
   /** When true, `showText` does not focus — a native overlay owns VoiceOver. */
   skipTextFocus?(): boolean;
+  /**
+   * Optional. When leaving an input, `showText` waits for this before painting
+   * so a native host can take VoiceOver off the web view first.
+   */
+  beforeShowText?(): void | Promise<void>;
 }
 
 export class Display {
@@ -40,6 +45,8 @@ export class Display {
   private mode: DisplayMode = "text";
   private textEl: HTMLElement | null = null;
   private inputEl: HTMLTextAreaElement | HTMLInputElement | null = null;
+  private pendingText: string | null = null;
+  private takeoverInFlight = false;
 
   constructor(root: HTMLElement, host?: DisplayHost) {
     this.root = root;
@@ -60,6 +67,26 @@ export class Display {
   }
 
   showText(label: string): void {
+    if (this.mode === "input" && this.host?.beforeShowText) {
+      this.pendingText = label;
+      if (!this.takeoverInFlight) {
+        this.takeoverInFlight = true;
+        void Promise.resolve(this.host.beforeShowText()).finally(() => {
+          this.takeoverInFlight = false;
+          const next = this.pendingText;
+          this.pendingText = null;
+          if (next !== null && this.mode === "input") {
+            this.paintText(next);
+          }
+        });
+      }
+      return;
+    }
+    this.pendingText = null;
+    this.paintText(label);
+  }
+
+  private paintText(label: string): void {
     this.root.replaceChildren();
     this.inputEl = null;
 
@@ -80,6 +107,7 @@ export class Display {
   }
 
   showInput(initialText: string, options: ShowInputOptions = {}): void {
+    this.pendingText = null;
     this.root.replaceChildren();
     this.textEl = null;
     this.inputEl = null;

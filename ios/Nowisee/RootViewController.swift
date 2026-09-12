@@ -94,10 +94,17 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
       return
     }
     let dict = message.body as? [String: Any]
+    let takeover = dict?["takeover"] as? Bool ?? false
     let mode = dict?["mode"] as? String ?? "text"
     let label = dict?["label"] as? String ?? ""
     DispatchQueue.main.async { [weak self] in
-      self?.applySurface(mode: mode, label: label)
+      guard let self else { return }
+      if takeover {
+        self.applyTakeover()
+        self.ackTakeover()
+      } else {
+        self.applySurface(mode: mode, label: label)
+      }
     }
   }
 
@@ -158,6 +165,25 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
         UIAccessibility.post(notification: .screenChanged, argument: self.webView)
       }
     }
+  }
+
+  /// Hide the web from VoiceOver and focus the overlay before the page paints text.
+  private func applyTakeover() {
+    refreshOriginFlag()
+    guard onAppOrigin else {
+      return
+    }
+    overlay.setNavigationEnabled(true)
+    setWebHiddenFromVoiceOver(true)
+    lastSurfaceMode = "text"
+    if !overlayOwnsVoiceOver {
+      moveVoiceOverToOverlay()
+    }
+  }
+
+  private func ackTakeover() {
+    let js = "window.__nowiseeNative&&window.__nowiseeNative.onTakeoverReady()"
+    webView.evaluateJavaScript(js, completionHandler: nil)
   }
 
   /// Move VoiceOver onto the Direct Touch overlay. Call while

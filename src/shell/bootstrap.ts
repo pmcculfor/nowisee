@@ -65,6 +65,7 @@ export function startShell(
 
   let navigator!: Navigator;
   let nativeNotify: (() => void) | undefined;
+  let nativeTakeover: (() => Promise<void>) | undefined;
   const display = new Display(surface, {
     isBlocked: () => navigator.isBlocked(),
     onIntent: (intent: NavIntent) => {
@@ -74,6 +75,9 @@ export function startShell(
       nativeNotify?.();
     },
     skipTextFocus: () => isNativeHostPresent(),
+    beforeShowText: isNativeHostPresent()
+      ? () => nativeTakeover?.() ?? Promise.resolve()
+      : undefined,
   });
   const map = new NavigationMapStore();
   const cache = new NodeCache();
@@ -135,6 +139,7 @@ export function startShell(
     nativeNotify = () => {
       bridge.notify();
     };
+    nativeTakeover = () => bridge.takeoverFromInput();
     nativeDetach = () => {
       bridge.detach();
     };

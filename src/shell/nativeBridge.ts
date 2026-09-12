@@ -3,8 +3,8 @@
  * `webkit.messageHandlers.nowisee`. Safari and desktop never set that, so
  * NavPads stay the VoiceOver path there.
  *
- * Native → page: `__nowiseeNative.onIntent(intent)`.
- * Page → native: `postMessage({ mode, label, blocked })`.
+ * Native → page: `__nowiseeNative.onIntent(intent)`, `onTakeoverReady()`.
+ * Page → native: `postMessage({ mode, label, blocked })` or `{ mode: "text", takeover: true }`.
  */
 
 import type { DisplayMode } from "../core/display.ts";
@@ -43,6 +43,8 @@ export function isNativeHostPresent(win: Window = window): boolean {
 
 export type NativeBridgeHandle = {
   notify(): void;
+  /** Hide the web from VoiceOver and focus the overlay, then resolve. */
+  takeoverFromInput(): Promise<void>;
   detach(): void;
 };
 
@@ -51,13 +53,41 @@ export function attachNativeBridge(
   win: Window = window,
 ): NativeBridgeHandle {
   const handler = webkitOf(win)?.messageHandlers?.nowisee;
+  let takeoverWait: { promise: Promise<void>; resolve: () => void; timer: ReturnType<typeof setTimeout> } | null =
+    null;
 
-  function post(state: NativeSurfaceState): void {
+  function post(state: NativeSurfaceState | { readonly mode: "text"; readonly takeover: true }): void {
     handler?.postMessage(state);
   }
 
   function notify(): void {
     post(host.getState());
+  }
+
+  function onTakeoverReady(): void {
+    const wait = takeoverWait;
+    takeoverWait = null;
+    if (wait) {
+      clearTimeout(wait.timer);
+      wait.resolve();
+    }
+  }
+
+  function takeoverFromInput(): Promise<void> {
+    if (takeoverWait) {
+      return takeoverWait.promise;
+    }
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    // Old iOS builds ignore `takeover` and never ACK; do not leave the input up forever.
+    const timer = win.setTimeout(() => {
+      onTakeoverReady();
+    }, 100);
+    takeoverWait = { promise, resolve, timer };
+    post({ mode: "text", takeover: true });
+    return promise;
   }
 
   const api = {
@@ -75,6 +105,7 @@ export function attachNativeBridge(
     getState(): NativeSurfaceState {
       return host.getState();
     },
+    onTakeoverReady,
     notify,
   };
 
@@ -87,7 +118,9 @@ export function attachNativeBridge(
 
   return {
     notify,
+    takeoverFromInput,
     detach() {
+      onTakeoverReady();
       delete (
         win as Window & {
           __nowiseeNative?: typeof api;
