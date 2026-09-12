@@ -15,6 +15,10 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
   private var overlayOwnsVoiceOver = false
   private var announcedLabel: String?
   private var lastSurfaceMode: String = "text"
+  /// Latest-label-wins delay after leaving input. Longer than a typical
+  /// same-origin action so “Signing in…” can be replaced before VoiceOver hears it.
+  private let voiceOverTakeoverDelay: TimeInterval = 0.4
+  private var voiceOverTakeoverWork: DispatchWorkItem?
 
   deinit {
     webView?.configuration.userContentController.removeScriptMessageHandler(forName: "nowisee")
@@ -130,26 +134,27 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
       guard !label.isEmpty else {
         return
       }
+      overlay.accessibilityLabel = label
       if !overlayOwnsVoiceOver {
-        if leavingInput {
-          // Focus only: screenChanged must not carry the node string, or a late
-          // handling of it speaks a stale warm label after the result announcement.
-          moveVoiceOverToOverlay()
-          announceOverlayLabel(label)
+        // After input, keep the overlay out of the VoiceOver tree until the
+        // label has settled. A warm working label posted as screenChanged is
+        // spoken late, after VoiceOver already started the result, and the
+        // rotor hint rides on that stale Direct Touch focus.
+        if leavingInput || voiceOverTakeoverWork != nil {
+          overlay.setVoiceOverElement(false)
+          scheduleVoiceOverTakeover()
         } else {
-          overlay.setVoiceOverElement(true)
-          overlay.accessibilityLabel = label
-          overlayOwnsVoiceOver = true
-          announcedLabel = label
-          UIAccessibility.post(notification: .screenChanged, argument: overlay)
+          finishVoiceOverTakeover()
         }
-      } else {
-        announceOverlayLabel(label)
+      } else if label != announcedLabel {
+        announcedLabel = label
+        UIAccessibility.post(notification: .announcement, argument: label)
       }
       return
     }
 
-    let handingOff = overlayOwnsVoiceOver
+    let handingOff = overlayOwnsVoiceOver || voiceOverTakeoverWork != nil
+    cancelVoiceOverTakeover()
     overlayOwnsVoiceOver = false
     announcedLabel = nil
     if handingOff {
@@ -160,23 +165,29 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     }
   }
 
-  /// Move VoiceOver onto the Direct Touch overlay. Call while
-  /// `accessibilityLabel` is still the handoff name, not the node text.
-  private func moveVoiceOverToOverlay() {
-    overlay.setVoiceOverElement(true)
-    overlay.accessibilityLabel = DirectTouchOverlay.focusHandoffLabel
-    overlayOwnsVoiceOver = true
-    announcedLabel = DirectTouchOverlay.focusHandoffLabel
-    UIAccessibility.post(notification: .screenChanged, argument: overlay)
+  private func scheduleVoiceOverTakeover() {
+    voiceOverTakeoverWork?.cancel()
+    let work = DispatchWorkItem { [weak self] in
+      self?.voiceOverTakeoverWork = nil
+      self?.finishVoiceOverTakeover()
+    }
+    voiceOverTakeoverWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + voiceOverTakeoverDelay, execute: work)
   }
 
-  private func announceOverlayLabel(_ label: String) {
-    overlay.accessibilityLabel = label
-    guard label != announcedLabel else {
+  private func cancelVoiceOverTakeover() {
+    voiceOverTakeoverWork?.cancel()
+    voiceOverTakeoverWork = nil
+  }
+
+  private func finishVoiceOverTakeover() {
+    guard onAppOrigin, !overlay.isHidden else {
       return
     }
-    announcedLabel = label
-    UIAccessibility.post(notification: .announcement, argument: label)
+    overlay.setVoiceOverElement(true)
+    overlayOwnsVoiceOver = true
+    announcedLabel = overlay.accessibilityLabel
+    UIAccessibility.post(notification: .screenChanged, argument: overlay)
   }
 
   private func setWebHiddenFromVoiceOver(_ hidden: Bool) {
@@ -188,6 +199,7 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     let host = webView.url?.host
     onAppOrigin = host == nil || host == NowiseeOrigin.host
     if !onAppOrigin {
+      cancelVoiceOverTakeover()
       overlay.setNavigationEnabled(false)
       setWebHiddenFromVoiceOver(false)
       overlayOwnsVoiceOver = false
@@ -201,6 +213,7 @@ final class RootViewController: UIViewController, WKNavigationDelegate, WKScript
     }
     errorLabel.text = "Could not load Nowisee.\n\(error.localizedDescription)"
     errorStack.isHidden = false
+    cancelVoiceOverTakeover()
     overlay.setNavigationEnabled(false)
     setWebHiddenFromVoiceOver(false)
     overlayOwnsVoiceOver = false

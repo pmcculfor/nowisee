@@ -27,7 +27,7 @@ Once the first vertical tick has fired, further movement is only measured on Y. 
 
 On **input** nodes the overlay hides. VoiceOver uses the web field and Cancel / Done / Recent apps. Off-site pages (OAuth) also hide the overlay.
 
-On text nodes the overlay is a Direct Touch accessibility element (so VoiceOver does not steal swipes). Node text is spoken as announcements. Leaving an input posts one screen-changed notification onto the overlay (focus only; the overlay name is not the node string) so VoiceOver leaves the web field, then announcements speak the real labels. Entering an input posts screen-changed to the web view. That used to be skipped, which left VoiceOver on the page (double-speak and a blue focus box).
+On text nodes the overlay is a Direct Touch accessibility element (so VoiceOver does not steal swipes) and speaks the node label. The page behind it is hidden from VoiceOver. Leaving an input hides the page from VoiceOver immediately, then waits a short moment so a working label can be replaced before the overlay takes VoiceOver focus (otherwise VoiceOver speaks “Signing in…” after already starting the result). Then focus moves to the overlay so the web surface is not left focused (that caused double-speak and a blue focus box).
 
 ## Local site instead of production
 
