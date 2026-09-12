@@ -355,7 +355,6 @@ onIntent(intent):
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
 - Optional `skipTextFocus`: the iOS wrapper uses this so VoiceOver is not moved onto the web surface while the Direct Touch overlay owns speech.
-- Optional `beforeShowText`: when leaving an input, wait before painting text so a native host can take VoiceOver off the web view first. Later `showText` calls replace the pending label. Desktop omits this.
 - Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done / Recent apps).
 
 ### Edge cases
@@ -364,7 +363,7 @@ onIntent(intent):
 |------|----------|
 | Long label | Single blob; no truncation required in MVP |
 | Switch text → input | Replace surface; focus textarea |
-| Switch input → text | Replace surface; focus application text surface. On the iOS host, wait for overlay takeover first. |
+| Switch input → text | Replace surface; focus application text surface |
 | Identical tip revalidated | Navigator skips Display; no remount / no re-focus |
 | Same text tip, new label | Remount + focus once so the new label is announced |
 
@@ -465,17 +464,17 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 The iPhone app is a visible `WKWebView` of the production origin plus a transparent touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
 
-The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. Node text is an announcement; `screenChanged` only moves VoiceOver between the web field and the overlay. Leaving an input, the page asks native to take VoiceOver (`postMessage({ mode: "text", takeover: true })`) and **does not paint text until native ACKs**. Native hides the web, focuses the overlay under the stable handoff name, posts `screenChanged`, then calls `onTakeoverReady()`. The page then paints and notifies; that notify is an announcement. Entering an input posts `screenChanged` to the web view. The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay).
+The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. Node text is an announcement; `screenChanged` only moves VoiceOver between the web field and the overlay. After an input node, one `screenChanged` targets the overlay while its name is still the stable handoff label (not the warm working string), then announcements speak the real node text — so “Signing in…” can interrupt Done, and the result can interrupt that, instead of a late `screenChanged` speaking the warm label after the result. Entering an input posts `screenChanged` to the web view. The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay).
 
 The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
 
 ### Page → native
 
-`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done/Recent apps. Leaving input also sends `{ mode: "text", takeover: true }` **before** the text surface exists; native ACKs with `onTakeoverReady()` so the page can paint.
+`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done/Recent apps.
 
 ### Native → page
 
-`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back"|"recents")`. Other strings are ignored. The iOS overlay maps swipe right/left to `enter`/`back`, pan up/down to `prev`/`next`, and a one-second still hold to `recents`. `onTakeoverReady()` resolves the page’s takeover wait after native has hidden the web and focused the overlay.
+`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back"|"recents")`. Other strings are ignored. The iOS overlay maps swipe right/left to `enter`/`back`, pan up/down to `prev`/`next`, and a one-second still hold to `recents`.
 
 ### Non-goals
 

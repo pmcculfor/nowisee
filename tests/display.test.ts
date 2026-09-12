@@ -231,32 +231,4 @@ describe("Display", () => {
     expect(document.activeElement).not.toBe(surface);
     expect(document.activeElement).toBe(previous);
   });
-
-  it("beforeShowText delays leaving input until the host resolves, and the latest label wins", async () => {
-    const root = document.createElement("div");
-    document.body.appendChild(root);
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const display = new Display(root, {
-      isBlocked: () => false,
-      onIntent: () => {},
-      beforeShowText: () => gate,
-    });
-
-    display.showInput("code");
-    display.showText("Signing in…");
-    expect(display.getMode()).toBe("input");
-    display.showText("Sign-in was unsuccessful.");
-    expect(root.querySelector("textarea")).not.toBeNull();
-
-    release();
-    await gate;
-    await Promise.resolve();
-
-    expect(display.getMode()).toBe("text");
-    expect(display.getLabel()).toBe("Sign-in was unsuccessful.");
-    expect(root.querySelector("textarea")).toBeNull();
-  });
 });

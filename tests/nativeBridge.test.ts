@@ -68,26 +68,6 @@ describe("nativeBridge", () => {
     expect((window as Window & { __nowiseeNative?: unknown }).__nowiseeNative).toBeUndefined();
   });
 
-  it("takeoverFromInput posts takeover and resolves on onTakeoverReady", async () => {
-    const handler = installNativeHost();
-    const bridge = attachNativeBridge({
-      onIntent: () => {},
-      getState: () => ({ mode: "input", label: "Input", blocked: false }),
-    });
-    handler.messages.length = 0;
-
-    const pending = bridge.takeoverFromInput();
-    expect(handler.messages).toEqual([{ mode: "text", takeover: true }]);
-
-    const api = (
-      window as Window & { __nowiseeNative: { onTakeoverReady: () => void } }
-    ).__nowiseeNative;
-    api.onTakeoverReady();
-    await pending;
-
-    bridge.detach();
-  });
-
   it("skips NavPads when the native host is present", async () => {
     installNativeHost();
     window.history.replaceState(null, "", "/");
