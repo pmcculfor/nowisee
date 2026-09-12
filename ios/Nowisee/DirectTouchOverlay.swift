@@ -4,10 +4,15 @@ protocol DirectTouchOverlayDelegate: AnyObject {
   func overlayDidFire(_ intent: NavIntent)
 }
 
-/// Transparent Direct Touch layer. VoiceOver focuses this view (not the page)
-/// and speaks `accessibilityLabel`. Hidden on input so the WKWebView form is reachable.
+/// Transparent Direct Touch layer. VoiceOver focuses this view (not the page).
+/// Node text is spoken as announcements; `accessibilityLabel` is the focused
+/// element's name. Hidden on input so the WKWebView form is reachable.
 final class DirectTouchOverlay: UIView {
   weak var delegate: DirectTouchOverlayDelegate?
+
+  /// Name used while moving VoiceOver onto this view so `screenChanged` does
+  /// not snapshot a warm working label (e.g. “Signing in…”).
+  static let focusHandoffLabel = "Nowisee"
 
   private enum Axis {
     case horizontal
@@ -31,7 +36,7 @@ final class DirectTouchOverlay: UIView {
     isAccessibilityElement = true
     accessibilityTraits.insert(.allowsDirectInteraction)
     accessibilityViewIsModal = true
-    accessibilityLabel = "Nowisee"
+    accessibilityLabel = Self.focusHandoffLabel
 
     let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
     pan.maximumNumberOfTouches = 1
@@ -63,8 +68,8 @@ final class DirectTouchOverlay: UIView {
     }
   }
 
-  /// Direct Touch + modal. Kept separate from navigation so VoiceOver can stay
-  /// off the overlay while a working label may still be replaced.
+  /// Direct Touch + modal. Separate from pan/hold so input can hide VoiceOver
+  /// on this view without disabling touch.
   func setVoiceOverElement(_ enabled: Bool) {
     isAccessibilityElement = enabled
     accessibilityViewIsModal = enabled
