@@ -1,9 +1,18 @@
-import UIKit
+import Foundation
 
 enum NowiseeOrigin {
-  /// Production site. Change this to a Mac LAN URL only for local spikes.
+  /// Production origin. Change this to a Mac LAN HTTPS URL only for local spikes.
   static let url = URL(string: "https://nowisee.app")!
   static var host: String { url.host ?? "nowisee.app" }
+  static var originHeader: String {
+    let root = url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    return root
+  }
+}
+
+enum ShellIds {
+  static let rootAppId = "home"
+  static let recentsAppId = "recents"
 }
 
 enum NavIntent: String {
@@ -28,4 +37,9 @@ enum ScrubTicks {
   static let secondGapFraction: CGFloat = 0.08
   /// After the second tick, each further 4% of height (either direction) is one tick.
   static let fastStepFraction: CGFloat = 0.04
+}
+
+enum LoadFailure {
+  static let label =
+    "Something went wrong. Please check your network connection. Navigate right to try again. Navigate left to go back."
 }

@@ -1,11 +1,13 @@
 # Nowisee iPhone client
 
-Thin wrapper: a full-screen `WKWebView` of **https://nowisee.app** plus a transparent Direct Touch overlay. Apps, the server host, and identity are unchanged. Compile and install on a **Mac with Xcode** — this project cannot be built on Windows.
+Swift shell: Navigator, cookieed `POST /api/apps/:id/open|refresh`, Direct Touch text, native input. Apps and identity stay on **https://nowisee.app**. Compile and install on a **Mac with Xcode** — this project cannot be built on Windows.
+
+Safari still uses the TypeScript website. There is no WKWebView in this app.
 
 ## Open and run (Mac)
 
 1. Open `ios/Nowisee.xcodeproj` in Xcode.
-2. Signing & Capabilities → Team → your Apple Account (Personal Team is enough; no $99).
+2. Signing & Capabilities → Team → your Apple Account (Personal Team is enough; no $99). For Gmail Connect on device, add Associated Domains `applinks:nowisee.app` and `webcredentials:nowisee.app` (paid team + `apple-app-site-association` on the origin, bundle `app.nowisee.client`).
 3. Enable Developer Mode on the iPhone (Settings → Privacy & Security).
 4. Plug in the phone, pick it as the run destination, Run.
 5. Trust the developer certificate: Settings → General → VPN & Device Management.
@@ -25,27 +27,12 @@ The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 P
 
 Once the first vertical tick has fired, further movement is only measured on Y. A second tick needs another 8%; after that, 4% up is another `prev` and 4% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items.
 
-On **input** nodes the overlay hides. VoiceOver uses the web field and Cancel / Done / Recent apps. Off-site pages (OAuth) also hide the overlay.
-
-On text nodes the overlay is a Direct Touch accessibility element (so VoiceOver does not steal swipes) and speaks the node label. The page behind it is hidden from VoiceOver. Leaving an input hides the page from VoiceOver immediately, then waits a short moment so a working label can be replaced before the overlay takes VoiceOver focus (otherwise VoiceOver speaks “Signing in…” after already starting the result). Then focus moves to the overlay so the web surface is not left focused (that caused double-speak and a blue focus box).
+On **input** nodes the overlay hides. VoiceOver uses the native field plus Cancel, Done, and Recent apps. A new text label interrupts the previous utterance (no takeover delay). Connect Gmail opens the system auth sheet (`ASWebAuthenticationSession`); cancel leaves the Connect node.
 
 ## Local site instead of production
 
-Edit `NowiseeOrigin.url` in [`Nowisee/Config.swift`](Nowisee/Config.swift). Session cookies need HTTPS on one origin (`__Host-` + CSRF). A LAN `http://` Vite server will not keep production-style cookies.
+Edit `NowiseeOrigin.url` in [`Nowisee/Config.swift`](Nowisee/Config.swift). Session cookies need HTTPS (`__Host-` + CSRF). A LAN `http://` Vite server will not keep production-style cookies. The `Origin` header must match `NOWISEE_ORIGIN` on the server.
 
-## Changes to existing code
+## Website
 
-The iOS binary is new. These existing files were touched so the page can talk to the wrapper. **No app, host, identity, or Navigator behavior changed.**
-
-| File | What changed |
-| ---- | ------------ |
-| [`src/core/display.ts`](../src/core/display.ts) | Optional `DisplayHost.onSurfaceChange`. `getLabel()` for the current surface. `onSurfaceChange` runs from `setMode` so a missing parent still notifies. |
-| [`src/shell/bootstrap.ts`](../src/shell/bootstrap.ts) | If `webkit.messageHandlers.nowisee` exists, attach [`src/shell/nativeBridge.ts`](../src/shell/nativeBridge.ts) and **do not mount NavPads**. Otherwise behavior is identical (pads still mount in Safari). |
-| [`tests/display.test.ts`](../tests/display.test.ts) | Covers `getLabel` / `onSurfaceChange`. |
-| [`docs/MODULES.md`](../docs/MODULES.md) | §9c native host; §9b notes pads are skipped under the iOS wrapper. |
-| [`README.md`](../README.md) | `ios/` in the layout list. |
-| [`.gitignore`](../.gitignore) | Xcode `xcuserdata`. |
-
-New files (not existing-code edits): `src/shell/nativeBridge.ts`, `tests/nativeBridge.test.ts`, this `ios/` tree.
-
-Account deletion was **not** implemented (not required to load the app on your own phone).
+The TypeScript shell no longer contains a WKWebView bridge. NavPads always mount in the browser.

@@ -4,13 +4,16 @@ import SwiftUI
 struct NowiseeApp: App {
   var body: some Scene {
     WindowGroup {
-      WebShellView()
+      NativeShellView()
         .ignoresSafeArea()
+        .onOpenURL { url in
+          NotificationCenter.default.post(name: .nowiseeOpenURL, object: url)
+        }
     }
   }
 }
 
-private struct WebShellView: UIViewControllerRepresentable {
+private struct NativeShellView: UIViewControllerRepresentable {
   func makeUIViewController(context: Context) -> RootViewController {
     RootViewController()
   }

@@ -29,7 +29,7 @@ Production is a Node host that serves the site and `/api` together (`npm start`)
 | More first-party apps | A folder, an `AppModule`, a pack row (`homeRole` as needed), and a remote stub. Home lists `ctx.directory` using `homeRole` plus its store. | No product names in core. The host does not open that app’s database. |
 | Larger corpora | They stay on the server; the app seeds its own file. The client bundle stays a shell. | No corpus in `src/core/` or in the browser graph. |
 | Hosted identity at volume | The identity service could swap SQLite for another engine behind `server/db`. | Apps still see `ctx.userId`, never `ctx.db`. |
-| Native client (iPhone) | Map swipe and direct-touch to the same four intents. Extract a three-method Display port (`showText` / `showInput` / `getInputText`) so Navigator can run headless. Keep the session cookie in the WebView. | Do not port apps to Swift. Do not teach apps about swipes. Do not build a second login path. |
+| Native client (iPhone) | Swift Navigator + URLSession RPC + native text/input. Same `open` / `refresh` JSON. Cookie jar plus `Origin` header. OAuth uses `ASWebAuthenticationSession`. | Do not port apps to Swift. Do not teach apps about swipes. Do not build a second login path. |
 | Live updates | Implement reserved `platform.requestRefresh()` as a read-only refresh of the current tip. The label updates in place; there is no teleport. | Apps must not `setInterval` or touch the DOM to fake push. |
 | Third-party apps | Same `open` / `refresh` messages. Then validate at Navigator `apply()`, add `apiVersion`, cap warm/map size, and run a sandbox host with catalog/review. | Do not hand apps the DOM, the registry, or live objects. Do not grow core branches per outsider feature. |
 | Payments | The Account app plus an external processor. Freemium stays at the app layer. | No ad region or second competing surface on Display. |
@@ -61,7 +61,7 @@ URL `open` resets the stack (locked), so a shared link starts with one entry. Re
 | Item | Notes |
 |------|--------|
 | `requestRefresh` | Typed, not provided. Implement it before a tip must update without a user intent (for example, new mail on the current subject). |
-| Display port | Three methods. Extract them before a native iOS surface. The seam gets stickier after more Display calls. |
+| Dual Navigator | Website TypeScript Navigator and iOS Swift Navigator must stay aligned. Prefer shared JSON fixtures when adding concurrency or park behavior. |
 | Response validation / `apiVersion` / unknown values | Typed, not provided. The single choke point is Navigator `apply()`. Wait until apps you did not write exist. Intended later: unknown edge kind → missing edge; unknown node kind → render as text; unknown intent → never matched. |
 | Browser Back/Forward vs session stack | `popstate` → `openLocation` is enough for now. |
 | Identity rate limits, password reset, email verify, export/deletion | See [`IDENTITY.md`](IDENTITY.md) §13. |

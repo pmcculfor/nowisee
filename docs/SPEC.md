@@ -230,7 +230,7 @@ Identity and per-app SQLite have landed. Clipboard is still the only platform ca
 
 Landed so far: core and the app kit, first-party apps on a Node host, identity, lockbox, OAuth, the Bible corpus and reader features, Notes, and Gmail v1.
 
-Later work can happen without changing the contracts above: a status channel; optional deep-link ancestry; `requestRefresh`; a Display port for a native client; third-party sandbox and contract versioning; browser Back/Forward versus the session stack.
+Later work can happen without changing the contracts above: a status channel; optional deep-link ancestry; `requestRefresh`; third-party sandbox and contract versioning; browser Back/Forward versus the session stack.
 
 ---
 

@@ -70,7 +70,7 @@ That only works if VoiceOver’s accessibility focus also fires a real DOM `focu
 
 ### Outcome (settled)
 
-Desktop VoiceOver edge pads already ship (focus or click). A native iPhone client is still deferred — see [`docs/PREPAREDNESS.md`](../docs/PREPAREDNESS.md) for the Display port and mapping swipe or direct-touch to the same four intents. This probe remains evidence for that later slice.
+Desktop VoiceOver edge pads already ship (focus or click). The iPhone app is a Swift client of the same `open` / `refresh` protocol; this probe remains evidence for Safari VoiceOver on the website.
 
 ### How to re-run it
 
