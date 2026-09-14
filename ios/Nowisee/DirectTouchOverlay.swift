@@ -40,7 +40,7 @@ final class DirectTouchOverlay: UIView {
     textView.isUserInteractionEnabled = false
     textView.isAccessibilityElement = false
     textView.backgroundColor = .clear
-    textView.font = .preferredFont(forTextStyle: .body)
+    textView.font = ShellFont.body()
     textView.adjustsFontForContentSizeCategory = true
     textView.textContainerInset = UIEdgeInsets(top: 24, left: 16, bottom: 24, right: 16)
     textView.translatesAutoresizingMaskIntoConstraints = false
@@ -98,7 +98,7 @@ final class DirectTouchOverlay: UIView {
     guard navigationEnabled, gesture.state == .began else {
       return
     }
-    delegate?.overlayDidFire(.recents)
+    fire(.recents)
   }
 
   @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -117,6 +117,7 @@ final class DirectTouchOverlay: UIView {
       scrolling = false
       fastScrolling = false
       lastTickY = 0
+      NavHaptics.prepare()
     case .changed:
       if scrolling {
         emitVerticalTicks(translationY: translation.y, height: bounds.height)
@@ -126,7 +127,7 @@ final class DirectTouchOverlay: UIView {
         scrolling = true
         axis = .vertical
         lastTickY = translation.y
-        delegate?.overlayDidFire(translation.y >= 0 ? .next : .prev)
+        fire(translation.y >= 0 ? .next : .prev)
         return
       }
       if axis == nil, hypot(translation.x, translation.y) >= decideDistance {
@@ -155,7 +156,7 @@ final class DirectTouchOverlay: UIView {
       }
       let sign: CGFloat = translationY >= lastTickY ? 1 : -1
       lastTickY += sign * gap
-      delegate?.overlayDidFire(sign > 0 ? .next : .prev)
+      fire(sign > 0 ? .next : .prev)
       fastScrolling = true
     }
     let step = height * ScrubTicks.fastStepFraction
@@ -170,7 +171,7 @@ final class DirectTouchOverlay: UIView {
     lastTickY += CGFloat(steps) * step
     let intent: NavIntent = steps > 0 ? .next : .prev
     for _ in 0..<abs(steps) {
-      delegate?.overlayDidFire(intent)
+      fire(intent)
     }
   }
 
@@ -183,9 +184,14 @@ final class DirectTouchOverlay: UIView {
       return
     }
     if translation.x > 0 {
-      delegate?.overlayDidFire(.enter)
+      fire(.enter)
     } else {
-      delegate?.overlayDidFire(.back)
+      fire(.back)
     }
+  }
+
+  private func fire(_ intent: NavIntent) {
+    NavHaptics.tick()
+    delegate?.overlayDidFire(intent)
   }
 }

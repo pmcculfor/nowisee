@@ -464,7 +464,7 @@ The iPhone app is a Swift client, not a WebView of the website. It POSTs the sam
 
 VoiceOver never enters a WebView. Text nodes are one Direct Touch overlay (visible label is not its own accessibility element). Leaving input posts `.screenChanged` onto the overlay; later labels wait for `accessibilityElementDidBecomeFocused` before `setLabel` and `.announcement`, so a result node can interrupt the warm node but cannot speak first. Once the overlay owns VoiceOver, a changed label posts `.announcement` so it interrupts the previous utterance. Input nodes are a native field plus Cancel / Done / Recent apps. `kind: "external"` opens `ASWebAuthenticationSession`; the callback GET runs in the same cookie jar.
 
-Gestures: swipe right/left → `enter`/`back`; pan up/down → `prev`/`next`; one-second still hold → `recents`.
+Gestures: swipe right/left → `enter`/`back`; pan up/down → `prev`/`next`; one-second still hold → `recents`. Each of those fires plays a light haptic; a long vertical pan ticks once per `prev`/`next`. Overlay and input body type is 3× default Dynamic Type body.
 
 ### Non-goals
 

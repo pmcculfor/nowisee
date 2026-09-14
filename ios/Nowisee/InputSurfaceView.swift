@@ -56,7 +56,7 @@ final class InputSurfaceView: UIView {
       let field = UITextField()
       field.isSecureTextEntry = true
       field.text = initialText
-      field.font = .preferredFont(forTextStyle: .body)
+      field.font = ShellFont.body()
       field.adjustsFontForContentSizeCategory = true
       field.borderStyle = .roundedRect
       field.autocapitalizationType = .none
@@ -77,7 +77,7 @@ final class InputSurfaceView: UIView {
     } else {
       let view = UITextView()
       view.text = initialText
-      view.font = .preferredFont(forTextStyle: .body)
+      view.font = ShellFont.body()
       view.adjustsFontForContentSizeCategory = true
       view.autocapitalizationType = .none
       view.autocorrectionType = .no

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 enum NowiseeOrigin {
   /// Production origin. Change this to a Mac LAN HTTPS URL only for local spikes.
@@ -37,6 +38,34 @@ enum ScrubTicks {
   static let secondGapFraction: CGFloat = 0.08
   /// After the second tick, each further 4% of height (either direction) is one tick.
   static let fastStepFraction: CGFloat = 0.04
+}
+
+enum ShellFont {
+  /// Overlay and input body text, relative to the default Dynamic Type body size.
+  static let sizeMultiplier: CGFloat = 3
+
+  static func body() -> UIFont {
+    let defaultTraits = UITraitCollection(preferredContentSizeCategory: .large)
+    let descriptor = UIFontDescriptor.preferredFontDescriptor(
+      withTextStyle: .body,
+      compatibleWith: defaultTraits
+    )
+    let base = UIFont(descriptor: descriptor, size: descriptor.pointSize * sizeMultiplier)
+    return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
+  }
+}
+
+enum NavHaptics {
+  private static let generator = UIImpactFeedbackGenerator(style: .light)
+
+  static func prepare() {
+    generator.prepare()
+  }
+
+  static func tick() {
+    generator.impactOccurred()
+    generator.prepare()
+  }
 }
 
 enum LoadFailure {
