@@ -7,7 +7,7 @@ Safari still uses the TypeScript website. There is no WKWebView in this app.
 ## Open and run (Mac)
 
 1. Open `ios/Nowisee.xcodeproj` in Xcode.
-2. Signing & Capabilities → Team → your Apple Account (Personal Team is enough; no $99). For Gmail Connect on device, add Associated Domains `applinks:nowisee.app` and `webcredentials:nowisee.app` (paid team + `apple-app-site-association` on the origin, bundle `app.nowisee.client`).
+2. Signing & Capabilities → Team → your Apple Account. Everyday navigation works on a Personal Team. **Gmail Connect** needs a paid Apple Developer team: the project already includes Associated Domains `applinks:nowisee.app` and `webcredentials:nowisee.app` (bundle `app.nowisee.client`). Put that team’s ten-character Team ID in production `NOWISEE_IOS_TEAM_ID` so the host can serve `apple-app-site-association`.
 3. Enable Developer Mode on the iPhone (Settings → Privacy & Security).
 4. Plug in the phone, pick it as the run destination, Run.
 5. Trust the developer certificate: Settings → General → VPN & Device Management.
@@ -27,7 +27,7 @@ The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 P
 
 Once the first vertical tick has fired, further movement is only measured on Y. A second tick needs another 8%; after that, 4% up is another `prev` and 4% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items.
 
-On **input** nodes the overlay hides. VoiceOver uses the native field plus Cancel, Done, and Recent apps. Leaving input posts `.screenChanged` onto the overlay; a newer label waits until that overlay is focused, then `setLabel` plus `.announcement` may interrupt. After that, a new text label interrupts the previous utterance (no takeover delay). Connect Gmail opens the system auth sheet (`ASWebAuthenticationSession`); cancel leaves the Connect node.
+On **input** nodes the overlay hides. VoiceOver uses the native field plus Cancel, Done, and Recent apps. Those buttons stay enabled; taps no-op while Navigator is blocked. Leaving input posts `.screenChanged` onto the overlay; a newer label waits until that overlay is focused, then `setLabel` plus `.announcement` may interrupt. After that, a new text label interrupts the previous utterance (no takeover delay). Connect Gmail opens the system auth sheet (`ASWebAuthenticationSession`); a failed start speaks a retry/back message; cancel leaves the Connect node.
 
 ## Local site instead of production
 

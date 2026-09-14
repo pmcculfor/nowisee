@@ -17,7 +17,11 @@ final class OAuthHandoff: NSObject, ASWebAuthenticationPresentationContextProvid
     self.window = window
   }
 
-  func start(authorizeURL: URL) {
+  @discardableResult
+  func start(authorizeURL: URL) -> Bool {
+    if session != nil {
+      return true
+    }
     let handler: ASWebAuthenticationSession.CompletionHandler = { [weak self] callbackURL, error in
       Task { @MainActor in
         await self?.finish(callbackURL: callbackURL, error: error)
@@ -40,7 +44,11 @@ final class OAuthHandoff: NSObject, ASWebAuthenticationPresentationContextProvid
     auth.presentationContextProvider = self
     auth.prefersEphemeralWebBrowserSession = false
     session = auth
-    auth.start()
+    let started = auth.start()
+    if !started {
+      session = nil
+    }
+    return started
   }
 
   func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

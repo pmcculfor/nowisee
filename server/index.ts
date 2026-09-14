@@ -17,6 +17,7 @@
  *   NOWISEE_ADMIN_EMAILS         comma-separated emails allowed to open /admin
  *   NOWISEE_TLS_CERT             optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
  *   NOWISEE_TLS_KEY              optional PEM path
+ *   NOWISEE_IOS_TEAM_ID          Apple Team ID for apple-app-site-association (Gmail Connect)
  */
 
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -30,7 +31,7 @@ import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { handleAdminHttp, isAdminUrl } from "./admin/http.ts";
 import { adminEmailsFromEnv } from "./admin/emails.ts";
 import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
-import { pageFile, siteTarget } from "./site.ts";
+import { appleAppSiteAssociation, appleTeamId, pageFile, siteTarget } from "./site.ts";
 
 const DIST = resolve(process.cwd(), "dist");
 const PORT = Number(process.env.PORT ?? "3000");
@@ -157,6 +158,23 @@ async function serveSite(method: string, url: string, res: ServerResponse): Prom
   }
   if (target.kind === "not-found") {
     writeError(res, 404, "Not found");
+    return;
+  }
+  if (target.kind === "association") {
+    const teamId = appleTeamId(process.env.NOWISEE_IOS_TEAM_ID);
+    if (!teamId) {
+      writeError(res, 404, "Not found");
+      return;
+    }
+    const body = appleAppSiteAssociation(teamId);
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Length", Buffer.byteLength(body));
+    if (method === "HEAD") {
+      res.end();
+      return;
+    }
+    res.end(body);
     return;
   }
   if (target.kind === "page") {

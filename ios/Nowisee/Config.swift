@@ -43,3 +43,8 @@ enum LoadFailure {
   static let label =
     "Something went wrong. Please check your network connection. Navigate right to try again. Navigate left to go back."
 }
+
+enum ExternalHandoffFailure {
+  static let label =
+    "Couldn't open the sign-in page. Navigate right to try again. Navigate left to go back."
+}

@@ -14,7 +14,6 @@ final class InputSurfaceView: UIView {
   private let cancelButton = UIButton(type: .system)
   private let doneButton = UIButton(type: .system)
   private let recentsButton = UIButton(type: .system)
-  private var buttonsEnabled = true
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -124,13 +123,6 @@ final class InputSurfaceView: UIView {
     (secretField ?? textView)?.becomeFirstResponder()
   }
 
-  func setButtonsEnabled(_ enabled: Bool) {
-    buttonsEnabled = enabled
-    cancelButton.isEnabled = enabled
-    doneButton.isEnabled = enabled
-    recentsButton.isEnabled = enabled
-  }
-
   private func configure(_ button: UIButton, title: String, action: Selector) {
     button.setTitle(title, for: .normal)
     button.titleLabel?.font = .preferredFont(forTextStyle: .body)
@@ -139,23 +131,14 @@ final class InputSurfaceView: UIView {
   }
 
   @objc private func cancelTapped() {
-    guard buttonsEnabled else {
-      return
-    }
     delegate?.inputDidFire(.back)
   }
 
   @objc private func doneTapped() {
-    guard buttonsEnabled else {
-      return
-    }
     delegate?.inputDidFire(.enter)
   }
 
   @objc private func recentsTapped() {
-    guard buttonsEnabled else {
-      return
-    }
     delegate?.inputDidFire(.recents)
   }
 

@@ -14,6 +14,7 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
   private var pendingLabel: String?
   private var mode: NodeKind = .text
   private var didBootstrap = false
+  private var labelBeforeExternalFailure: String?
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -101,6 +102,9 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
   }
 
   func showText(_ label: String) {
+    if label != ExternalHandoffFailure.label {
+      labelBeforeExternalFailure = nil
+    }
     let leavingInput = mode == .input
     mode = .text
     inputSurface.hide()
@@ -134,6 +138,7 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
   }
 
   func showInput(_ initialText: String, secret: Bool, autocomplete: InputAutocomplete?) {
+    labelBeforeExternalFailure = nil
     mode = .input
     awaitingOverlayFocus = false
     pendingLabel = nil
@@ -146,7 +151,6 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
       autocomplete: autocomplete,
       accessibleName: accessibleName(secret: secret, autocomplete: autocomplete)
     )
-    inputSurface.setButtonsEnabled(!navigator.isBlocked)
     UIAccessibility.post(notification: .screenChanged, argument: inputSurface.voiceOverTarget())
   }
 
@@ -166,10 +170,30 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
 
   private func openExternal(_ href: String) {
     guard let url = URL(string: href) else {
+      presentExternalHandoffFailure()
       return
     }
     oauth.setWindow(view.window)
-    oauth.start(authorizeURL: url)
+    if oauth.start(authorizeURL: url) {
+      restoreAfterExternalHandoffFailure()
+      return
+    }
+    presentExternalHandoffFailure()
+  }
+
+  private func presentExternalHandoffFailure() {
+    if labelBeforeExternalFailure == nil {
+      labelBeforeExternalFailure = announcedLabel
+    }
+    showText(ExternalHandoffFailure.label)
+  }
+
+  private func restoreAfterExternalHandoffFailure() {
+    guard let saved = labelBeforeExternalFailure else {
+      return
+    }
+    labelBeforeExternalFailure = nil
+    showText(saved)
   }
 
   private func openReturnedPath(_ location: String) {
