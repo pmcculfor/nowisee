@@ -10,6 +10,8 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
   private var oauth: OAuthHandoff!
   private var announcedLabel: String?
   private var overlayOwnsVoiceOver = false
+  private var awaitingOverlayFocus = false
+  private var pendingLabel: String?
   private var mode: NodeKind = .text
   private var didBootstrap = false
 
@@ -75,6 +77,22 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
     navigator.onIntent(intent)
   }
 
+  func overlayDidBecomeFocused() {
+    guard awaitingOverlayFocus else {
+      return
+    }
+    awaitingOverlayFocus = false
+    overlayOwnsVoiceOver = true
+    guard let pending = pendingLabel, pending != announcedLabel else {
+      pendingLabel = nil
+      return
+    }
+    pendingLabel = nil
+    overlay.setLabel(pending)
+    announcedLabel = pending
+    UIAccessibility.post(notification: .announcement, argument: pending)
+  }
+
   func inputDidFire(_ intent: NavIntent) {
     guard !navigator.isBlocked else {
       return
@@ -87,13 +105,29 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
     mode = .text
     inputSurface.hide()
     overlay.setNavigationEnabled(true)
-    overlay.setLabel(label)
     overlay.setVoiceOverElement(true)
+
+    // Hold later labels until VoiceOver has actually focused the overlay, so an
+    // `.announcement` cannot speak before the `.screenChanged` from leaving input.
+    if awaitingOverlayFocus {
+      pendingLabel = label
+      return
+    }
+
     if leavingInput || !overlayOwnsVoiceOver {
+      overlay.setLabel(label)
       overlayOwnsVoiceOver = true
       announcedLabel = label
+      if UIAccessibility.isVoiceOverRunning {
+        awaitingOverlayFocus = true
+        pendingLabel = nil
+      }
       UIAccessibility.post(notification: .screenChanged, argument: overlay)
-    } else if label != announcedLabel {
+      return
+    }
+
+    if label != announcedLabel {
+      overlay.setLabel(label)
       announcedLabel = label
       UIAccessibility.post(notification: .announcement, argument: label)
     }
@@ -101,6 +135,8 @@ final class RootViewController: UIViewController, DirectTouchOverlayDelegate, In
 
   func showInput(_ initialText: String, secret: Bool, autocomplete: InputAutocomplete?) {
     mode = .input
+    awaitingOverlayFocus = false
+    pendingLabel = nil
     overlayOwnsVoiceOver = false
     announcedLabel = nil
     overlay.setNavigationEnabled(false)

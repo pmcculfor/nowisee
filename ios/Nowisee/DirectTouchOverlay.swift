@@ -2,6 +2,7 @@ import UIKit
 
 protocol DirectTouchOverlayDelegate: AnyObject {
   func overlayDidFire(_ intent: NavIntent)
+  func overlayDidBecomeFocused()
 }
 
 /// Direct Touch layer. VoiceOver focuses this view and speaks `accessibilityLabel`.
@@ -69,6 +70,11 @@ final class DirectTouchOverlay: UIView {
   func setLabel(_ label: String) {
     textView.text = label
     accessibilityLabel = label
+  }
+
+  override func accessibilityElementDidBecomeFocused() {
+    super.accessibilityElementDidBecomeFocused()
+    delegate?.overlayDidBecomeFocused()
   }
 
   func setNavigationEnabled(_ enabled: Bool) {

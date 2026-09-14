@@ -27,7 +27,7 @@ The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 P
 
 Once the first vertical tick has fired, further movement is only measured on Y. A second tick needs another 8%; after that, 4% up is another `prev` and 4% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items.
 
-On **input** nodes the overlay hides. VoiceOver uses the native field plus Cancel, Done, and Recent apps. A new text label interrupts the previous utterance (no takeover delay). Connect Gmail opens the system auth sheet (`ASWebAuthenticationSession`); cancel leaves the Connect node.
+On **input** nodes the overlay hides. VoiceOver uses the native field plus Cancel, Done, and Recent apps. Leaving input posts `.screenChanged` onto the overlay; a newer label waits until that overlay is focused, then `setLabel` plus `.announcement` may interrupt. After that, a new text label interrupts the previous utterance (no takeover delay). Connect Gmail opens the system auth sheet (`ASWebAuthenticationSession`); cancel leaves the Connect node.
 
 ## Local site instead of production
 
