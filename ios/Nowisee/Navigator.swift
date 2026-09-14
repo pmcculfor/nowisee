@@ -405,7 +405,10 @@ final class Navigator {
   @discardableResult
   private func startCall(_ args: CallArgs) -> Task<Void, Never> {
     let running = Task { @MainActor [weak self] in
-      await self?.runCall(args)
+      guard let self else {
+        return
+      }
+      await self.runCall(args)
     }
     inFlight = InFlight(token: args.token, task: running, isAction: args.isAction)
     return running
