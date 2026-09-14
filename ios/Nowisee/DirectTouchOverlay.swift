@@ -33,7 +33,7 @@ final class DirectTouchOverlay: UIView {
     isAccessibilityElement = true
     accessibilityTraits.insert(.allowsDirectInteraction)
     accessibilityViewIsModal = true
-    accessibilityLabel = "Nowisee"
+    accessibilityLabel = "Now I See"
 
     textView.isEditable = false
     textView.isSelectable = false
