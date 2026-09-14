@@ -42,7 +42,7 @@ enum ScrubTicks {
 
 enum ShellFont {
   /// Overlay and input body text, relative to the default Dynamic Type body size.
-  static let sizeMultiplier: CGFloat = 3
+  static let sizeMultiplier: CGFloat = 2
 
   static func body() -> UIFont {
     let defaultTraits = UITraitCollection(preferredContentSizeCategory: .large)
