@@ -1,233 +1,169 @@
 import UIKit
-import WebKit
 
-final class RootViewController: UIViewController, WKNavigationDelegate, WKScriptMessageHandler,
-  DirectTouchOverlayDelegate
+final class RootViewController: UIViewController, DirectTouchOverlayDelegate, InputSurfaceDelegate,
+  DisplayPort
 {
-  private var webView: WKWebView!
   private let overlay = DirectTouchOverlay()
-  private let errorLabel = UILabel()
-  private let retryButton = UIButton(type: .system)
-  private let errorStack = UIStackView()
-  private let scriptProxy = WeakScriptMessageHandler()
-
-  private var onAppOrigin = true
-  private var overlayOwnsVoiceOver = false
+  private let inputSurface = InputSurfaceView()
+  private let rpc = AppRpc()
+  private var navigator: Navigator!
+  private var oauth: OAuthHandoff!
   private var announcedLabel: String?
-  private var lastSurfaceMode: String = "text"
-  /// Latest-label-wins delay after leaving input. Longer than a typical
-  /// same-origin action so “Signing in…” can be replaced before VoiceOver hears it.
-  private let voiceOverTakeoverDelay: TimeInterval = 0.4
-  private var voiceOverTakeoverWork: DispatchWorkItem?
-
-  deinit {
-    webView?.configuration.userContentController.removeScriptMessageHandler(forName: "nowisee")
-  }
+  private var overlayOwnsVoiceOver = false
+  private var mode: NodeKind = .text
+  private var didBootstrap = false
 
   override func viewDidLoad() {
     super.viewDidLoad()
     view.backgroundColor = .systemBackground
-    scriptProxy.target = self
-
-    let config = WKWebViewConfiguration()
-    config.websiteDataStore = .default()
-    config.defaultWebpagePreferences.allowsContentJavaScript = true
-    config.userContentController.add(scriptProxy, name: "nowisee")
-    webView = WKWebView(frame: .zero, configuration: config)
-    webView.navigationDelegate = self
-    webView.scrollView.contentInsetAdjustmentBehavior = .never
-    webView.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(webView)
 
     overlay.delegate = self
     overlay.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(overlay)
 
-    errorLabel.numberOfLines = 0
-    errorLabel.textAlignment = .center
-    errorLabel.font = .preferredFont(forTextStyle: .body)
-    retryButton.setTitle("Retry", for: .normal)
-    retryButton.addTarget(self, action: #selector(loadOrigin), for: .touchUpInside)
-    errorStack.axis = .vertical
-    errorStack.spacing = 16
-    errorStack.alignment = .center
-    errorStack.addArrangedSubview(errorLabel)
-    errorStack.addArrangedSubview(retryButton)
-    errorStack.isHidden = true
-    errorStack.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(errorStack)
+    inputSurface.delegate = self
+    inputSurface.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(inputSurface)
 
     NSLayoutConstraint.activate([
-      webView.topAnchor.constraint(equalTo: view.topAnchor),
-      webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-      webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       overlay.topAnchor.constraint(equalTo: view.topAnchor),
       overlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
       overlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       overlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      errorStack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      errorStack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-      errorStack.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-      errorStack.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+      inputSurface.topAnchor.constraint(equalTo: view.topAnchor),
+      inputSurface.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+      inputSurface.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+      inputSurface.trailingAnchor.constraint(equalTo: view.trailingAnchor),
     ])
 
-    loadOrigin()
+    oauth = OAuthHandoff(window: view.window, rpc: rpc)
+    oauth.onReturnPath = { [weak self] location in
+      self?.openReturnedPath(location)
+    }
+
+    navigator = Navigator(
+      rpc: rpc,
+      display: self,
+      clipboard: DeviceClipboard(),
+      setAddressBar: { _ in },
+      handOffExternal: { [weak self] href in
+        self?.openExternal(href)
+      }
+    )
+
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleOpenURL(_:)),
+      name: .nowiseeOpenURL,
+      object: nil
+    )
   }
 
-  @objc private func loadOrigin() {
-    errorStack.isHidden = true
-    webView.isHidden = false
-    overlay.setNavigationEnabled(true)
-    webView.load(URLRequest(url: NowiseeOrigin.url))
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    oauth.setWindow(view.window)
+    if !didBootstrap {
+      didBootstrap = true
+      Task { await navigator.openLocation(AppLocation(appId: ShellIds.rootAppId, path: "/")) }
+    }
   }
 
   func overlayDidFire(_ intent: NavIntent) {
-    guard onAppOrigin, !overlay.isHidden else {
+    guard !navigator.isBlocked else {
       return
     }
-    let js = "window.__nowiseeNative&&window.__nowiseeNative.onIntent(\"\(intent.rawValue)\")"
-    webView.evaluateJavaScript(js, completionHandler: nil)
+    navigator.onIntent(intent)
   }
 
-  func userContentController(
-    _ userContentController: WKUserContentController,
-    didReceive message: WKScriptMessage
-  ) {
-    guard message.name == "nowisee" else {
+  func inputDidFire(_ intent: NavIntent) {
+    guard !navigator.isBlocked else {
       return
     }
-    let dict = message.body as? [String: Any]
-    let mode = dict?["mode"] as? String ?? "text"
-    let label = dict?["label"] as? String ?? ""
-    DispatchQueue.main.async { [weak self] in
-      self?.applySurface(mode: mode, label: label)
+    navigator.onIntent(intent)
+  }
+
+  func showText(_ label: String) {
+    let leavingInput = mode == .input
+    mode = .text
+    inputSurface.hide()
+    overlay.setNavigationEnabled(true)
+    overlay.setLabel(label)
+    overlay.setVoiceOverElement(true)
+    if leavingInput || !overlayOwnsVoiceOver {
+      overlayOwnsVoiceOver = true
+      announcedLabel = label
+      UIAccessibility.post(notification: .screenChanged, argument: overlay)
+    } else if label != announcedLabel {
+      announcedLabel = label
+      UIAccessibility.post(notification: .announcement, argument: label)
     }
   }
 
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    errorStack.isHidden = true
-    refreshOriginFlag()
-  }
-
-  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-    showLoadError(error)
-  }
-
-  func webView(
-    _ webView: WKWebView,
-    didFailProvisionalNavigation navigation: WKNavigation!,
-    withError error: Error
-  ) {
-    showLoadError(error)
-  }
-
-  private func applySurface(mode: String, label: String) {
-    refreshOriginFlag()
-    let navigationOn = onAppOrigin && mode != "input"
-    let leavingInput = lastSurfaceMode == "input" && navigationOn
-    lastSurfaceMode = navigationOn ? "text" : "input"
-    overlay.setNavigationEnabled(navigationOn)
-    setWebHiddenFromVoiceOver(navigationOn)
-
-    if navigationOn {
-      guard !label.isEmpty else {
-        return
-      }
-      overlay.accessibilityLabel = label
-      if !overlayOwnsVoiceOver {
-        // After input, keep the overlay out of the VoiceOver tree until the
-        // label has settled. A warm working label posted as screenChanged is
-        // spoken late, after VoiceOver already started the result, and the
-        // rotor hint rides on that stale Direct Touch focus.
-        if leavingInput || voiceOverTakeoverWork != nil {
-          overlay.setVoiceOverElement(false)
-          scheduleVoiceOverTakeover()
-        } else {
-          finishVoiceOverTakeover()
-        }
-      } else if label != announcedLabel {
-        announcedLabel = label
-        UIAccessibility.post(notification: .announcement, argument: label)
-      }
-      return
-    }
-
-    let handingOff = overlayOwnsVoiceOver || voiceOverTakeoverWork != nil
-    cancelVoiceOverTakeover()
+  func showInput(_ initialText: String, secret: Bool, autocomplete: InputAutocomplete?) {
+    mode = .input
     overlayOwnsVoiceOver = false
     announcedLabel = nil
-    if handingOff {
-      DispatchQueue.main.async { [weak self] in
-        guard let self else { return }
-        UIAccessibility.post(notification: .screenChanged, argument: self.webView)
-      }
-    }
-  }
-
-  private func scheduleVoiceOverTakeover() {
-    voiceOverTakeoverWork?.cancel()
-    let work = DispatchWorkItem { [weak self] in
-      self?.voiceOverTakeoverWork = nil
-      self?.finishVoiceOverTakeover()
-    }
-    voiceOverTakeoverWork = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + voiceOverTakeoverDelay, execute: work)
-  }
-
-  private func cancelVoiceOverTakeover() {
-    voiceOverTakeoverWork?.cancel()
-    voiceOverTakeoverWork = nil
-  }
-
-  private func finishVoiceOverTakeover() {
-    guard onAppOrigin, !overlay.isHidden else {
-      return
-    }
-    overlay.setVoiceOverElement(true)
-    overlayOwnsVoiceOver = true
-    announcedLabel = overlay.accessibilityLabel
-    UIAccessibility.post(notification: .screenChanged, argument: overlay)
-  }
-
-  private func setWebHiddenFromVoiceOver(_ hidden: Bool) {
-    webView.accessibilityElementsHidden = hidden
-    webView.scrollView.accessibilityElementsHidden = hidden
-  }
-
-  private func refreshOriginFlag() {
-    let host = webView.url?.host
-    onAppOrigin = host == nil || host == NowiseeOrigin.host
-    if !onAppOrigin {
-      cancelVoiceOverTakeover()
-      overlay.setNavigationEnabled(false)
-      setWebHiddenFromVoiceOver(false)
-      overlayOwnsVoiceOver = false
-    }
-  }
-
-  private func showLoadError(_ error: Error) {
-    let ns = error as NSError
-    if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
-      return
-    }
-    errorLabel.text = "Could not load Nowisee.\n\(error.localizedDescription)"
-    errorStack.isHidden = false
-    cancelVoiceOverTakeover()
     overlay.setNavigationEnabled(false)
-    setWebHiddenFromVoiceOver(false)
-    overlayOwnsVoiceOver = false
+    inputSurface.present(
+      initialText: initialText,
+      secret: secret,
+      autocomplete: autocomplete,
+      accessibleName: accessibleName(secret: secret, autocomplete: autocomplete)
+    )
+    inputSurface.setButtonsEnabled(!navigator.isBlocked)
+    UIAccessibility.post(notification: .screenChanged, argument: inputSurface.voiceOverTarget())
+  }
+
+  func getInputText() -> String {
+    inputSurface.inputText()
+  }
+
+  private func accessibleName(secret: Bool, autocomplete: InputAutocomplete?) -> String {
+    if secret || autocomplete == .currentPassword || autocomplete == .newPassword {
+      return "Password"
+    }
+    if autocomplete == .username {
+      return "Email"
+    }
+    return "Input"
+  }
+
+  private func openExternal(_ href: String) {
+    guard let url = URL(string: href) else {
+      return
+    }
+    oauth.setWindow(view.window)
+    oauth.start(authorizeURL: url)
+  }
+
+  private func openReturnedPath(_ location: String) {
+    let parsed = PathRouter.parse(location, rootAppId: ShellIds.rootAppId)
+    Task { await navigator.openLocation(parsed) }
+  }
+
+  @objc private func handleOpenURL(_ note: Notification) {
+    guard let url = note.object as? URL else {
+      return
+    }
+    if url.path.hasPrefix("/oauth/callback") {
+      Task { await finishOAuthFromLink(url) }
+      return
+    }
+    openReturnedPath(url.path)
+  }
+
+  private func finishOAuthFromLink(_ url: URL) async {
+    do {
+      let result = try await rpc.getWithoutRedirect(url)
+      if let location = result.location {
+        openReturnedPath(location)
+      }
+    } catch {
+      print("OAuth universal-link GET failed \(error)")
+    }
   }
 }
 
-/// WKUserContentController retains its handler; this breaks the cycle back to the VC.
-private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
-  weak var target: WKScriptMessageHandler?
-
-  func userContentController(
-    _ userContentController: WKUserContentController,
-    didReceive message: WKScriptMessage
-  ) {
-    target?.userContentController(userContentController, didReceive: message)
-  }
+extension Notification.Name {
+  static let nowiseeOpenURL = Notification.Name("nowiseeOpenURL")
 }

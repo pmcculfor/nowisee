@@ -71,7 +71,7 @@ These are not bugs. They are worth doing when you are already in that file.
 2. **Bible view dispatcher.** Done: `view/kinds.ts` is one `kind → { addLevel, payload, version, location }` table.
 3. **Gmail `view.ts`** (~580 lines). Leave as one file for now; split later if it grows.
 4. **`collectNeighborhood` unused.** Keep as a seam; apps may use it later.
-5. **Display is a DOM class.** Leave for now. Extract the three-method port before a native client.
+5. **Display is a DOM class** on the website. The iPhone client has its own Swift surface. Do not extract a shared Display port unless a third host appears.
 6. **Account register-then-sign-in.** Done: emailed six-character codes (`adb3670`).
 7. **Search tokenizer is ASCII-only.** Fine for current versions; the function is already the seam.
 8. **Host `ephemeral`.** Done: `createNowiseeHost({ ephemeral })` is an explicit flag (default `true`). Production passes `false`. Do not infer from `typeof db`.
@@ -120,7 +120,7 @@ This is not an order you have to follow — just the highest-leverage leftovers.
 2. NavPads should ignore input tips in code, not only via CSS.
 3. Review the fallbacks in §7 — keep the ones that are product policy, delete the ones that hide mistakes.
 
-Leave until a named milestone: `requestRefresh`, the status channel, the Display port, a Facebook app, a third-party sandbox, and lockbox multi-key rotation.
+Leave until a named milestone: `requestRefresh`, the status channel, a Facebook app, a third-party sandbox, and lockbox multi-key rotation.
 
 ---
 

@@ -354,7 +354,6 @@ onIntent(intent):
 - `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`), **Done** (`enter`), and **Recent apps** (`recents`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
-- Optional `skipTextFocus`: the iOS wrapper uses this so VoiceOver is not moved onto the web surface while the Direct Touch overlay owns speech.
 - Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done / Recent apps).
 
 ### Edge cases
@@ -441,7 +440,6 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
 - Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done / Recent apps or fire on explore-by-touch.
-- **Not mounted** when the iOS WKWebView host is present (`webkit.messageHandlers.nowisee`); the native overlay is the intent host then.
 
 | Edge | Intent |
 |------|--------|
@@ -458,29 +456,21 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 ---
 
-## 9c. Native WKWebView host
+## 9c. Native iPhone client
 
-**Path:** `src/shell/nativeBridge.ts` (page), `ios/` (Swift overlay)
+**Path:** `ios/` (Swift)
 
-The iPhone app is a visible `WKWebView` of the production origin plus a transparent touch overlay. It is a **fourth intent host**, same as Keyboard and NavPads: it calls `navigator.onIntent`. Apps and the server host do not know it exists.
+The iPhone app is a Swift client, not a WebView of the website. It POSTs the same `/api/apps/:id/open` and `/refresh` JSON as the browser, with the `__Host-nowisee_session` cookie and `Origin: https://nowisee.app`. It reimplements Navigator, stack, map, cache, and recents park. Apps, identity, and OAuth token exchange stay on the server. Safari still uses the TypeScript shell in [`src/core/`](../src/core/).
 
-The overlay is a Direct Touch accessibility element so one-finger swipes reach the app instead of VoiceOver. It speaks `accessibilityLabel` (and posts an announcement when the label changes). The WKWebView is hidden from VoiceOver while the overlay is up (`accessibilityViewIsModal` on the overlay). After an input node, the web view is hidden from VoiceOver immediately, but the overlay stays out of the VoiceOver tree until the node label has been unchanged for a short delay. Then one screen-changed notification moves focus onto the overlay. That way a warm working label replaced by the action result (e.g. “Signing in…” → “Sign-in was unsuccessful.”) is spoken once. A later in-place update still posts an announcement.
+VoiceOver never enters a WebView. Text nodes are one Direct Touch overlay (visible label is not its own accessibility element). A changed label posts `.announcement` so it interrupts the previous utterance. Input nodes are a native field plus Cancel / Done / Recent apps. `kind: "external"` opens `ASWebAuthenticationSession`; the callback GET runs in the same cookie jar.
 
-The page attaches the bridge only when `webkit.messageHandlers.nowisee` is present (the iOS wrapper). Safari and desktop never set that, so NavPads still mount there.
-
-### Page → native
-
-`postMessage({ mode, label, blocked })` after Display surface changes and after an intent settles. `mode === "input"` tells native to hide the overlay so VoiceOver uses the web field and Cancel/Done/Recent apps.
-
-### Native → page
-
-`window.__nowiseeNative.onIntent("prev"|"next"|"enter"|"back"|"recents")`. Other strings are ignored. The iOS overlay maps swipe right/left to `enter`/`back`, pan up/down to `prev`/`next`, and a one-second still hold to `recents`.
+Gestures: swipe right/left → `enter`/`back`; pan up/down → `prev`/`next`; one-second still hold → `recents`.
 
 ### Non-goals
 
-- A Display port or native text renderer (deferred until device spikes fail).
 - Teaching apps about swipes or User-Agent.
-- A second login path; the WebView keeps the session cookie.
+- A second login path (Account is still `open` / `refresh` nodes).
+- Porting any app folder to Swift.
 
 ---
 

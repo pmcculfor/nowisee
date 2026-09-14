@@ -28,10 +28,6 @@ export type DisplayMode = "text" | "input";
 export interface DisplayHost {
   isBlocked(): boolean;
   onIntent(intent: NavIntent): void;
-  /** Optional. Fired after mode/label change so another intent host can sync. */
-  onSurfaceChange?(): void;
-  /** When true, `showText` does not focus — a native overlay owns VoiceOver. */
-  skipTextFocus?(): boolean;
 }
 
 export class Display {
@@ -74,9 +70,7 @@ export class Display {
     this.root.appendChild(el);
     this.textEl = el;
     this.setMode("text");
-    if (this.host?.skipTextFocus?.() !== true) {
-      el.focus();
-    }
+    el.focus();
   }
 
   showInput(initialText: string, options: ShowInputOptions = {}): void {
@@ -147,7 +141,6 @@ export class Display {
         parent.removeAttribute("data-input-open");
       }
     }
-    this.host?.onSurfaceChange?.();
   }
 
   private fireIntent(intent: NavIntent): void {

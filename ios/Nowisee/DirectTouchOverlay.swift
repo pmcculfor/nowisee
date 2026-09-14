@@ -4,8 +4,8 @@ protocol DirectTouchOverlayDelegate: AnyObject {
   func overlayDidFire(_ intent: NavIntent)
 }
 
-/// Transparent Direct Touch layer. VoiceOver focuses this view (not the page)
-/// and speaks `accessibilityLabel`. Hidden on input so the WKWebView form is reachable.
+/// Direct Touch layer. VoiceOver focuses this view and speaks `accessibilityLabel`.
+/// Visible text is a separate non-accessible label so the overlay stays one element.
 final class DirectTouchOverlay: UIView {
   weak var delegate: DirectTouchOverlayDelegate?
 
@@ -21,17 +21,35 @@ final class DirectTouchOverlay: UIView {
   private let decideDistance: CGFloat = 12
   private let horizontalCommitFraction: CGFloat = 0.08
   private let horizontalMinPoints: CGFloat = 36
-  /// Allow quite diagonal enter/back: horizontal need only beat 40% of vertical.
   private let horizontalVsVertical: CGFloat = 0.4
+  private let textView = UITextView()
+  private var navigationEnabled = true
 
   override init(frame: CGRect) {
     super.init(frame: frame)
-    backgroundColor = .clear
-    isOpaque = false
+    backgroundColor = .systemBackground
+    isOpaque = true
     isAccessibilityElement = true
     accessibilityTraits.insert(.allowsDirectInteraction)
     accessibilityViewIsModal = true
     accessibilityLabel = "Nowisee"
+
+    textView.isEditable = false
+    textView.isSelectable = false
+    textView.isUserInteractionEnabled = false
+    textView.isAccessibilityElement = false
+    textView.backgroundColor = .clear
+    textView.font = .preferredFont(forTextStyle: .body)
+    textView.adjustsFontForContentSizeCategory = true
+    textView.textContainerInset = UIEdgeInsets(top: 24, left: 16, bottom: 24, right: 16)
+    textView.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(textView)
+    NSLayoutConstraint.activate([
+      textView.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+      textView.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
+      textView.leadingAnchor.constraint(equalTo: leadingAnchor),
+      textView.trailingAnchor.constraint(equalTo: trailingAnchor),
+    ])
 
     let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
     pan.maximumNumberOfTouches = 1
@@ -43,19 +61,18 @@ final class DirectTouchOverlay: UIView {
     addGestureRecognizer(hold)
   }
 
-  @objc private func handleHold(_ gesture: UILongPressGestureRecognizer) {
-    guard gesture.state == .began else {
-      return
-    }
-    delegate?.overlayDidFire(.recents)
-  }
-
   @available(*, unavailable)
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
   }
 
+  func setLabel(_ label: String) {
+    textView.text = label
+    accessibilityLabel = label
+  }
+
   func setNavigationEnabled(_ enabled: Bool) {
+    navigationEnabled = enabled
     isHidden = !enabled
     isUserInteractionEnabled = enabled
     if !enabled {
@@ -63,8 +80,6 @@ final class DirectTouchOverlay: UIView {
     }
   }
 
-  /// Direct Touch + modal. Kept separate from navigation so VoiceOver can stay
-  /// off the overlay while a working label may still be replaced.
   func setVoiceOverElement(_ enabled: Bool) {
     isAccessibilityElement = enabled
     accessibilityViewIsModal = enabled
@@ -73,7 +88,17 @@ final class DirectTouchOverlay: UIView {
     }
   }
 
+  @objc private func handleHold(_ gesture: UILongPressGestureRecognizer) {
+    guard navigationEnabled, gesture.state == .began else {
+      return
+    }
+    delegate?.overlayDidFire(.recents)
+  }
+
   @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+    guard navigationEnabled else {
+      return
+    }
     let translation = gesture.translation(in: self)
     let bounds = bounds
     guard bounds.height > 0, bounds.width > 0 else {
