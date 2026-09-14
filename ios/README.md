@@ -7,7 +7,7 @@ Safari still uses the TypeScript website. There is no WKWebView in this app.
 ## Open and run (Mac)
 
 1. Open `ios/Nowisee.xcodeproj` in Xcode.
-2. Signing & Capabilities → Team → your Apple Account. Everyday navigation works on a Personal Team. **Gmail Connect** needs a paid Apple Developer team: the project already includes Associated Domains `applinks:nowisee.app` and `webcredentials:nowisee.app` (bundle `app.nowisee.client`). Put that team’s ten-character Team ID in production `NOWISEE_IOS_TEAM_ID` so the host can serve `apple-app-site-association`.
+2. Signing & Capabilities → Team → your Apple Account (Personal Team is enough; no $99). **Gmail Connect** later needs a paid team: add Associated Domains `applinks:nowisee.app` and `webcredentials:nowisee.app` (bundle `app.nowisee.client`) and set production `NOWISEE_IOS_TEAM_ID` so the host can serve `apple-app-site-association`. Leave those entitlements out until then — they block a free-profile build.
 3. Enable Developer Mode on the iPhone (Settings → Privacy & Security).
 4. Plug in the phone, pick it as the run destination, Run.
 5. Trust the developer certificate: Settings → General → VPN & Device Management.
