@@ -46,7 +46,7 @@ describe("Account app", () => {
     h?.close();
   });
 
-  it("signed-out open starts on Sign in or register; signed-in open starts on Settings", async () => {
+  it("signed-out open starts on the email prompt; signed-in open starts on Settings", async () => {
     const made = makeHost();
     h = made.host;
     const opened = await handleSessionHttp(h, {
@@ -58,15 +58,12 @@ describe("Account app", () => {
     expect(opened.status).toBe(200);
     const body = opened.body as RefreshResult;
     expect(body.node.id).toBe(NODE.start);
-    expect(body.node.label).toBe("Sign in or register");
+    expect(body.node.label).toBe("Enter your email on the next screen to sign in or register.");
     expect(body.navigationMap[NODE.start]?.enter).toEqual({
       kind: "node",
-      toNodeId: NODE.emailPrompt,
+      toNodeId: NODE.email,
       stackBehavior: "push",
     });
-    expect(body.warm.find((n) => n.id === NODE.emailPrompt)?.label).toBe(
-      "Please enter your email on the next screen.",
-    );
     expect(body.warm.find((n) => n.id === NODE.codePrompt)?.label).toBe(
       "We sent a sign-in code to that email. Enter it on the next screen.",
     );
@@ -96,12 +93,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         stack: [
-          { nodeId: NODE.start, label: "Sign in or register", location: null },
-          {
-            nodeId: NODE.emailPrompt,
-            label: "Please enter your email on the next screen.",
-            location: null,
-          },
+          { nodeId: NODE.start, label: "Enter your email on the next screen to sign in or register.", location: null },
           { nodeId: NODE.email, label: "", location: null },
           {
             nodeId: NODE.codePrompt,

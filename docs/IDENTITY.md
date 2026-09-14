@@ -5,7 +5,7 @@
 **Owner deltas applied in this slice**
 
 - Registration is **open** by default. There is no invite code. `allowRegistration` on the host can close it later; the default is on because this product is not advertised.
-- Combined sign-in / register: one option, then email, then a six-character sign-in code sent to that email, then “Signing in…”, then “You are signed in as …”. Signed-in Account opens on Settings (a dead-end placeholder) with Sign out as the next sibling.
+- Combined sign-in / register: one email prompt, then email, then a six-character sign-in code sent to that email, then “Signing in…”, then “You are signed in as …”. Signed-in Account opens on Settings (a dead-end placeholder) with Sign out as the next sibling.
 - Secret input is a `secret` flag on the existing `input` kind, not a new `NodeKind`.
 - SQLite on a host that can keep a file; `npm start` serves the SPA and `/api` together.
 

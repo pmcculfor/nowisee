@@ -25,8 +25,7 @@ export type AccountViewDeps = {
   readonly flow: AccountFlowStore;
 };
 
-const START_LABEL = "Sign in or register";
-const EMAIL_PROMPT_LABEL = "Please enter your email on the next screen.";
+const START_LABEL = "Enter your email on the next screen to sign in or register.";
 const CODE_SENT_LABEL = "We sent a sign-in code to that email. Enter it on the next screen.";
 const CODE_THROTTLED_LABEL = "Please wait before requesting another sign-in code.";
 const SETTINGS_LABEL = "Settings. This screen is not available yet.";
@@ -38,7 +37,6 @@ const AUTH_FAILED_LABEL = "Sign-in was unsuccessful.";
 
 const SIGNED_OUT_IDS = [
   NODE.start,
-  NODE.emailPrompt,
   NODE.email,
   NODE.codePrompt,
   NODE.code,
@@ -65,9 +63,6 @@ export async function openAccount(
   }
   if (path === "/email/input") {
     return signedOutView(deps, NODE.email, ctx);
-  }
-  if (path === "/email") {
-    return signedOutView(deps, NODE.emailPrompt, ctx);
   }
   return signedOutView(deps, NODE.start, ctx);
 }
@@ -169,7 +164,6 @@ function signedOutView(
   _ctx: AppServerContext | undefined,
 ): RefreshResult {
   const start: NodePayload = { id: NODE.start, label: START_LABEL };
-  const emailPrompt: NodePayload = { id: NODE.emailPrompt, label: EMAIL_PROMPT_LABEL };
   const email: NodePayload = {
     id: NODE.email,
     label: "",
@@ -187,7 +181,6 @@ function signedOutView(
 
   const payloads = new Map<string, NodePayload>([
     [NODE.start, start],
-    [NODE.emailPrompt, emailPrompt],
     [NODE.email, email],
     [NODE.codePrompt, codePrompt],
     [NODE.code, code],
@@ -198,9 +191,6 @@ function signedOutView(
   const navigationMap = buildMap(
     {
       [NODE.start]: {
-        enter: edgeNode(NODE.emailPrompt, "push"),
-      },
-      [NODE.emailPrompt]: {
         enter: edgeNode(NODE.email, "push"),
       },
       [NODE.codePrompt]: {
@@ -209,7 +199,6 @@ function signedOutView(
     },
     rootBackToHome(NODE.start, deps.rootAppId, ACCOUNT_APP_ID),
     {
-      [NODE.emailPrompt]: { back: edgePop() },
       [NODE.codePrompt]: { back: edgePop() },
     },
     inputEdges(NODE.email, {
@@ -231,7 +220,7 @@ function signedOutView(
 
   return {
     navigationMap,
-    warm: [start, emailPrompt, email, codePrompt, code, auth],
+    warm: [start, email, codePrompt, code, auth],
     node: tip,
     location: locationFor(tip.id),
   };
@@ -354,8 +343,6 @@ function locationFor(tipId: string): AppLocation | null {
   switch (tipId) {
     case NODE.start:
       return { appId: ACCOUNT_APP_ID, path: "/" };
-    case NODE.emailPrompt:
-      return { appId: ACCOUNT_APP_ID, path: "/email" };
     case NODE.email:
       return { appId: ACCOUNT_APP_ID, path: "/email/input" };
     case NODE.codePrompt:
