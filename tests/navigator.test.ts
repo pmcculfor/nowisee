@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Display } from "../src/core/display.ts";
 import { NavigationMapStore } from "../src/core/navigationMap.ts";
-import { Navigator, LOAD_FAILURE_LABEL } from "../src/core/navigator.ts";
+import { Navigator, LOAD_FAILURE_LABEL, ACTION_FAILURE_LABEL } from "../src/core/navigator.ts";
 import { NodeCache } from "../src/core/nodeCache.ts";
 import { PlatformCapabilities } from "../src/core/platform.ts";
 import { AppRegistry } from "../src/core/registry.ts";
@@ -76,10 +76,79 @@ function createRecentsStub(): { app: AppModule; calls: FakeCall[] } {
         calls.push({ method: "open", path, extras: { ...extras } });
         return view(extras);
       },
-      refresh(stack, extras = {}) {
-        calls.push({ method: "refresh", stack, extras: { ...extras } });
-        return view(extras, stack[stack.length - 1]?.nodeId);
+      refresh(nodeId, extras = {}) {
+        calls.push({ method: "refresh", nodeId, extras: { ...extras } });
+        return view(extras, nodeId);
       },
+    },
+  };
+}
+
+function overlayApp(opts?: { nestContacts?: boolean }): AppModule {
+  const nest = opts?.nestContacts === true;
+  function view(nodeId: string): RefreshResult {
+    const payloads: Record<string, { id: string; label: string }> = {
+      root: { id: "root", label: "Root" },
+      child: { id: "child", label: "Child" },
+      a: { id: "a", label: "A" },
+      b: { id: "b", label: "B" },
+      contacts: { id: "contacts", label: "Contacts" },
+    };
+    const node = payloads[nodeId] ?? payloads.root!;
+    return {
+      navigationMap: {
+        root: {
+          enter: { kind: "node", toNodeId: "child", stackBehavior: "push" },
+          back: { kind: "app", to: { appId: "home", path: "/" } },
+        },
+        child: {
+          enter: {
+            kind: "node",
+            toNodeId: "a",
+            stackBehavior: "pushTransient",
+            frame: "menu",
+          },
+          back: { kind: "node", stackBehavior: "pop" },
+        },
+        a: {
+          enter: {
+            kind: "node",
+            toNodeId: "b",
+            stackBehavior: "pushTransient",
+            frame: "menu",
+          },
+          ...(nest
+            ? {
+                next: {
+                  kind: "node",
+                  toNodeId: "contacts",
+                  stackBehavior: "pushTransient",
+                  frame: "contacts",
+                },
+              }
+            : {}),
+          back: { kind: "node", stackBehavior: "popTransient" },
+        },
+        b: {
+          back: { kind: "node", stackBehavior: "popTransient" },
+        },
+        contacts: {
+          back: { kind: "node", stackBehavior: "popTransient" },
+        },
+      },
+      warm: Object.values(payloads),
+      node,
+      location: { appId: "overlay", path: "/" },
+    };
+  }
+  return {
+    id: "overlay",
+    label: "Overlay",
+    open() {
+      return view("root");
+    },
+    refresh(nodeId) {
+      return view(nodeId);
     },
   };
 }
@@ -603,7 +672,7 @@ describe("Navigator + Router contracts", () => {
     const refreshCalls = h.fake.calls.filter((c) => c.method === "refresh");
     expect(refreshCalls).toHaveLength(2);
     expect(refreshCalls[0]!.extras.signal?.aborted).toBe(false);
-    expect(refreshCalls[1]!.stack?.at(-1)?.nodeId).toBe("copy");
+    expect(refreshCalls[1]!.nodeId).toBe("copy");
     expect(visibleText(h.root)).toBe("Copy");
   });
 
@@ -645,7 +714,7 @@ describe("Navigator + Router contracts", () => {
     expect(h.map.lookup("b", "prev")?.kind).toBe("node");
     const refreshCalls = h.fake.calls.filter((c) => c.method === "refresh");
     expect(refreshCalls.length).toBe(2);
-    expect(refreshCalls[1]!.stack?.at(-1)?.nodeId).toBe("b");
+    expect(refreshCalls[1]!.nodeId).toBe("b");
   });
 
   it("stale refresh that omits the live tip does not replace warm", async () => {
@@ -687,9 +756,9 @@ describe("Navigator + Router contracts", () => {
           location: { appId: "probe", path: "/here" },
         };
       },
-      async refresh(stack) {
+      async refresh(nodeId) {
         refreshCount += 1;
-        const tipId = stack[stack.length - 1]?.nodeId ?? "here";
+        const tipId = nodeId || "here";
         if (refreshCount === 1) {
           await firstGate();
         }
@@ -816,9 +885,9 @@ describe("Navigator + Router contracts", () => {
           location: { appId: "probe", path: "/here" },
         };
       },
-      async refresh(stack) {
+      async refresh(nodeId) {
         refreshCount += 1;
-        const tipId = stack[stack.length - 1]?.nodeId ?? "here";
+        const tipId = nodeId || "here";
         if (refreshCount === 1) {
           await firstGate();
         }
@@ -970,16 +1039,18 @@ describe("Navigator + Router contracts", () => {
     hold = true;
 
     h.navigator.onIntent("enter"); // action → copy-status
-    // Supersede with navigation away before action settles
-    h.navigator.onIntent("back");
+    h.navigator.onIntent("back"); // blocked for the whole action call
+    h.navigator.onIntent("enter"); // must not re-issue
 
     release();
     await flush();
     await flush();
 
-    const actionCalls = h.fake.calls.filter((c) => c.extras.action === true);
+    const actionCalls = h.fake.calls.filter((c) => c.extras.action);
     expect(actionCalls.length).toBe(1);
+    expect(actionCalls[0]!.extras.action).toEqual({ triggerId: "copy" });
     expect(actionCalls[0]!.extras.signal?.aborted).toBe(false);
+    expect(h.fake.effects).toEqual(["copy"]);
   });
 
   it("extras.action only on action edge traversal — not warm revalidation or re-entry", async () => {
@@ -988,7 +1059,7 @@ describe("Navigator + Router contracts", () => {
     await intent(h.navigator, "enter"); // to copy (no action)
     await intent(h.navigator, "enter"); // action to copy-status
 
-    const actionCalls = h.fake.calls.filter((c) => c.extras.action === true);
+    const actionCalls = h.fake.calls.filter((c) => c.extras.action);
     expect(actionCalls).toHaveLength(1);
     expect(actionCalls[0]!.method).toBe("refresh");
     expect(h.fake.effects).toEqual(["copy"]);
@@ -999,7 +1070,7 @@ describe("Navigator + Router contracts", () => {
     expect(h.fake.effects).toEqual(["copy"]);
 
     await intent(h.navigator, "next");
-    expect(h.fake.calls.filter((c) => c.extras.action === true)).toHaveLength(1);
+    expect(h.fake.calls.filter((c) => c.extras.action)).toHaveLength(1);
   });
 
   it("copies clipboardText from an action result onto the device clipboard", async () => {
@@ -1323,5 +1394,201 @@ describe("Navigator recents / resume", () => {
     expect(h.navigator.getCurrentAppId()).toBe("fake");
     expect(visibleText(h.root)).toBe("Root");
     expect(h.fake.calls.filter((c) => c.method === "open").length).toBeGreaterThan(0);
+  });
+
+  it("stay action refreshes in place and blocks a second enter", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "enter"); // child
+    await intent(h.navigator, "next"); // ping
+    expect(visibleText(h.root)).toBe("Ping");
+    const depth = h.stack.length;
+    await intent(h.navigator, "enter");
+    expect(h.stack.length).toBe(depth);
+    expect(h.stack.tip()?.nodeId).toBe("ping");
+    expect(visibleText(h.root)).toBe("Pong");
+    expect(h.fake.effects).toEqual(["ping"]);
+    expect(h.fake.calls.find((c) => c.extras.action)?.extras.action).toEqual({ triggerId: "ping" });
+    await intent(h.navigator, "enter");
+    expect(h.fake.effects).toEqual(["ping"]);
+  });
+
+  it("replace onto its own fromNodeId is a silent no-op", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    h.map.replace({
+      root: {
+        next: { kind: "node", toNodeId: "root", stackBehavior: "replace" },
+      },
+    });
+    const token = h.navigator.getTransitionToken();
+    h.navigator.onIntent("next");
+    expect(h.navigator.getTransitionToken()).toBe(token);
+    expect(h.stack.tip()?.nodeId).toBe("root");
+  });
+
+  it("pushTransient without a frame is a silent no-op", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    h.map.replace({
+      root: {
+        enter: { kind: "node", toNodeId: "child", stackBehavior: "pushTransient" },
+      },
+    });
+    const token = h.navigator.getTransitionToken();
+    h.navigator.onIntent("enter");
+    expect(h.navigator.getTransitionToken()).toBe(token);
+    expect(h.stack.tip()?.nodeId).toBe("root");
+  });
+
+  it("popTransient unwinds one named frame and never pops the last entry", async () => {
+    const h = harness();
+    h.registry.register(overlayApp());
+    await h.navigator.openLocation({ appId: "overlay", path: "/" });
+    await intent(h.navigator, "enter"); // child
+    await intent(h.navigator, "enter"); // a, frame menu
+    expect(h.stack.tip()?.frame).toBe("menu");
+    await intent(h.navigator, "enter"); // b, same frame
+    expect(h.stack.length).toBe(4);
+    await intent(h.navigator, "back");
+    expect(h.stack.tip()?.nodeId).toBe("child");
+    expect(h.stack.tip()?.frame).toBeUndefined();
+  });
+
+  it("popTransient at depth 1 recovers to Home without popping first", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    const root = h.stack.tip()!;
+    h.stack.replaceTip({ ...root, frame: "menu" });
+    h.map.replace({
+      root: {
+        back: { kind: "node", stackBehavior: "popTransient" },
+      },
+    });
+    await intent(h.navigator, "back");
+    expect(h.navigator.getCurrentAppId()).toBe("home");
+    expect(visibleText(h.root)).toBe("Home");
+  });
+
+  it("popTransient pops only the innermost nested frame", async () => {
+    const h = harness();
+    h.registry.register(overlayApp({ nestContacts: true }));
+    await h.navigator.openLocation({ appId: "overlay", path: "/" });
+    await intent(h.navigator, "enter"); // child
+    await intent(h.navigator, "enter"); // a, menu
+    await intent(h.navigator, "next"); // contacts, nested frame
+    expect(h.stack.tip()?.frame).toBe("contacts");
+    expect(h.stack.length).toBe(4);
+    await intent(h.navigator, "back");
+    expect(h.stack.tip()?.nodeId).toBe("a");
+    expect(h.stack.tip()?.frame).toBe("menu");
+  });
+
+  it("triggerId is the node that was tip before the local move", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "next"); // a
+    await intent(h.navigator, "enter"); // copy
+    await intent(h.navigator, "enter"); // copy-status
+    const actionCall = h.fake.calls.find((c) => c.extras.action);
+    expect(actionCall?.nodeId).toBe("copy-status");
+    expect(actionCall?.extras.action).toEqual({ triggerId: "copy" });
+  });
+
+  it("open ancestry is installed when the last entry is the tip", async () => {
+    const h = harness();
+    const nested: AppModule = {
+      id: "nested",
+      label: "Nested",
+      open() {
+        return {
+          navigationMap: {
+            book: { enter: { kind: "node", toNodeId: "verse", stackBehavior: "push" } },
+            verse: { back: { kind: "node", stackBehavior: "pop" } },
+          },
+          warm: [
+            { id: "book", label: "Book" },
+            { id: "verse", label: "Verse" },
+          ],
+          node: { id: "verse", label: "Verse" },
+          location: { appId: "nested", path: "/book/1" },
+          stack: [
+            { nodeId: "book", label: "Book", location: { appId: "nested", path: "/book" } },
+            { nodeId: "verse", label: "Verse", location: { appId: "nested", path: "/book/1" } },
+          ],
+        };
+      },
+      refresh(nodeId) {
+        return {
+          navigationMap: {
+            book: { enter: { kind: "node", toNodeId: "verse", stackBehavior: "push" } },
+            verse: { back: { kind: "node", stackBehavior: "pop" } },
+          },
+          warm: [{ id: nodeId, label: nodeId === "verse" ? "Verse" : "Book" }],
+          node: { id: nodeId, label: nodeId === "verse" ? "Verse" : "Book" },
+          location: { appId: "nested", path: nodeId === "verse" ? "/book/1" : "/book" },
+        };
+      },
+    };
+    h.registry.register(nested);
+    await h.navigator.openLocation({ appId: "nested", path: "/book/1" });
+    expect(h.stack.snapshot().map((e) => e.nodeId)).toEqual(["book", "verse"]);
+    await intent(h.navigator, "back");
+    expect(h.stack.tip()?.nodeId).toBe("book");
+  });
+
+  it("discards open ancestry when an ancestor location is not canonical", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const h = harness();
+    const nested: AppModule = {
+      id: "nested",
+      label: "Nested",
+      open() {
+        return {
+          navigationMap: { verse: {} },
+          warm: [{ id: "verse", label: "Verse" }],
+          node: { id: "verse", label: "Verse" },
+          location: { appId: "nested", path: "/book/1" },
+          stack: [
+            { nodeId: "book", label: "Book", location: { appId: "nested", path: "book" } },
+            { nodeId: "verse", label: "Verse", location: { appId: "nested", path: "/book/1" } },
+          ],
+        };
+      },
+      refresh(nodeId) {
+        return {
+          navigationMap: { verse: {} },
+          warm: [{ id: nodeId, label: "Verse" }],
+          node: { id: nodeId, label: "Verse" },
+          location: { appId: "nested", path: "/book/1" },
+        };
+      },
+    };
+    h.registry.register(nested);
+    await h.navigator.openLocation({ appId: "nested", path: "/book/1" });
+    expect(h.stack.snapshot().map((e) => e.nodeId)).toEqual(["verse"]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("action failure offers back only and does not re-issue on enter", async () => {
+    const h = harness();
+    await h.navigator.openLocation({ appId: "fake", path: "/" });
+    await intent(h.navigator, "enter");
+    await intent(h.navigator, "next");
+    const original = h.fake.app.refresh;
+    h.fake.app.refresh = async (nodeId, extras) => {
+      if (extras?.action) {
+        throw new Error("write failed");
+      }
+      return original.call(h.fake.app, nodeId, extras);
+    };
+    await intent(h.navigator, "enter");
+    expect(visibleText(h.root)).toBe(ACTION_FAILURE_LABEL);
+    const before = h.fake.calls.filter((c) => c.extras.action).length;
+    await intent(h.navigator, "enter");
+    expect(h.fake.calls.filter((c) => c.extras.action).length).toBe(before);
+    await intent(h.navigator, "back");
+    expect(visibleText(h.root)).toBe("Ping");
   });
 });

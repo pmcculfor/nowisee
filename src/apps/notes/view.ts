@@ -14,10 +14,10 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
+import { isActionExtras } from "../../core/types.ts";
 import {
   CREATE_EDIT_NODE_ID,
   CREATE_NODE_ID,
-  CREATE_RESULT_NODE_ID,
   firstLineLabel,
   noteEditNodeId,
   noteNodeId,
@@ -49,8 +49,8 @@ export async function buildNotesView(
     return signedOutNotes(deps, ctx);
   }
 
-  if (extras.action) {
-    return applyAction(deps, ownerId, tipId, extras);
+  if (isActionExtras(extras)) {
+    await applyAction(deps, ownerId, tipId, extras);
   }
 
   const notes = await deps.store.list(ownerId);
@@ -125,32 +125,25 @@ async function applyAction(
   ownerId: string,
   tipId: string,
   extras: RefreshExtras,
-): Promise<RefreshResult> {
+): Promise<void> {
   if (extras.inputText === undefined) {
-    const notes = await deps.store.list(ownerId);
-    return viewFromNotes(deps, notes, tipId);
+    return;
   }
   const text = extras.inputText;
+  const triggerId = extras.action?.triggerId ?? tipId;
 
-  if (tipId === CREATE_RESULT_NODE_ID) {
-    const created = await deps.store.create(ownerId, text);
-    const notes = await deps.store.list(ownerId);
-    return viewFromNotes(deps, notes, noteNodeId(created.id));
+  if (triggerId === CREATE_EDIT_NODE_ID) {
+    const mintedId = parseNoteNodeId(tipId);
+    if (mintedId) {
+      await deps.store.create(ownerId, text, mintedId);
+    }
+    return;
   }
 
-  const noteId = parseNoteNodeId(tipId);
-  if (noteId) {
-    const updated = await deps.store.update(ownerId, noteId, text);
-    const notes = await deps.store.list(ownerId);
-    return viewFromNotes(
-      deps,
-      notes,
-      updated ? noteNodeId(noteId) : defaultListTip(notes),
-    );
+  const editId = parseNoteEditNodeId(triggerId);
+  if (editId) {
+    await deps.store.update(ownerId, editId, text);
   }
-
-  const notes = await deps.store.list(ownerId);
-  return viewFromNotes(deps, notes, defaultListTip(notes));
 }
 
 function viewFromNotes(
@@ -169,11 +162,6 @@ function viewFromNotes(
     id: CREATE_EDIT_NODE_ID,
     label: "",
     kind: "input",
-  });
-  // Warm placeholder so a warm-hit create commit can paint before refresh repairs.
-  payloads.set(CREATE_RESULT_NODE_ID, {
-    id: CREATE_RESULT_NODE_ID,
-    label: "Saving…",
   });
 
   for (const note of notes) {
@@ -222,12 +210,11 @@ function buildNavigationMap(
     },
     // Done (enter) saves; Cancel (back) returns to Create a note.
     inputEdges(CREATE_EDIT_NODE_ID, {
-      commitTo: CREATE_RESULT_NODE_ID,
+      commitTo: noteNodeId(crypto.randomUUID()),
       backTo: CREATE_NODE_ID,
       action: true,
       commitStackBehavior: "replace",
     }),
-    rootBackToHome(CREATE_RESULT_NODE_ID, rootAppId, NOTES_APP_ID),
   ];
 
   for (const note of notes) {
@@ -263,10 +250,6 @@ function locationFor(tipId: string): AppLocation | null {
   }
   if (tipId === CREATE_EDIT_NODE_ID) {
     return { appId: NOTES_APP_ID, path: "/create/edit" };
-  }
-  if (tipId === CREATE_RESULT_NODE_ID) {
-    // Transient — keep prior address bar until tip is repaired.
-    return null;
   }
   const noteId = parseNoteNodeId(tipId);
   if (noteId) {

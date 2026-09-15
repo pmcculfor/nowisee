@@ -1,11 +1,14 @@
 import {
-  edgeAction,
   edgeNode,
   edgePop,
+  edgePopTransient,
+  edgePushTransient,
+  edgeStay,
   siblingListEdges,
   type MapFragment,
 } from "../../../app-kit/index.ts";
 import type { NodePayload } from "../../../core/types.ts";
+import { isActionExtras } from "../../../core/types.ts";
 import {
   SEARCH_POLICY,
   VERSE_OPTIONS,
@@ -44,6 +47,8 @@ import {
   type ViewSession,
 } from "./helpers.ts";
 
+export const VERSE_MENU_FRAME = "verse-menu";
+
 export function addVerseLevel(
   session: ViewSession,
   payloads: Map<string, NodePayload>,
@@ -67,8 +72,7 @@ export function addVerseLevel(
   fragments.push({
     [tip]: {
       ...(enter ? { enter } : {}),
-      back:
-        seq.type === "chapter" ? edgeNode(chapterId(ref.bookId, ref.chapter), "replace") : edgePop(),
+      back: seq.type === "chapter" ? edgePop() : edgePop(),
     },
   });
   if (seq.type === "search") {
@@ -89,7 +93,9 @@ function verseEnter(seq: VerseSequence, ref: CanonRef) {
     return edgeNode(verseNodeId(contextSeq(ref.bookId, ref.chapter), ref), "push");
   }
   const firstOption = VERSE_OPTIONS[0];
-  return firstOption ? edgeNode(optionId(ref, firstOption.type, seq), "replace") : undefined;
+  return firstOption
+    ? edgePushTransient(optionId(ref, firstOption.type, seq), VERSE_MENU_FRAME)
+    : undefined;
 }
 
 function sameCanon(a: CanonRef, b: CanonRef): boolean {
@@ -242,7 +248,7 @@ export function addOptionLevel(
     fragments.push({
       [id]: {
         enter: optionEnter(session, seq, ref, option.type),
-        back: edgeNode(verseNodeId(seq, ref), "replace"),
+        back: edgePop(),
       },
     });
   }
@@ -269,26 +275,34 @@ export function optionEnter(
   option: "copy" | "bookmark" | "versions" | "commentary",
 ) {
   if (option === "copy") {
-    return edgeAction(optionId(ref, "copy", seq), { stackBehavior: "replace" });
+    const id = optionId(ref, "copy", seq);
+    if (justCopied(session, id)) {
+      return undefined;
+    }
+    return edgeStay({ action: true });
   }
   if (option === "bookmark") {
     if (!session.userId) {
       return edgeNode(signInId(), "push");
     }
-    return edgeAction(optionId(ref, "bookmark", seq), { stackBehavior: "replace" });
+    return edgeStay({ action: true });
   }
   if (option === "versions") {
     const firstVersion = listedVersions(session)[0];
     if (!firstVersion) {
       return undefined;
     }
-    return edgeNode(verseVersionPickId(ref, firstVersion.id, seq), "replace");
+    return edgePushTransient(verseVersionPickId(ref, firstVersion.id, seq), VERSE_MENU_FRAME);
   }
   const firstWork = listedCommentaries(session)[0];
   if (!firstWork) {
     return edgeNode(commentaryListId(ref), "push");
   }
   return edgeNode(commentaryWorkId(ref, firstWork.id), "push");
+}
+
+function justCopied(session: ViewSession, copyId: string): boolean {
+  return isActionExtras(session.extras) && session.extras.action.triggerId === copyId;
 }
 
 export function optionNodeLabel(
@@ -327,8 +341,8 @@ export function addVerseVersionList(
     const id = verseVersionPickId(ref, item.id, seq);
     fragments.push({
       [id]: {
-        enter: edgeAction(id, { stackBehavior: "replace" }),
-        back: edgeNode(optionId(ref, "versions", seq), "replace"),
+        enter: edgePopTransient({ action: true }),
+        back: edgePop(),
       },
     });
   }
@@ -349,7 +363,7 @@ export function addRootVersionList(
     const id = versionPickId(item.id);
     fragments.push({
       [id]: {
-        enter: edgeAction(id, { stackBehavior: "replace" }),
+        enter: edgePopTransient({ action: true }),
         back: edgePop(),
       },
     });

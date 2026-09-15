@@ -48,18 +48,38 @@ export function createSqliteNotesStore(db: Db, options: SqliteNotesStoreOptions 
       );
       return row ? fromRow(row) : null;
     },
-    async create(ownerId, body) {
+    async create(ownerId, body, id) {
       const ts = now();
-      const id = idFactory();
+      const noteId = id ?? idFactory();
+      const clash = db.get<{ owner_id: string }>(
+        "SELECT owner_id FROM notes WHERE id = ?",
+        noteId,
+      );
+      if (clash) {
+        if (clash.owner_id !== ownerId) {
+          return { id: noteId, body, createdAt: ts, updatedAt: ts };
+        }
+        const existing = db.get<{
+          id: string;
+          body: string;
+          created_at: string;
+          updated_at: string;
+        }>(
+          "SELECT id, body, created_at, updated_at FROM notes WHERE id = ? AND owner_id = ?",
+          noteId,
+          ownerId,
+        );
+        return existing ? fromRow(existing) : { id: noteId, body, createdAt: ts, updatedAt: ts };
+      }
       db.run(
         "INSERT INTO notes (id, owner_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        id,
+        noteId,
         ownerId,
         body,
         ts,
         ts,
       );
-      return { id, body, createdAt: ts, updatedAt: ts };
+      return { id: noteId, body, createdAt: ts, updatedAt: ts };
     },
     async update(ownerId, id, body) {
       const existing = db.get<{ created_at: string }>(

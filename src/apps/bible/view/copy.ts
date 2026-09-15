@@ -1,13 +1,13 @@
-import type { RefreshResult } from "../../../core/types.ts";
 import { formatRef } from "../canon.ts";
 import type { CanonRef } from "../types.ts";
-import { activeVersion, bookLabel, slotVerseId, withTipLabel, type ViewSession } from "./helpers.ts";
+import { activeVersion, bookLabel, slotVerseId, type ViewSession } from "./helpers.ts";
 
-export function resolveCopy(
-  session: ViewSession,
-  ref: CanonRef,
-  view: RefreshResult,
-): RefreshResult {
+export type ActionContribution = {
+  readonly statusLabel?: string;
+  readonly clipboardText?: string;
+};
+
+export function resolveCopy(session: ViewSession, ref: CanonRef): ActionContribution {
   const version = activeVersion(session);
   const verseId = slotVerseId(session.deps.store, ref);
   const text =
@@ -16,6 +16,8 @@ export function resolveCopy(
     text !== null && version
       ? `${formatRef(bookLabel(session.deps.store, ref.bookId), ref)}. ${text} (${version.abbreviation})`
       : null;
-  const labeled = withTipLabel(view, line ? "Copied" : "Copy failed: verse not found.");
-  return line ? { ...labeled, clipboardText: line } : labeled;
+  if (!line) {
+    return { statusLabel: "Copy failed: verse not found." };
+  }
+  return { statusLabel: "Copied", clipboardText: line };
 }

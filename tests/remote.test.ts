@@ -14,11 +14,11 @@ describe("toWireExtras", () => {
   it("keeps action and inputText; drops the abort signal", () => {
     expect(
       toWireExtras({
-        action: true,
+        action: { triggerId: "n1" },
         inputText: "hi",
         signal: new AbortController().signal,
       }),
-    ).toEqual({ action: true, inputText: "hi" });
+    ).toEqual({ action: { triggerId: "n1" }, inputText: "hi" });
   });
 
   it("omits action when absent", () => {
@@ -40,20 +40,20 @@ describe("createRemoteApp", () => {
         calls.push({ method: "open", appId, path, extras });
         return emptyResult;
       },
-      async refresh(appId, stack, extras) {
-        calls.push({ method: "refresh", appId, stack, extras });
+      async refresh(appId, nodeId, extras) {
+        calls.push({ method: "refresh", appId, nodeId, extras });
         return emptyResult;
       },
     };
     const app = createRemoteApp({ id: "bible", label: "Bible", rpc });
-    await app.open("/", { action: true });
-    await app.refresh([{ nodeId: "a", label: "A", location: null }], { inputText: "x" });
+    await app.open("/", { action: { triggerId: "root" } });
+    await app.refresh("a", { inputText: "x" });
     expect(calls).toEqual([
-      { method: "open", appId: "bible", path: "/", extras: { action: true } },
+      { method: "open", appId: "bible", path: "/", extras: { action: { triggerId: "root" } } },
       {
         method: "refresh",
         appId: "bible",
-        stack: [{ nodeId: "a", label: "A", location: null }],
+        nodeId: "a",
         extras: { inputText: "x" },
       },
     ]);

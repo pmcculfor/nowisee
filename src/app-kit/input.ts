@@ -1,17 +1,34 @@
-import type { NavEdge } from "../core/types.ts";
-import { edgeAction, edgeNode, edgePop, type EdgeFlags } from "./edges.ts";
+import type { NavEdge, StackBehavior } from "../core/types.ts";
+import {
+  edgeAction,
+  edgeNode,
+  edgePop,
+  edgePopTransient,
+  edgeStay,
+  type EdgeFlags,
+} from "./edges.ts";
 import type { MapFragment } from "./lists.ts";
 
+export type InputCommitBehavior = Extract<
+  StackBehavior,
+  "push" | "replace" | "stay" | "pushTransient" | "popTransient"
+>;
+
 export type InputEdgesOptions = {
-  /** Destination node for the commit edge (`passInputText`, optional `action`). */
-  readonly commitTo: string;
   /**
-   * Cancel (`back`): a node id to replace to, or `"pop"` for a pop edge.
+   * Destination for push / replace / pushTransient commits.
+   * Omit when commitStackBehavior is stay or popTransient.
    */
-  readonly backTo: string | "pop";
+  readonly commitTo?: string;
+  /**
+   * Cancel (`back`): a node id to replace to, `"pop"`, or `"popTransient"`.
+   */
+  readonly backTo: string | "pop" | "popTransient";
   /** When true, commit edge also carries `action: true` (e.g. Save / Send). */
   readonly action?: boolean;
-  readonly commitStackBehavior?: "push" | "replace";
+  readonly commitStackBehavior?: InputCommitBehavior;
+  /** Required when commitStackBehavior is pushTransient. */
+  readonly commitFrame?: string;
 };
 
 /**
@@ -19,17 +36,18 @@ export type InputEdgesOptions = {
  * Done (`enter`) commits; Cancel (`back`) abandons via `backTo`.
  */
 export function inputEdges(inputId: string, opts: InputEdgesOptions): MapFragment {
-  const commitFlags: EdgeFlags = {
+  const flags: EdgeFlags = {
     passInputText: true,
     ...(opts.action ? { action: true } : {}),
   };
-  const stackBehavior = opts.commitStackBehavior ?? "push";
-
-  const commit: NavEdge = opts.action
-    ? edgeAction(opts.commitTo, { stackBehavior, passInputText: true })
-    : edgeNode(opts.commitTo, stackBehavior, commitFlags);
-
-  const back: NavEdge = opts.backTo === "pop" ? edgePop() : edgeNode(opts.backTo, "replace");
+  const stackBehavior: InputCommitBehavior = opts.commitStackBehavior ?? "push";
+  const commit = commitEdge(opts, flags, stackBehavior);
+  const back: NavEdge =
+    opts.backTo === "pop"
+      ? edgePop()
+      : opts.backTo === "popTransient"
+        ? edgePopTransient()
+        : edgeNode(opts.backTo, "replace");
 
   return {
     [inputId]: {
@@ -37,4 +55,31 @@ export function inputEdges(inputId: string, opts: InputEdgesOptions): MapFragmen
       back,
     },
   };
+}
+
+function commitEdge(
+  opts: InputEdgesOptions,
+  flags: EdgeFlags,
+  stackBehavior: InputCommitBehavior,
+): NavEdge {
+  if (stackBehavior === "stay") {
+    return edgeStay(flags);
+  }
+  if (stackBehavior === "popTransient") {
+    return edgePopTransient(flags);
+  }
+  const dest = opts.commitTo;
+  if (!dest) {
+    return edgeStay(flags);
+  }
+  if (stackBehavior === "pushTransient") {
+    return edgeNode(dest, "pushTransient", {
+      ...flags,
+      frame: opts.commitFrame ?? "",
+    });
+  }
+  if (opts.action) {
+    return edgeAction(dest, { stackBehavior, passInputText: true });
+  }
+  return edgeNode(dest, stackBehavior, flags);
 }

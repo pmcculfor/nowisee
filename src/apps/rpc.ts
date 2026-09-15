@@ -1,11 +1,11 @@
-import type { RefreshExtras, RefreshResult, StackEntry } from "../core/types.ts";
+import type { ActionExtras, RefreshExtras, RefreshResult } from "../core/types.ts";
 
 /**
  * Extras that survive the app RPC. No abort signal.
  */
 export type WireExtras = {
   readonly inputText?: string;
-  readonly action?: boolean;
+  readonly action?: ActionExtras;
   readonly parkedAppIds?: readonly string[];
 };
 
@@ -18,19 +18,23 @@ export type AppRpc = {
   ): Promise<RefreshResult>;
   refresh(
     appId: string,
-    stack: readonly StackEntry[],
+    nodeId: string,
     extras: WireExtras,
     signal?: AbortSignal,
   ): Promise<RefreshResult>;
 };
 
 export function toWireExtras(extras: RefreshExtras): WireExtras {
-  const wire: { inputText?: string; action?: boolean; parkedAppIds?: readonly string[] } = {};
+  const wire: {
+    inputText?: string;
+    action?: ActionExtras;
+    parkedAppIds?: readonly string[];
+  } = {};
   if (extras.inputText !== undefined) {
     wire.inputText = extras.inputText;
   }
   if (extras.action) {
-    wire.action = true;
+    wire.action = { triggerId: extras.action.triggerId };
   }
   if (extras.parkedAppIds) {
     wire.parkedAppIds = extras.parkedAppIds;
@@ -65,10 +69,10 @@ export function createFetchRpc(): AppRpc {
         signal,
       );
     },
-    refresh(appId, stack, extras, signal) {
+    refresh(appId, nodeId, extras, signal) {
       return post(
         `/api/apps/${encodeURIComponent(appId)}/refresh`,
-        { stack, extras },
+        { nodeId, extras },
         signal,
       );
     },

@@ -25,6 +25,7 @@ import {
   type WeatherStore,
 } from "../src/apps/weather/types.ts";
 import type { AppServerContext } from "../src/core/types.ts";
+import { refreshApp } from "./helpers/refreshCall.ts";
 
 const USER = "user-1";
 const OTHER = "user-2";
@@ -136,7 +137,7 @@ describe("Weather app graph", () => {
     expect(client.lookups).toEqual([]);
     expect(await store.getZip(USER)).toBe(ZIP);
 
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
       { action: true, inputText: "10001" },
       signedOutCtx(),
@@ -178,7 +179,7 @@ describe("Weather app graph", () => {
 
   it("Done with a 5-digit zip saves, looks up once, and tips current", async () => {
     const { app, store, client } = harness();
-    const result = await app.refresh(
+    const result = await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
       { action: true, inputText: ZIP },
       signedIn(),
@@ -192,7 +193,7 @@ describe("Weather app graph", () => {
 
   it("Done with ZIP+4 stores the first five digits", async () => {
     const { app, store, client } = harness();
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
       { action: true, inputText: "90210-1234" },
       signedIn(),
@@ -215,12 +216,12 @@ describe("Weather app graph", () => {
     expect(result.navigationMap[NODE.place]?.enter).toEqual({
       kind: "node",
       toNodeId: NODE.placeEdit,
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "weather-zip",
     });
     expect(result.navigationMap[NODE.placeEdit]?.back).toEqual({
       kind: "node",
-      toNodeId: NODE.place,
-      stackBehavior: "replace",
+      stackBehavior: "popTransient",
     });
     expect(client.lookups).toEqual([ZIP]);
   });
@@ -245,7 +246,7 @@ describe("Weather app graph", () => {
   it("looks up weather on every open and refresh; zip row is unchanged", async () => {
     const { app, store, client } = harness({ zipByUser: { [USER]: ZIP } });
     await app.open("/", {}, signedIn());
-    await app.refresh([{ nodeId: NODE.current, label: SAMPLE.currentLabel, location: null }], {}, signedIn());
+    await refreshApp(app,[{ nodeId: NODE.current, label: SAMPLE.currentLabel, location: null }], {}, signedIn());
     await app.open("/place", {}, signedIn());
     expect(client.lookups).toEqual([ZIP, ZIP, ZIP]);
     expect(await store.getZip(USER)).toBe(ZIP);
@@ -253,7 +254,7 @@ describe("Weather app graph", () => {
 
   it("invalid zip does not look up or save", async () => {
     const { app, store, client } = harness();
-    const result = await app.refresh(
+    const result = await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
       { action: true, inputText: "abc" },
       signedIn(),
@@ -276,7 +277,7 @@ describe("Weather app graph", () => {
       errorByZip: { "00000": new WeatherClientError("not-found") },
     });
     const { app, store } = harness({ zipByUser: { [USER]: ZIP }, client });
-    const result = await app.refresh(
+    const result = await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
       { action: true, inputText: "00000" },
       signedIn(),
@@ -326,7 +327,7 @@ describe("Weather app graph", () => {
     const other = await app.open("/", {}, signedIn(OTHER));
     expect(other.warm.find((n) => n.id === NODE.place)?.label).toBe(placeLabel("10001"));
 
-    const forged = await app.refresh(
+    const forged = await refreshApp(app,
       [{ nodeId: dayNodeId("1999-01-01"), label: "Gone", location: null }],
       {},
       signedIn(USER),
@@ -336,7 +337,7 @@ describe("Weather app graph", () => {
 
   it("does not save without extras.action", async () => {
     const { app, store, client } = harness({ zipByUser: { [USER]: ZIP } });
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: NODE.placeEdit, label: ZIP, location: null }],
       { inputText: "10001" },
       signedIn(),
@@ -347,7 +348,7 @@ describe("Weather app graph", () => {
 
   it("does not save when action is set but typed text is missing", async () => {
     const { app, store } = harness({ zipByUser: { [USER]: ZIP } });
-    const result = await app.refresh(
+    const result = await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
       { action: true },
       signedIn(),

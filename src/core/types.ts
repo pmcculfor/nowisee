@@ -15,7 +15,13 @@ export type NavIntent =
   | "back" // ascend / return / abandon from an input node
   | (string & {}); // apps may define extra symbolic intents; delivered only if bound
 
-export type StackBehavior = "push" | "replace" | "pop";
+export type StackBehavior =
+  | "push"
+  | "replace"
+  | "pop"
+  | "stay"
+  | "pushTransient"
+  | "popTransient";
 
 export type NodeKind = "text" | "input";
 
@@ -61,9 +67,15 @@ export interface AppLocation {
 export type NavEdge =
   | {
       kind: "node";
-      /** Required for push/replace. Omit when stackBehavior is "pop". */
+      /** Required for push / replace / pushTransient. Omit for pop / stay / popTransient. */
       toNodeId?: string;
       stackBehavior: StackBehavior;
+      /**
+       * Required (non-empty) on pushTransient. App-owned overlay name.
+       * Same name as the current tip's frame joins that overlay; a new name nests.
+       * Client-only: never sent to refresh.
+       */
+      frame?: string;
       /** When true and tip is input, core passes input box text into refresh extras. */
       passInputText?: boolean;
       /** Marks this traversal as a deliberate trigger; see ARCHITECTURE "Action edges". */
@@ -100,17 +112,28 @@ export interface StackEntry {
   label: string;
   /** Last non-null location associated while this entry was tip, if any. */
   location: AppLocation | null;
+  /**
+   * Overlay name when this entry was pushed with pushTransient.
+   * Client / park only — stripped before any app call; omitted on open ancestry.
+   */
+  frame?: string;
+}
+
+export interface ActionExtras {
+  /** Node id that was tip before the local move. The write keys off this, not the dest. */
+  readonly triggerId: string;
 }
 
 export interface RefreshExtras {
   /** Present when the triggering edge had passInputText and tip was input. */
   inputText?: string;
   /**
-   * True only on the single call caused by traversing an edge with `action: true`.
+   * Present only on the single call caused by traversing an edge with `action: true`.
    * Absent on bootstrap, revalidation, and every other call. Apps perform side
-   * effects only when this is true.
+   * effects only when this is set. The write is chosen by `triggerId`; rendering
+   * keys on the refresh tip.
    */
-  action?: boolean;
+  action?: ActionExtras;
   /**
    * MRU parked app ids. Navigator sets this only on Recents `open` / `refresh`.
    * Other apps ignore it. Ids only — never stacks or tip text.
@@ -196,6 +219,22 @@ export interface RefreshResult {
 }
 
 /**
+ * `open` may rehydrate committed ancestry. Last entry's nodeId must equal `node.id`.
+ * Honored only on open — RefreshResult has no stack field.
+ */
+export interface OpenResult extends RefreshResult {
+  readonly stack?: readonly StackEntry[];
+}
+
+/** True when this call is the one traversal of an action edge. */
+export function isActionExtras(
+  extras: RefreshExtras | undefined,
+): extras is RefreshExtras & { action: ActionExtras } {
+  const triggerId = extras?.action?.triggerId;
+  return typeof triggerId === "string" && triggerId.length > 0;
+}
+
+/**
  * Structured outcome from the host identity capability.
  * The Account app owns the words the user hears; this type never carries prose.
  */
@@ -275,14 +314,14 @@ export interface AppModule {
     path: string,
     extras?: RefreshExtras,
     ctx?: AppServerContext,
-  ): Promise<RefreshResult> | RefreshResult;
+  ): Promise<OpenResult> | OpenResult;
   /**
-   * Revalidate current stack tip; return map + warm + tip + location.
-   * Perform side effects only when `extras.action` is true.
+   * Revalidate the current tip; return map + warm + tip + location.
+   * Perform side effects only when `extras.action` is set.
    * `ctx` is server-only and omitted in the browser.
    */
   refresh(
-    stack: readonly StackEntry[],
+    nodeId: string,
     extras?: RefreshExtras,
     ctx?: AppServerContext,
   ): Promise<RefreshResult> | RefreshResult;

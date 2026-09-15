@@ -35,6 +35,6 @@ Signed in: **Add Apps**, then **Remove Apps**, then **Reorder Apps** (no wrap). 
 - Add: `default` / `optional` not on the list. Enter is `action: true` into **App added to home screen** (`location: null`).
 - Remove: `default` / `optional` on the list (never `required`). Enter is `action: true` into **App removed from home screen**.
 - Empty lists: **No apps to add.** / **No apps to remove.**
-- Reorder: current home apps except Manage Apps. Enter an app **replaces** into Move up / Move down. Enter a move is `action` + `replace` onto a dest that names the direction; refresh returns that app on the list in the new order. First has no Move up; last has no Move down.
+- Reorder: current home apps except Manage Apps. Enter an app is a `home-reorder` overlay onto Move up / Move down. Enter a move is `action` + `popTransient` back to that app row in the new order. First has no Move up; last has no Move down. Add/remove still **push** onto a status node.
 
 Direct URLs to an app that is off the list still work; Home repairs `/app/:id` when that row is missing.

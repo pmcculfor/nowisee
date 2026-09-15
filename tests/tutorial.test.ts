@@ -114,7 +114,7 @@ describe("Tutorial app", () => {
     expect(prompt.node.label).not.toMatch(/Recent apps/i);
 
     const typed = tutorial().refresh(
-      [{ nodeId: NODE.done, label: "", location: null }],
+      NODE.done,
       { inputText: "hello" },
     ) as RefreshResult;
     expect(typed.node.label).toContain('You typed "hello".');

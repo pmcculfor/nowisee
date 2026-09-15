@@ -91,7 +91,7 @@ Packaging, stack, and env: [`ARCHITECTURE.md`](ARCHITECTURE.md). How apps call c
 
 ### 4.2 `open` + `refresh` (not `navigate(action)` as primary)
 
-**Decision:** Core follows the **navigation map** locally when possible, then calls `app.refresh(stack, extras)`. Cold start and all location transitions go through `navigator.openLocation` → app `open` bootstrap. The app returns a new navigation map, warm nodes, the authoritative tip, and an optional location.
+**Decision:** Core follows the **navigation map** locally when possible, then calls `app.refresh(nodeId, extras)`. Cold start and all location transitions go through `navigator.openLocation` → app `open` bootstrap. The app returns a new navigation map, warm nodes, the authoritative tip, and an optional location. `open` may also return committed ancestry (`OpenResult.stack`); `refresh` never carries a stack.
 
 **Why:** Instant UI from warm + map; one app call shape; stack tip encodes where the user is; app revalidates every time.
 
@@ -101,13 +101,15 @@ Packaging, stack, and env: [`ARCHITECTURE.md`](ARCHITECTURE.md). How apps call c
 
 **Decision:** Edges keyed by `(fromNodeId, intent)` where `intent` is `prev | next | enter | back` (or an app-defined symbolic intent), **never a keystroke**.
 
-- `kind: "node"` + `stackBehavior: push | replace | pop`
+- `kind: "node"` + `stackBehavior: push | replace | pop | stay | pushTransient | popTransient`
 - `kind: "app"` → an `AppLocation` inside Nowisee; core serializes it
 - `kind: "resume"` → restore that app's parked stack, then `refresh`
 - `kind: "external"` → leaves the platform
 - Optional `passInputText` on edges leaving an input node
 - Optional `action: true` marking a deliberate trigger (§4.5)
-- On `pop`: **omit `toNodeId`**; destination is stack tip after pop
+- On `pop` / `stay` / `popTransient`: **omit `toNodeId`**
+- On `pushTransient`: required non-empty `frame` (client-only overlay name)
+- `replace` onto the same `fromNodeId` is malformed (use `stay`)
 - Missing edge: silent no-op
 - Apps may publish edges for nodes other than the current tip (multi-hop locally)
 - Map structure is nested (`fromNodeId → intent → edge`) so no delimiter can collide with app-owned ids
@@ -126,20 +128,25 @@ Packaging, stack, and env: [`ARCHITECTURE.md`](ARCHITECTURE.md). How apps call c
 
 ### 4.5 No separate `activate()`; effects are marked on the **edge**
 
-**Decision:** Side effects (copy, send) still happen inside an ordinary `refresh` on an ordinary node — there is no `activate()` call and no action edge *kind*. The app marks the single edge that constitutes the button press with `action: true`. Core sets `extras.action` on exactly the call caused by traversing that edge, and on no other call. Warm may show a working label and the resulting refresh updates **in place**.
+**Decision:** Side effects (copy, send) still happen inside an ordinary `refresh` on an ordinary node — there is no `activate()` call and no action edge *kind*. The app marks the single edge that constitutes the button press with `action: true`. Core sets `extras.action = { triggerId }` (the node that was tip **before** the local move) on exactly the call caused by traversing that edge, and on no other call. The write is chosen by `triggerId`; rendering keys on the refresh tip. Core **blocks intents for the duration of every action call**. On action failure, recovery copy offers **back only** — core must not re-issue an action.
 
-- App: marks the trigger edge; performs effects only when `extras.action` is true.
-- Core: sets the flag on that one traversal; never on bootstrap, revalidation, replay, or retry; never re-issues, retries, aborts, or coalesces an action call.
+- App: marks the trigger edge; performs effects only when `extras.action` is set; chooses the write from `triggerId`.
+- Core: sets `{ triggerId }` on that one traversal; never on bootstrap, revalidation, replay, or retry; never re-issues, retries, aborts, or coalesces an action call; blocks until the action call settles.
 
-**Why:** the effect is now tied to a *transition the user deliberately made*, not to a node merely being current. Three failure modes disappear by construction rather than by author discipline:
+**Stay** refreshes the current tip in place. It is for **fast, local** work only (copy, toggle). A `stay` action **must change the label** so the keypress is announced. Slow work pushes a status node instead. A non-action `stay` is legal (manual refresh) but is an ordinary coalescible read-only call.
+
+**Transients:** `pushTransient` / `popTransient` with a required `frame`. Inside a frame, descending pushes another transient with the same name; peers `replace`. Confirm that should leave the overlay is `popTransient`. `popTransient` never pops the last entry.
+
+Rapid double-press during an action is blocked by core. After a stay+action, the new map must not keep `action: true` on that enter if a second press must not repeat the write.
 
 | Failure | Why it cannot happen |
 |---------|----------------------|
 | Browsing sibling options fires the effect | `prev` / `next` edges carry no flag |
 | Warm-hit background revalidation repeats it | Revalidation carries no flag |
-| Returning to a status node replays the effect | Ordinary edges carry no flag |
+| Returning to a node later replays the effect | Ordinary edges carry no flag |
+| A second Enter while an action is in flight | Core blocks for the duration of the action call |
 
-Rapid double-press is naturally safe: after the local move the tip is the status node, and the trigger edge belonged to the previous node.
+**Why:** the effect is tied to a transition the user deliberately made, not to a node merely being current.
 
 **Rejected:** an `activate()` API; an `action` edge *kind* (it would duplicate `node` and `app` edges); and a richer `reason` / `requestId` protocol on every refresh — the edge flag covers the only case where the distinction was load-bearing, at a fraction of the complexity.
 
@@ -196,8 +203,10 @@ Copy is `clipboardText` on the result; core writes the clipboard. Durable storag
 | Case | Behavior |
 |------|----------|
 | Open/bootstrap or map target not in warm | Block on refresh; ignore further intents; no placeholder |
-| Warm hit | Show immediately; background refresh; allow further map hits. Current-token result fully applies. Stale read-only result replaces warm/map only if it still contains the live tip |
-| Refresh failure (warm miss) | Speak core recovery copy; keep dest; `enter` retries; `back` restores previous node |
+| Warm hit (read-only) | Show immediately; background refresh; allow further map hits. Current-token result fully applies. Stale read-only result replaces warm/map only if it still contains the live tip |
+| Any action call | Block until it settles; ignore further intents |
+| Refresh failure (warm miss, read-only) | Speak core recovery copy; keep dest; `enter` retries; `back` restores previous node |
+| Action-call failure | Speak back-only recovery copy; `enter` does not re-issue; `back` restores previous node |
 | Refresh failure (warm hit or open) | Keep last text; clear busy; do not crash shell |
 | Missing edge | Silent no-op |
 
@@ -213,7 +222,7 @@ Identity and per-app SQLite have landed. Clipboard is still the only platform ca
 
 1. **Runtime-unknown next node.** Ship a temporary warm node plus an edge, then replace the content on refresh.
 2. **List ends.** Choose wrap, stop, or a message. Do not assume the platform wraps.
-3. **Action / send / copy.** Put `action: true` on the `enter` edge into a status node. Show a working label, then done or error in place. Leave only via mapped intents; never jump the stack silently. Resolve with an error label rather than rejecting — a rejected action call strands the user on the working label.
+3. **Action / send / copy.** Put `action: true` on the trigger edge. Fast local work uses `stay` and **must change the label**. Slow work pushes a status node. Choose the write from `triggerId`, not the dest. Leave only via mapped intents; never jump the stack silently. Resolve with an error label rather than rejecting.
 4. **Leaving the app.** Root `back` MUST be an `app` edge to Home.
 5. **Input.** Put an instruction node before the input node. `enter` (Done) with `passInputText` commits; `back` (Cancel) abandons.
 6. **Addressing.** Return a stable canonical location when the tip is bookmarkable. Use `location: null` for status tips that should not change the bar (this also stops a reload from re-entering an action node).

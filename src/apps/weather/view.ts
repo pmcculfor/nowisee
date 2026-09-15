@@ -1,6 +1,7 @@
 import {
   buildMap,
   edgeNode,
+  edgePushTransient,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -14,6 +15,7 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
+import { isActionExtras } from "../../core/types.ts";
 import {
   NODE,
   WEATHER_APP_ID,
@@ -35,6 +37,7 @@ const SETUP_LABEL = "Enter your zip code.";
 const NOT_FOUND_LABEL = "That zip code was not found.";
 const LOAD_ERROR_LABEL = "Could not load weather.";
 const SAVING_LABEL = "Saving…";
+const WEATHER_ZIP_FRAME = "weather-zip";
 
 export async function openWeatherPath(
   deps: WeatherViewDeps,
@@ -56,7 +59,7 @@ export async function buildWeatherView(
     return signedOutWeather(deps, ctx);
   }
 
-  if (extras.action) {
+  if (isActionExtras(extras)) {
     return applyAction(deps, userId, tipId, extras);
   }
 
@@ -83,7 +86,8 @@ async function applyAction(
   tipId: string,
   extras: RefreshExtras,
 ): Promise<RefreshResult> {
-  if (tipId !== NODE.zipSave) {
+  const writeId = extras.action?.triggerId ?? tipId;
+  if (writeId !== NODE.zipSave && writeId !== NODE.placeEdit && writeId !== NODE.setupEdit) {
     const zip = await deps.store.getZip(userId);
     if (!zip) {
       return setupView(deps, tipId);
@@ -107,7 +111,7 @@ async function applyAction(
   try {
     const snapshot = await deps.client.lookup(parsed);
     await deps.store.setZip(userId, parsed);
-    return weatherView(deps, snapshot, parsed, NODE.current);
+    return weatherView(deps, snapshot, parsed, tipId === NODE.zipSave ? NODE.current : tipId);
   } catch (err) {
     if (isAbort(err)) {
       throw err;
@@ -221,14 +225,13 @@ function weatherMap(rootAppId: string, listIds: readonly string[]): NavigationMa
     siblingListEdges(listIds, { wrap: false }),
     {
       [NODE.place]: {
-        enter: edgeNode(NODE.placeEdit, "replace"),
+        enter: edgePushTransient(NODE.placeEdit, WEATHER_ZIP_FRAME),
       },
     },
     inputEdges(NODE.placeEdit, {
-      commitTo: NODE.zipSave,
-      backTo: NODE.place,
+      backTo: "popTransient",
       action: true,
-      commitStackBehavior: "replace",
+      commitStackBehavior: "popTransient",
     }),
     ...listIds.map((id) => rootBackToHome(id, rootAppId, WEATHER_APP_ID)),
     rootBackToHome(NODE.zipSave, rootAppId, WEATHER_APP_ID),

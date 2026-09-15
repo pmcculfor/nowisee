@@ -120,7 +120,7 @@ describe("Recents app", () => {
 
   it("refresh keeps the Home node when it is the tip", () => {
     const result = recents().refresh(
-      [{ nodeId: HOME_NODE_ID, label: "Home", location: null }],
+      HOME_NODE_ID,
       { parkedAppIds: ["notes"] },
       directory(PACK),
     ) as RefreshResult;
@@ -130,7 +130,7 @@ describe("Recents app", () => {
 
   it("refresh keeps the current listed row", () => {
     const result = recents().refresh(
-      [{ nodeId: appRowId("bible"), label: "Bible", location: null }],
+      appRowId("bible"),
       { parkedAppIds: ["notes", "bible"] },
       directory(PACK),
     ) as RefreshResult;

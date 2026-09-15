@@ -12,6 +12,7 @@ export type FakeCall = {
   method: "open" | "refresh";
   path?: string;
   stack?: readonly StackEntry[];
+  nodeId?: string;
   extras: RefreshExtras;
 };
 
@@ -44,6 +45,7 @@ export function createFakeApp(options: FakeAppOptions): {
     ["copy-status", "Copying…"],
     ["input", ""],
     ["sent", "Sending…"],
+    ["ping", "Ping"],
   ]);
 
   function payload(id: string, kind?: NodePayload["kind"]): NodePayload {
@@ -92,6 +94,14 @@ export function createFakeApp(options: FakeAppOptions): {
       child: {
         back: { kind: "node", stackBehavior: "pop" },
         enter: { kind: "node", toNodeId: "input", stackBehavior: "push" },
+        next: { kind: "node", toNodeId: "ping", stackBehavior: "push" },
+      },
+      ping: {
+        back: { kind: "node", stackBehavior: "pop" },
+        enter:
+          labels.get("ping") === "Pong"
+            ? { kind: "node", stackBehavior: "stay" }
+            : { kind: "node", stackBehavior: "stay", action: true },
       },
       input: {
         enter: {
@@ -120,6 +130,7 @@ export function createFakeApp(options: FakeAppOptions): {
       payload("copy-status"),
       payload("input", "input"),
       payload("sent"),
+      payload("ping"),
       tip,
     ];
   }
@@ -132,7 +143,7 @@ export function createFakeApp(options: FakeAppOptions): {
     stack?: readonly StackEntry[],
   ): Promise<RefreshResult> {
     const plannedLabel = labels.get(tipId) ?? tipId;
-    calls.push({ method, path, stack, extras: { ...extras } });
+    calls.push({ method, path, stack, extras: { ...extras }, nodeId: tipId });
     if (options.gate) {
       await options.gate();
     }
@@ -140,13 +151,17 @@ export function createFakeApp(options: FakeAppOptions): {
       throw new DOMException("Aborted", "AbortError");
     }
 
-    if (extras.action && tipId === "copy-status") {
+    if (extras.action && extras.action.triggerId === "copy") {
       effects.push("copy");
       labels.set("copy-status", "Copied");
     }
-    if (extras.action && tipId === "sent") {
+    if (extras.action && extras.action.triggerId === "input") {
       effects.push(`send:${extras.inputText ?? ""}`);
       labels.set("sent", "Sent");
+    }
+    if (extras.action && extras.action.triggerId === "ping") {
+      effects.push("ping");
+      labels.set("ping", "Pong");
     }
 
     const label = labels.get(tipId) ?? plannedLabel;
@@ -164,7 +179,7 @@ export function createFakeApp(options: FakeAppOptions): {
       warm: warmAround(node),
       node,
       location,
-      ...(extras.action && tipId === "copy-status"
+      ...(extras.action && extras.action.triggerId === "copy"
         ? { clipboardText: "copied-text" }
         : {}),
     };
@@ -177,9 +192,9 @@ export function createFakeApp(options: FakeAppOptions): {
       const tipId = path === "/" ? "root" : path.replace(/^\//, "");
       return respond("open", tipId, extras, path);
     },
-    async refresh(stack, extras = {}) {
-      const tipId = stack[stack.length - 1]?.nodeId ?? "root";
-      return respond("refresh", tipId, extras, undefined, stack);
+    async refresh(nodeId, extras = {}) {
+      const tipId = nodeId || "root";
+      return respond("refresh", tipId, extras, undefined, undefined);
     },
   };
 
@@ -211,12 +226,11 @@ export function createRootApp(rootAppId: string): AppModule {
       node: { id: "home-root", label: "Home" },
       location: { appId: rootAppId, path: "/" },
     }),
-    refresh: (stack) => {
-      const tip = stack[stack.length - 1];
+    refresh: (nodeId) => {
       return {
         navigationMap: map,
         warm: [{ id: "home-root", label: "Home" }],
-        node: { id: tip?.nodeId ?? "home-root", label: tip?.label ?? "Home" },
+        node: { id: nodeId || "home-root", label: nodeId === "home-root" || !nodeId ? "Home" : nodeId },
         location: { appId: rootAppId, path: "/" },
       };
     },

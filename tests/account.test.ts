@@ -77,14 +77,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [
-          {
-            nodeId: NODE.codePrompt,
-            label: "We sent a sign-in code to that email. Enter it on the next screen.",
-            location: null,
-          },
-        ],
-        extras: { action: true, inputText: "user@example.com" },
+        nodeId: NODE.codePrompt,
+        extras: { action: { triggerId: NODE.codePrompt }, inputText: "user@example.com" },
       },
     });
     const signedIn = await handleSessionHttp(h, {
@@ -92,18 +86,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [
-          { nodeId: NODE.start, label: "Enter your email on the next screen to sign in or register.", location: null },
-          { nodeId: NODE.email, label: "", location: null },
-          {
-            nodeId: NODE.codePrompt,
-            label: "We sent a sign-in code to that email. Enter it on the next screen.",
-            location: null,
-          },
-          { nodeId: NODE.code, label: "", location: null },
-          { nodeId: NODE.auth, label: "Signing in…", location: null },
-        ],
-        extras: { action: true, inputText: made.mailer.lastCode() },
+        nodeId: NODE.auth,
+        extras: { action: { triggerId: NODE.auth }, inputText: made.mailer.lastCode() },
       },
     });
     const signedBody = signedIn.body as RefreshResult;
@@ -142,14 +126,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(anon),
       body: {
-        stack: [
-          {
-            nodeId: NODE.codePrompt,
-            label: "We sent a sign-in code to that email. Enter it on the next screen.",
-            location: null,
-          },
-        ],
-        extras: { action: true, inputText: "pat@example.com" },
+        nodeId: NODE.codePrompt,
+        extras: { action: { triggerId: NODE.codePrompt }, inputText: "pat@example.com" },
       },
     });
     const action = await handleSessionHttp(h, {
@@ -157,8 +135,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(anon),
       body: {
-        stack: [{ nodeId: NODE.auth, label: "Signing in…", location: null }],
-        extras: { action: true, inputText: made.mailer.lastCode() },
+        nodeId: NODE.auth,
+        extras: { action: { triggerId: NODE.auth }, inputText: made.mailer.lastCode() },
       },
     });
     expect(action.status).toBe(200);
@@ -185,14 +163,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [
-          {
-            nodeId: NODE.codePrompt,
-            label: "We sent a sign-in code to that email. Enter it on the next screen.",
-            location: null,
-          },
-        ],
-        extras: { action: true, inputText: "short@example.com" },
+        nodeId: NODE.codePrompt,
+        extras: { action: { triggerId: NODE.codePrompt }, inputText: "short@example.com" },
       },
     });
     const failed = await handleSessionHttp(h, {
@@ -200,11 +172,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [
-          { nodeId: NODE.code, label: "", location: null },
-          { nodeId: NODE.auth, label: "Signing in…", location: null },
-        ],
-        extras: { action: true, inputText: "zzz000" },
+        nodeId: NODE.auth,
+        extras: { action: { triggerId: NODE.auth }, inputText: "zzz000" },
       },
     });
     const body = failed.body as RefreshResult;
@@ -229,14 +198,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [
-          {
-            nodeId: NODE.codePrompt,
-            label: "We sent a sign-in code to that email. Enter it on the next screen.",
-            location: null,
-          },
-        ],
-        extras: { action: true, inputText: "wait@example.com" },
+        nodeId: NODE.codePrompt,
+        extras: { action: { triggerId: NODE.codePrompt }, inputText: "wait@example.com" },
       },
     });
     const throttled = await handleSessionHttp(h, {
@@ -244,14 +207,8 @@ describe("Account app", () => {
       url: "/api/apps/account/refresh",
       headers: headers(cookie),
       body: {
-        stack: [
-          {
-            nodeId: NODE.codePrompt,
-            label: "We sent a sign-in code to that email. Enter it on the next screen.",
-            location: null,
-          },
-        ],
-        extras: { action: true, inputText: "wait@example.com" },
+        nodeId: NODE.codePrompt,
+        extras: { action: { triggerId: NODE.codePrompt }, inputText: "wait@example.com" },
       },
     });
     const body = throttled.body as RefreshResult;
@@ -274,7 +231,7 @@ describe("Account app", () => {
           location: { appId: "probe", path: "/" },
         };
       },
-      refresh(_stack, _extras, ctx) {
+      refresh(_nodeId, _extras, ctx) {
         seen.push(ctx);
         return {
           navigationMap: {},

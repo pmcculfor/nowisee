@@ -39,7 +39,7 @@ export type FirstActiveItem = {
 export interface ListsStore {
   listLists(ownerId: string): Promise<readonly ListRecord[]>;
   getList(ownerId: string, id: string): Promise<ListRecord | null>;
-  createList(ownerId: string, title: string): Promise<ListRecord>;
+  createList(ownerId: string, title: string, id?: string): Promise<ListRecord>;
   deleteList(ownerId: string, id: string): Promise<boolean>;
   /** Oldest active item per list — catalog `enter` targets. */
   firstActiveItems(ownerId: string): Promise<readonly FirstActiveItem[]>;

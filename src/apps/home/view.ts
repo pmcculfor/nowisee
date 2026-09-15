@@ -4,6 +4,8 @@ import {
   edgeApp,
   edgeNode,
   edgePop,
+  edgePopTransient,
+  edgePushTransient,
   homeCatalogPath,
   siblingListEdges,
 } from "../../app-kit/index.ts";
@@ -15,6 +17,7 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
+import { isActionExtras } from "../../core/types.ts";
 import {
   ADD_EMPTY_ID,
   ADD_MENU_ID,
@@ -70,6 +73,7 @@ const NO_REMOVE_TEXT = "No apps to remove.";
 const TOO_FEW_REORDER_TEXT = "Need two or more apps to reorder.";
 const MOVE_UP_LABEL = "Move up";
 const MOVE_DOWN_LABEL = "Move down";
+const HOME_REORDER_FRAME = "home-reorder";
 
 type HomeSession = {
   readonly peers: readonly AppDescriptor[];
@@ -117,7 +121,7 @@ async function viewForTip(
   tipId: string | undefined,
   extras: RefreshExtras,
 ): Promise<RefreshResult> {
-  if (extras.action && session.ownerId) {
+  if (isActionExtras(extras) && session.ownerId) {
     return applyAction(deps, session, tipId ?? "", extras);
   }
   return render(session, tipId);
@@ -127,7 +131,7 @@ async function applyAction(
   deps: HomeViewDeps,
   session: HomeSession,
   tipId: string,
-  _extras: RefreshExtras,
+  extras: RefreshExtras,
 ): Promise<RefreshResult> {
   const store = deps.store;
   const ownerId = session.ownerId;
@@ -135,7 +139,10 @@ async function applyAction(
     return render(session, tipId);
   }
 
-  const addedId = parseAddAddedNodeId(tipId);
+  const writeId = extras.action?.triggerId ?? tipId;
+
+  const addedId =
+    parseAddAddedNodeId(writeId) ?? parseAddAddedNodeId(tipId) ?? parseAddAppNodeId(writeId);
   if (addedId) {
     const next = await mutate(store, ownerId, session, (ids) => {
       if (!ids.includes(addedId) && canAddId(session, addedId)) {
@@ -145,7 +152,10 @@ async function applyAction(
     return addStatusView(next, addedId);
   }
 
-  const removedId = parseRemoveRemovedNodeId(tipId);
+  const removedId =
+    parseRemoveRemovedNodeId(writeId) ??
+    parseRemoveRemovedNodeId(tipId) ??
+    parseRemoveAppNodeId(writeId);
   if (removedId) {
     const next = await mutate(store, ownerId, session, (ids) => {
       const app = session.peers.find((a) => a.id === removedId);
@@ -159,7 +169,10 @@ async function applyAction(
     return removeStatusView(next, removedId);
   }
 
-  const moving = parseReorderMovingId(tipId);
+  const moving =
+    parseReorderMoveId(writeId) ??
+    parseReorderMovingId(writeId) ??
+    parseReorderMovingId(tipId);
   if (moving) {
     const next = await mutate(store, ownerId, session, (ids) => {
       const i = ids.indexOf(moving.appId);
@@ -511,7 +524,7 @@ function reorderListView(session: HomeSession, requestedTipId: string): RefreshR
       index === 0 ? reorderMoveDownId(app.id) : reorderMoveUpId(app.id);
     return {
       [id]: {
-        enter: edgeNode(dest, "replace"),
+        enter: edgePushTransient(dest, HOME_REORDER_FRAME),
         back: edgePop(),
       },
     };
@@ -586,16 +599,16 @@ function reorderMoveView(
       canUp
         ? {
             [upId]: {
-              enter: edgeAction(reorderMovingId(appId, "up"), { stackBehavior: "replace" }),
-              back: edgeNode(listId, "replace"),
+              enter: edgePopTransient({ action: true }),
+              back: edgePop(),
             },
           }
         : {},
       canDown
         ? {
             [downId]: {
-              enter: edgeAction(reorderMovingId(appId, "down"), { stackBehavior: "replace" }),
-              back: edgeNode(listId, "replace"),
+              enter: edgePopTransient({ action: true }),
+              back: edgePop(),
             },
           }
         : {},

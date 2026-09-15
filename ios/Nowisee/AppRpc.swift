@@ -2,7 +2,7 @@ import Foundation
 
 protocol AppRpcing: AnyObject {
   func open(appId: String, path: String, extras: RefreshExtras) async throws -> RefreshResult
-  func refresh(appId: String, stack: [StackEntry], extras: RefreshExtras) async throws -> RefreshResult
+  func refresh(appId: String, nodeId: String, extras: RefreshExtras) async throws -> RefreshResult
   func getWithoutRedirect(_ url: URL) async throws -> (status: Int, location: String?)
 }
 
@@ -39,11 +39,11 @@ final class AppRpc: AppRpcing {
     try await post(appId: appId, kind: "open", body: RefreshDecoding.wireBody(path: path, extras: extras))
   }
 
-  func refresh(appId: String, stack: [StackEntry], extras: RefreshExtras) async throws -> RefreshResult {
+  func refresh(appId: String, nodeId: String, extras: RefreshExtras) async throws -> RefreshResult {
     try await post(
       appId: appId,
       kind: "refresh",
-      body: RefreshDecoding.wireBody(stack: stack, extras: extras)
+      body: RefreshDecoding.wireBody(nodeId: nodeId, extras: extras)
     )
   }
 

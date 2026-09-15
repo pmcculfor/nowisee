@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { CREATE_NODE_ID, LISTS_APP_ID } from "./ids.ts";
 import {
@@ -24,7 +23,7 @@ export type ListsApp = AppModule & { close(): void };
 /**
  * Lists as a portable AppModule.
  * Catalog of list titles; enter a list to browse items. Complete / restore /
- * delete run only when `extras.action` is true.
+ * delete run only when `extras.action` is set.
  * Signed-out (`ctx.userId` null) is a sign-in node; no rows are written.
  */
 export function createListsApp(deps: ListsAppDeps): ListsApp {
@@ -40,12 +39,11 @@ export function createListsApp(deps: ListsAppDeps): ListsApp {
       return openListsPath(viewDeps, path, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
-      const tipId = stack[stack.length - 1]?.nodeId ?? CREATE_NODE_ID;
-      return buildListsView(viewDeps, tipId, stack.length, extras, ctx);
+      return buildListsView(viewDeps, nodeId || CREATE_NODE_ID, extras, ctx);
     },
     close() {
       deps.close?.();

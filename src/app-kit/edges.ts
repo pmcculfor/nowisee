@@ -5,17 +5,25 @@ export type EdgeFlags = {
   readonly action?: boolean;
 };
 
-/** Node edge with push or replace (toNodeId required). */
+const NEEDS_DEST: ReadonlySet<StackBehavior> = new Set([
+  "push",
+  "replace",
+  "pushTransient",
+]);
+
+/** Node edge with a destination (push / replace / pushTransient). */
 export function edgeNode(
   toNodeId: string,
-  stackBehavior: Exclude<StackBehavior, "pop">,
-  flags: EdgeFlags = {},
+  stackBehavior: "push" | "replace" | "pushTransient",
+  flags: EdgeFlags & { readonly frame?: string } = {},
 ): NavEdge {
+  const { frame, ...rest } = flags;
   return {
     kind: "node",
     toNodeId,
     stackBehavior,
-    ...flags,
+    ...(frame !== undefined ? { frame } : {}),
+    ...rest,
   };
 }
 
@@ -24,6 +32,33 @@ export function edgePop(flags: EdgeFlags = {}): NavEdge {
   return {
     kind: "node",
     stackBehavior: "pop",
+    ...flags,
+  };
+}
+
+/** Refresh the current tip in place. Omits toNodeId. */
+export function edgeStay(flags: EdgeFlags = {}): NavEdge {
+  return {
+    kind: "node",
+    stackBehavior: "stay",
+    ...flags,
+  };
+}
+
+/** Push onto a named overlay. `frame` is required. */
+export function edgePushTransient(
+  toNodeId: string,
+  frame: string,
+  flags: EdgeFlags = {},
+): NavEdge {
+  return edgeNode(toNodeId, "pushTransient", { ...flags, frame });
+}
+
+/** Pop every trailing entry in the innermost frame. Omits toNodeId. */
+export function edgePopTransient(flags: EdgeFlags = {}): NavEdge {
+  return {
+    kind: "node",
+    stackBehavior: "popTransient",
     ...flags,
   };
 }
@@ -50,19 +85,31 @@ export function edgeExternal(href: string): NavEdge {
   };
 }
 
+export type EdgeActionOpts = {
+  readonly stackBehavior?: Exclude<StackBehavior, "pop" | "popTransient">;
+  readonly passInputText?: boolean;
+  readonly frame?: string;
+};
+
 /**
  * One-line button press: node edge with `action: true`.
  * Default stackBehavior is `push` (typical status-node landing).
+ * For stay / popTransient use `edgeStay({ action: true })` / `edgePopTransient({ action: true })`.
  */
-export function edgeAction(
-  toNodeId: string,
-  opts: {
-    readonly stackBehavior?: Exclude<StackBehavior, "pop">;
-    readonly passInputText?: boolean;
-  } = {},
-): NavEdge {
-  return edgeNode(toNodeId, opts.stackBehavior ?? "push", {
+export function edgeAction(toNodeId: string, opts: EdgeActionOpts = {}): NavEdge {
+  const behavior = opts.stackBehavior ?? "push";
+  if (!NEEDS_DEST.has(behavior)) {
+    return {
+      kind: "node",
+      stackBehavior: behavior,
+      passInputText: opts.passInputText,
+      action: true,
+      ...(opts.frame !== undefined ? { frame: opts.frame } : {}),
+    };
+  }
+  return edgeNode(toNodeId, behavior as "push" | "replace" | "pushTransient", {
     passInputText: opts.passInputText,
     action: true,
+    frame: opts.frame,
   });
 }

@@ -8,7 +8,6 @@ import type {
   HomeRole,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../src/core/types.ts";
 import type { Db } from "./db/index.ts";
 import { openDatabase } from "./db/index.ts";
@@ -77,7 +76,7 @@ export type NowiseeHost = {
   ): Promise<RefreshResult>;
   refresh(
     appId: string,
-    stack: readonly StackEntry[],
+    nodeId: string,
     extras: WireExtras,
     ctx?: AppServerContext,
   ): Promise<RefreshResult>;
@@ -90,7 +89,7 @@ export type NowiseeHost = {
     args: {
       readonly appId: string;
       readonly path?: string;
-      readonly stack?: readonly StackEntry[];
+      readonly nodeId?: string;
       readonly extras: WireExtras;
       readonly token: string | null;
       readonly slot: CookieSlot;
@@ -254,12 +253,12 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
 
   async function refresh(
     appId: string,
-    stack: readonly StackEntry[],
+    nodeId: string,
     extras: WireExtras,
     ctx?: AppServerContext,
   ): Promise<RefreshResult> {
     return invoke(registry, appId, async (app) =>
-      app.refresh(stack, toRefreshExtras(extras), await resolveCtx(app, ctx)),
+      app.refresh(nodeId, toRefreshExtras(extras), await resolveCtx(app, ctx)),
     );
   }
 
@@ -312,7 +311,7 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
       const result =
         kind === "open"
           ? await app.open(args.path ?? "/", extras, ctx)
-          : await app.refresh(args.stack ?? [], extras, ctx);
+          : await app.refresh(args.nodeId ?? "", extras, ctx);
       const after = db.get<{ user_id: string | null }>(
         "SELECT user_id FROM sessions WHERE id = ?",
         resolved.sessionId,
@@ -343,8 +342,8 @@ export function createAppHost(options: AppHostOptions = {}): AppRpc {
     async open(appId, path, extras) {
       return host.open(appId, path, extras);
     },
-    async refresh(appId, stack, extras) {
-      return host.refresh(appId, stack, extras);
+    async refresh(appId, nodeId, extras) {
+      return host.refresh(appId, nodeId, extras);
     },
   };
 }
@@ -374,7 +373,7 @@ function toRefreshExtras(extras: WireExtras): RefreshExtras {
     out.inputText = extras.inputText;
   }
   if (extras.action) {
-    out.action = true;
+    out.action = { triggerId: extras.action.triggerId };
   }
   if (extras.parkedAppIds) {
     out.parkedAppIds = extras.parkedAppIds;

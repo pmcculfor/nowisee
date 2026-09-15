@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { CREATE_NODE_ID, NOTES_APP_ID } from "./ids.ts";
 import {
@@ -40,12 +39,11 @@ export function createNotesApp(deps: NotesAppDeps): NotesApp {
       return openNotesPath(viewDeps, path, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
-      const tipId = stack[stack.length - 1]?.nodeId ?? CREATE_NODE_ID;
-      return buildNotesView(viewDeps, tipId, extras, ctx);
+      return buildNotesView(viewDeps, nodeId || CREATE_NODE_ID, extras, ctx);
     },
     close() {
       deps.close?.();

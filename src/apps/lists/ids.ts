@@ -2,17 +2,13 @@ export const LISTS_APP_ID = "lists";
 
 export const CREATE_NODE_ID = "lists:create";
 export const CREATE_EDIT_NODE_ID = "lists:create:edit";
-/** Landing tip for create-list action before the result repairs the tip id. */
-export const CREATE_RESULT_NODE_ID = "lists:create:result";
 
 export type ListsNode =
   | { readonly kind: "create" }
   | { readonly kind: "createEdit" }
-  | { readonly kind: "createResult" }
   | { readonly kind: "catalogList"; readonly listId: string }
   | { readonly kind: "add"; readonly listId: string }
   | { readonly kind: "addEdit"; readonly listId: string }
-  | { readonly kind: "addResult"; readonly listId: string }
   | { readonly kind: "completedOpen"; readonly listId: string }
   | { readonly kind: "completedEmpty"; readonly listId: string }
   | { readonly kind: "delete"; readonly listId: string }
@@ -21,8 +17,7 @@ export type ListsNode =
   | { readonly kind: "activeItem"; readonly itemId: string }
   | { readonly kind: "itemDone"; readonly itemId: string }
   | { readonly kind: "itemUndo"; readonly itemId: string }
-  | { readonly kind: "completedItem"; readonly itemId: string }
-  | { readonly kind: "itemRestored"; readonly itemId: string };
+  | { readonly kind: "completedItem"; readonly itemId: string };
 
 export function catalogListNodeId(listId: string): string {
   return `lists:list:${listId}`;
@@ -34,10 +29,6 @@ export function addNodeId(listId: string): string {
 
 export function addEditNodeId(listId: string): string {
   return `lists:list:${listId}:add:edit`;
-}
-
-export function addResultNodeId(listId: string): string {
-  return `lists:list:${listId}:add:result`;
 }
 
 export function completedOpenNodeId(listId: string): string {
@@ -76,19 +67,12 @@ export function completedItemNodeId(itemId: string): string {
   return `lists:item:${itemId}:completed`;
 }
 
-export function itemRestoredNodeId(itemId: string): string {
-  return `lists:item:${itemId}:restored`;
-}
-
 export function parseListsNode(nodeId: string): ListsNode | null {
   if (nodeId === CREATE_NODE_ID) {
     return { kind: "create" };
   }
   if (nodeId === CREATE_EDIT_NODE_ID) {
     return { kind: "createEdit" };
-  }
-  if (nodeId === CREATE_RESULT_NODE_ID) {
-    return { kind: "createResult" };
   }
 
   const listMatch = /^lists:list:([^:]+)(?::(.+))?$/.exec(nodeId);
@@ -103,8 +87,6 @@ export function parseListsNode(nodeId: string): ListsNode | null {
         return { kind: "add", listId };
       case "add:edit":
         return { kind: "addEdit", listId };
-      case "add:result":
-        return { kind: "addResult", listId };
       case "completed":
         return { kind: "completedOpen", listId };
       case "completed:empty":
@@ -134,8 +116,6 @@ export function parseListsNode(nodeId: string): ListsNode | null {
         return { kind: "itemUndo", itemId };
       case "completed":
         return { kind: "completedItem", itemId };
-      case "restored":
-        return { kind: "itemRestored", itemId };
       default:
         return null;
     }

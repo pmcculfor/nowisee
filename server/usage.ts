@@ -10,7 +10,7 @@ export function hourBucket(at: number): number {
 
 export function usageKind(
   dispatchKind: "open" | "refresh",
-  extras: { readonly action?: boolean },
+  extras: { readonly action?: unknown },
 ): UsageKind {
   if (extras.action) {
     return "action";

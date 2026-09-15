@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { RECENTS_APP_ID, RECENTS_APP_LABEL } from "./ids.ts";
 import { openRecents, refreshRecents, type RecentsViewDeps } from "./view.ts";
@@ -21,11 +20,11 @@ export function createRecentsApp(deps: RecentsAppDeps): AppModule {
       return openRecents(viewDeps, extras, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): RefreshResult {
-      return refreshRecents(viewDeps, stack, extras, ctx);
+      return refreshRecents(viewDeps, nodeId, extras, ctx);
     },
   };
 }

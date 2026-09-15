@@ -54,18 +54,35 @@ export function createSqliteListsStore(db: Db, options: SqliteListsStoreOptions 
       );
       return row ? fromListRow(row) : null;
     },
-    async createList(ownerId, title) {
+    async createList(ownerId, title, id) {
       const ts = now();
-      const id = idFactory();
+      const listId = id ?? idFactory();
+      const clash = db.get<{ owner_id: string }>(
+        "SELECT owner_id FROM list WHERE id = ?",
+        listId,
+      );
+      if (clash) {
+        if (clash.owner_id !== ownerId) {
+          return { id: listId, title, createdAt: ts, updatedAt: ts };
+        }
+        const existing = db.get<ListRow>(
+          "SELECT id, title, created_at, updated_at FROM list WHERE id = ? AND owner_id = ?",
+          listId,
+          ownerId,
+        );
+        if (existing) {
+          return fromListRow(existing);
+        }
+      }
       db.run(
         "INSERT INTO list (id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        id,
+        listId,
         ownerId,
         title,
         ts,
         ts,
       );
-      return { id, title, createdAt: ts, updatedAt: ts };
+      return { id: listId, title, createdAt: ts, updatedAt: ts };
     },
     async deleteList(ownerId, id) {
       return db.transaction(() => {

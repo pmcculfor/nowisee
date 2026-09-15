@@ -14,9 +14,9 @@ Open `/` lands on the most recently edited note if there is one, otherwise on **
 
 List order is **Create a note**, then notes sorted by `updatedAt` descending. List tips show the **first line** of each note body (an empty body is spoken as “Empty note”).
 
-Enter on Create or on a note pushes an input tip with the full body. **Done** (`enter`) commits with `passInputText` and `action: true`. **Cancel** (`back`) returns without saving. Side effects run **only** when `extras.action` is true.
+Enter on Create or on a note opens an input tip with the full body. Create Done mints a note id on the dest edge and inserts if that id is missing. **Done** (`enter`) commits with `passInputText` and `action: true`. **Cancel** (`back`) returns without saving. Side effects run **only** when `extras.action` is set; the write is chosen by `triggerId`.
 
-Resolve stack node ids with the owner in the query. A note the user does not own is treated as the default list tip, not as a confirmation that the record exists. On root list tips, `back` is an `app` edge to Home.
+Resolve tip and trigger ids with the owner in the query. A note the user does not own is treated as the default list tip, not as a confirmation that the record exists. On root list tips, `back` is an `app` edge to Home.
 
 ## Non-goals
 

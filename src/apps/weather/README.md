@@ -16,7 +16,7 @@ Open `/` lands on **Enter your zip code.** `enter` replaces onto an empty input.
 
 Open `/` lands on **current** (not the ZIP-change node). The sibling list (no wrap) is:
 
-1. **Change zip code. Current zip is {zip}.** — `enter` replaces onto the ZIP input, prefilled with the stored ZIP.
+1. **Change zip code. Current zip is {zip}.** — `enter` is a `weather-zip` overlay onto the ZIP input, prefilled with the stored ZIP. Successful save `popTransient`s back. First-run setup is a committed place, not an overlay.
 2. Current conditions (first hourly period).
 3. One node per later calendar day from the 12-hour forecast (`name` + `detailedForecast`, daytime then night when both exist).
 

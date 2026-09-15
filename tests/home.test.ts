@@ -22,6 +22,7 @@ import {
   startHomeApp,
 } from "../src/apps/home/store.ts";
 import type { AppDescriptor, AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { refreshApp } from "./helpers/refreshCall.ts";
 
 const OWNER = "user-1";
 const OTHER = "user-2";
@@ -183,7 +184,7 @@ describe("Home app", () => {
 
     const openedResult = (await home.open("/", {}, ctx())) as RefreshResult;
     const mail = openedResult.warm.find((n) => n.label === "Mail")!;
-    const refreshed = (await home.refresh(
+    const refreshed = (await refreshApp(home,
       [{ nodeId: mail.id, label: mail.label, location: null }],
       {},
       ctx(),
@@ -194,7 +195,7 @@ describe("Home app", () => {
       { id: "home", label: "Home", homeRole: "internal" },
       { id: "bible", label: "Bible", homeRole: "default" },
     ];
-    const repaired = (await home.refresh(
+    const repaired = (await refreshApp(home,
       [{ nodeId: mail.id, label: mail.label, location: null }],
       {},
       ctx(),
@@ -255,7 +256,7 @@ describe("Home app", () => {
       stackBehavior: "push",
     });
 
-    const refreshed = (await app.refresh(
+    const refreshed = (await refreshApp(app,
       [{ nodeId: MANAGE_NODE_ID, label: "Manage Apps", location: null }],
       {},
       ctx,
@@ -271,7 +272,7 @@ describe("Home app", () => {
     const catalog = (await app.open("/manage", {}, ctx)) as RefreshResult;
     expect(catalog.node.label).toBe("Manage Apps");
 
-    const result = (await app.refresh(
+    const result = (await refreshApp(app,
       [{ nodeId: MANAGE_SIGNED_OUT_ID, label: "Sign in to manage apps.", location: null }],
       {},
       ctx,
@@ -309,7 +310,7 @@ describe("Home app", () => {
       toNodeId: addAddedNodeId("gmail"),
     });
 
-    const added = (await app.refresh(
+    const added = (await refreshApp(app,
       [{ nodeId: addAddedNodeId("gmail"), label: "App added to home screen", location: null }],
       { action: true },
       ctx,
@@ -335,7 +336,7 @@ describe("Home app", () => {
     expect(list.node.label).toBe("Tutorial");
     expect(list.warm.map((n) => n.label).includes("Account")).toBe(false);
 
-    const removed = (await app.refresh(
+    const removed = (await refreshApp(app,
       [{ nodeId: removeRemovedNodeId("tutorial"), label: "App removed from home screen", location: null }],
       { action: true },
       ctx,
@@ -386,11 +387,12 @@ describe("Home app", () => {
     const bible = (await app.open("/manage/reorder/bible", {}, ctx)) as RefreshResult;
     expect(bible.node.label).toBe("Bible");
     expect(bible.navigationMap[reorderAppNodeId("bible")]?.enter).toMatchObject({
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
       toNodeId: reorderMoveUpId("bible"),
+      frame: "home-reorder",
     });
 
-    const moveUp = (await app.refresh(
+    const moveUp = (await refreshApp(app,
       [{ nodeId: reorderMoveUpId("bible"), label: "Move up", location: null }],
       {},
       ctx,
@@ -398,14 +400,13 @@ describe("Home app", () => {
     expect(moveUp.node.label).toBe("Move up");
     expect(moveUp.navigationMap[reorderMoveUpId("bible")]?.enter).toMatchObject({
       action: true,
-      stackBehavior: "replace",
-      toNodeId: reorderMovingId("bible", "up"),
+      stackBehavior: "popTransient",
     });
     expect(moveUp.navigationMap[reorderMoveUpId("bible")]?.next?.toNodeId).toBe(
       reorderMoveDownId("bible"),
     );
 
-    const moved = (await app.refresh(
+    const moved = (await refreshApp(app,
       [{ nodeId: reorderMovingId("bible", "up"), label: "Bible", location: null }],
       { action: true },
       ctx,
@@ -433,7 +434,7 @@ describe("Home app", () => {
     expect(tutorial.navigationMap[reorderAppNodeId("tutorial")]?.enter).toMatchObject({
       toNodeId: reorderMoveDownId("tutorial"),
     });
-    const move = (await app.refresh(
+    const move = (await refreshApp(app,
       [{ nodeId: reorderMoveDownId("tutorial"), label: "Move down", location: null }],
       {},
       ctx,
@@ -444,7 +445,7 @@ describe("Home app", () => {
 
   it("store is owner-scoped", async () => {
     const app = homeApp();
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: addAddedNodeId("gmail"), label: ADDED, location: null }],
       { action: true },
       signedInCtx(),

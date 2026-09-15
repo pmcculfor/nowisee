@@ -1,5 +1,4 @@
 import type { WireExtras } from "../src/apps/rpc.ts";
-import type { StackEntry } from "../src/core/types.ts";
 import { readSessionToken, serializeSessionCookie } from "./cookie.ts";
 import { checkCsrf, expectedOriginFromRequest } from "./csrf.ts";
 import { AppNotFoundError } from "./errors.ts";
@@ -65,22 +64,22 @@ function parseOpenBody(
 
 function parseRefreshBody(
   body: unknown,
-):
-  | { ok: true; stack: StackEntry[]; extras: WireExtras }
-  | { ok: false; error: string } {
+): { ok: true; nodeId: string; extras: WireExtras } | { ok: false; error: string } {
   if (body === undefined || body === null || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, error: "Expected a JSON object" };
   }
-  const rec = body as { stack?: unknown; extras?: unknown };
-  const stack = parseStack(rec.stack);
-  if (!stack.ok) {
-    return stack;
+  const rec = body as { nodeId?: unknown; stack?: unknown; extras?: unknown };
+  if (rec.stack !== undefined) {
+    return { ok: false, error: "stack is not allowed; send nodeId" };
+  }
+  if (typeof rec.nodeId !== "string" || rec.nodeId.length === 0) {
+    return { ok: false, error: "nodeId must be a non-empty string" };
   }
   const extras = parseExtras(rec.extras);
   if (!extras.ok) {
     return extras;
   }
-  return { ok: true, stack: stack.stack, extras: extras.extras };
+  return { ok: true, nodeId: rec.nodeId, extras: extras.extras };
 }
 
 function parseExtras(
@@ -93,7 +92,11 @@ function parseExtras(
     return { ok: false, error: "extras must be an object" };
   }
   const rec = value as { inputText?: unknown; action?: unknown; parkedAppIds?: unknown };
-  const extras: { inputText?: string; action?: boolean; parkedAppIds?: readonly string[] } = {};
+  const extras: WireExtras & {
+    inputText?: string;
+    action?: { triggerId: string };
+    parkedAppIds?: readonly string[];
+  } = {};
   if (rec.inputText !== undefined) {
     if (typeof rec.inputText !== "string") {
       return { ok: false, error: "extras.inputText must be a string" };
@@ -101,10 +104,11 @@ function parseExtras(
     extras.inputText = rec.inputText;
   }
   if (rec.action !== undefined) {
-    if (rec.action !== true) {
-      return { ok: false, error: "extras.action must be true when present" };
+    const parsedAction = parseAction(rec.action);
+    if (!parsedAction.ok) {
+      return parsedAction;
     }
-    extras.action = true;
+    extras.action = parsedAction.action;
   }
   if (rec.parkedAppIds !== undefined) {
     if (!Array.isArray(rec.parkedAppIds) || !rec.parkedAppIds.every((id) => typeof id === "string")) {
@@ -115,38 +119,20 @@ function parseExtras(
   return { ok: true, extras };
 }
 
-function parseStack(
+function parseAction(
   value: unknown,
-): { ok: true; stack: StackEntry[] } | { ok: false; error: string } {
-  if (!Array.isArray(value)) {
-    return { ok: false, error: "stack must be an array" };
+): { ok: true; action: { triggerId: string } } | { ok: false; error: string } {
+  if (value === true || value === false) {
+    return { ok: false, error: "extras.action must be an object with triggerId" };
   }
-  const stack: StackEntry[] = [];
-  for (const entry of value) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      return { ok: false, error: "stack entries must be objects" };
-    }
-    const rec = entry as { nodeId?: unknown; label?: unknown; location?: unknown };
-    if (typeof rec.nodeId !== "string" || rec.nodeId.length === 0) {
-      return { ok: false, error: "stack entry nodeId must be a non-empty string" };
-    }
-    if (typeof rec.label !== "string") {
-      return { ok: false, error: "stack entry label must be a string" };
-    }
-    let location: StackEntry["location"] = null;
-    if (rec.location !== undefined && rec.location !== null) {
-      if (typeof rec.location !== "object" || Array.isArray(rec.location)) {
-        return { ok: false, error: "stack entry location must be an object or null" };
-      }
-      const loc = rec.location as { appId?: unknown; path?: unknown };
-      if (typeof loc.appId !== "string" || typeof loc.path !== "string") {
-        return { ok: false, error: "location needs appId and path strings" };
-      }
-      location = { appId: loc.appId, path: loc.path };
-    }
-    stack.push({ nodeId: rec.nodeId, label: rec.label, location });
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "extras.action must be an object with triggerId" };
   }
-  return { ok: true, stack };
+  const triggerId = (value as { triggerId?: unknown }).triggerId;
+  if (typeof triggerId !== "string" || triggerId.length === 0) {
+    return { ok: false, error: "extras.action.triggerId must be a non-empty string" };
+  }
+  return { ok: true, action: { triggerId } };
 }
 
 /**
@@ -208,7 +194,7 @@ export async function handleSessionHttp(
     return callHost(host, slot, () =>
       host.dispatch("refresh", {
         appId,
-        stack: parsed.stack,
+        nodeId: parsed.nodeId,
         extras: parsed.extras,
         token,
         slot,

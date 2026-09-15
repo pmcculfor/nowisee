@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { ACCOUNT_APP_ID } from "./ids.ts";
 import type { AccountFlowStore } from "./types.ts";
@@ -30,11 +29,11 @@ export function createAccountApp(deps: AccountAppDeps): AccountApp {
       return openAccount(viewDeps, path, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
-      return refreshAccount(viewDeps, stack, extras, ctx);
+      return refreshAccount(viewDeps, nodeId, extras, ctx);
     },
     close() {
       deps.close?.();

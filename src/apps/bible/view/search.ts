@@ -18,7 +18,7 @@ export function addSearchInput(
       commitTo: searchWorkingId(),
       backTo: "pop",
       action: true,
-      commitStackBehavior: "replace",
+      commitStackBehavior: "push",
     }),
   );
 }

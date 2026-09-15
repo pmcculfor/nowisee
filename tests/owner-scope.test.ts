@@ -31,8 +31,8 @@ function vaultApp(): AppModule {
         location: { appId: "vault", path: "/" },
       };
     },
-    refresh(stack, _extras, ctx) {
-      const tip = stack[stack.length - 1]?.nodeId ?? "";
+    refresh(nodeId, _extras, ctx) {
+      const tip = nodeId || "";
       const match = /^vault:item:(.+)$/.exec(tip);
       const notFound: RefreshResult = {
         navigationMap: {},
@@ -108,7 +108,7 @@ describe("owner-scoped stack ids", () => {
       url: "/api/apps/vault/refresh",
       headers: headers(cookieA),
       body: {
-        stack: [{ nodeId: "vault:item:secret-a", label: "", location: null }],
+        nodeId: "vault:item:secret-a",
       },
     });
     expect((own.body as RefreshResult).node.label).toBe("Alpha private note");
@@ -118,7 +118,7 @@ describe("owner-scoped stack ids", () => {
       url: "/api/apps/vault/refresh",
       headers: headers(cookieA),
       body: {
-        stack: [{ nodeId: "vault:item:secret-b", label: "", location: null }],
+        nodeId: "vault:item:secret-b",
       },
     });
     expect((forged.body as RefreshResult).node.label).toBe("Not found");

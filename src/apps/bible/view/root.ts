@@ -1,5 +1,7 @@
 import {
   edgeNode,
+  edgePop,
+  edgePushTransient,
   rootBackToHome,
   siblingListEdges,
   type MapFragment,
@@ -22,6 +24,8 @@ import {
 } from "../ids.ts";
 import { activeVersion, addNode, listedVersions, type ViewSession } from "./helpers.ts";
 import { missingVerseLabel } from "../canon.ts";
+
+export const ROOT_VERSIONS_FRAME = "root-versions";
 
 export function addRootLevel(
   session: ViewSession,
@@ -99,7 +103,9 @@ function rootEnterEdges(session: ViewSession): MapFragment {
     [bookmarksId()]: { enter: bookmarksEnter },
     [searchId()]: { enter: edgeNode(searchInputId(), "push") },
     [versionsHeadingId()]: {
-      ...(firstVersion ? { enter: edgeNode(versionPickId(firstVersion.id), "push") } : {}),
+      ...(firstVersion
+        ? { enter: edgePushTransient(versionPickId(firstVersion.id), ROOT_VERSIONS_FRAME) }
+        : {}),
     },
   };
 }
@@ -133,8 +139,8 @@ export function addBookLevel(
   const firstChapter = chapters[0];
   fragments.push({
     [bookNodeId(book.id)]: {
-      ...(firstChapter ? { enter: edgeNode(chapterId(book.id, firstChapter.number), "replace") } : {}),
-      back: edgeNode(testamentId(book.testament), "replace"),
+      ...(firstChapter ? { enter: edgeNode(chapterId(book.id, firstChapter.number), "push") } : {}),
+      back: edgePop(),
     },
   });
   for (const chapter of chapters.slice(0, 12)) {
@@ -181,11 +187,11 @@ export function addChapterLevel(
         ? {
             enter: edgeNode(
               verseNodeId(seq, { bookId: book.id, chapter: chapter.number, verse: firstReading.verse }),
-              "replace",
+              "push",
             ),
           }
         : {}),
-      back: edgeNode(bookNodeId(book.id), "replace"),
+      back: edgePop(),
     },
   });
   const version = session.deps.store.getVersion(versionId) ?? activeVersion(session);

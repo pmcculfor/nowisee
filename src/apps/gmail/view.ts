@@ -1,9 +1,11 @@
 import {
   buildMap,
-  edgeAction,
   edgeExternal,
   edgeNode,
   edgePop,
+  edgePopTransient,
+  edgePushTransient,
+  edgeStay,
   edgeToHome,
   inputEdges,
   rootBackToHome,
@@ -20,6 +22,7 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
+import { isActionExtras } from "../../core/types.ts";
 import {
   chunkNodeId,
   GMAIL_APP_ID,
@@ -50,6 +53,7 @@ const UNAVAILABLE_LABEL = "Gmail is not configured.";
 const LOAD_ERROR_LABEL = "Couldn't load inbox. Try again.";
 const SENDING_LABEL = "Sending…";
 const SENT_LABEL = "Sent.";
+const COMPOSE_FRAME = "compose";
 
 export async function openGmailPath(
   deps: GmailViewDeps,
@@ -75,7 +79,7 @@ export async function buildGmailView(
     return unavailable(deps);
   }
 
-  if (extras.action && tipId) {
+  if (isActionExtras(extras) && tipId) {
     return applyAction(deps, ownerId, tipId, extras, ctx, oauth);
   }
 
@@ -104,24 +108,25 @@ async function applyAction(
   ctx: AppServerContext,
   oauth: OAuthCapability,
 ): Promise<RefreshResult> {
-  if (tipId === NODE.disconnectStatus) {
+  const writeId = extras.action?.triggerId ?? tipId;
+  if (writeId === NODE.disconnect || writeId === NODE.disconnectStatus || tipId === NODE.disconnectStatus) {
     await oauth.disconnect(GMAIL_OAUTH_SLOT);
     await deps.store.replaceInbox(ownerId, []);
     await deps.store.clearDraft(ownerId);
     return disconnectedView(deps);
   }
 
-  if (tipId === NODE.composeSubjectPrompt) {
+  if (writeId === NODE.composeTo || tipId === NODE.composeSubjectPrompt) {
     await deps.store.saveDraft(ownerId, { to: extras.inputText ?? "", sendResult: null });
     return connectedView(deps, ownerId, NODE.composeSubjectPrompt, {}, ctx, oauth);
   }
 
-  if (tipId === NODE.composeBodyPrompt) {
+  if (writeId === NODE.composeSubject || tipId === NODE.composeBodyPrompt) {
     await deps.store.saveDraft(ownerId, { subject: extras.inputText ?? "", sendResult: null });
     return connectedView(deps, ownerId, NODE.composeBodyPrompt, {}, ctx, oauth);
   }
 
-  if (tipId === NODE.composeSent) {
+  if (writeId === NODE.composeBody || writeId === NODE.composeSent || tipId === NODE.composeSent) {
     return sendMail(deps, ownerId, extras.inputText ?? "", extras, ctx, oauth);
   }
 
@@ -288,17 +293,17 @@ function loadError(deps: GmailViewDeps): RefreshResult {
 }
 
 function disconnectedView(deps: GmailViewDeps): RefreshResult {
-  const node: NodePayload = { id: NODE.disconnectStatus, label: DISCONNECTED_LABEL };
+  const node: NodePayload = { id: NODE.disconnect, label: DISCONNECTED_LABEL };
   return {
     node,
     warm: [node],
     navigationMap: buildMap({
-      [NODE.disconnectStatus]: {
+      [NODE.disconnect]: {
         enter: edgeToHome(deps.rootAppId, GMAIL_APP_ID),
         back: edgeToHome(deps.rootAppId, GMAIL_APP_ID),
       },
     }),
-    location: { appId: GMAIL_APP_ID, path: "/disconnect" },
+    location: { appId: GMAIL_APP_ID, path: "/" },
   };
 }
 
@@ -382,23 +387,23 @@ function buildNavigationMap(
     siblingListEdges(listIds, { wrap: false }),
     {
       [NODE.disconnect]: {
-        enter: edgeAction(NODE.disconnectStatus, { stackBehavior: "replace" }),
+        enter: edgeStay({ action: true }),
       },
     },
     {
       [NODE.compose]: {
-        enter: edgeNode(NODE.composeToPrompt, "replace"),
+        enter: edgePushTransient(NODE.composeToPrompt, COMPOSE_FRAME),
       },
       [NODE.composeToPrompt]: {
-        enter: edgeNode(NODE.composeTo, "replace"),
-        back: edgeNode(NODE.compose, "replace"),
+        enter: edgePushTransient(NODE.composeTo, COMPOSE_FRAME),
+        back: edgePopTransient(),
       },
       [NODE.composeSubjectPrompt]: {
-        enter: edgeNode(NODE.composeSubject, "replace"),
+        enter: edgePushTransient(NODE.composeSubject, COMPOSE_FRAME),
         back: edgeNode(NODE.composeTo, "replace"),
       },
       [NODE.composeBodyPrompt]: {
-        enter: edgeNode(NODE.composeBody, "replace"),
+        enter: edgePushTransient(NODE.composeBody, COMPOSE_FRAME),
         back: edgeNode(NODE.composeSubject, "replace"),
       },
     },
@@ -415,15 +420,14 @@ function buildNavigationMap(
       commitStackBehavior: "replace",
     }),
     inputEdges(NODE.composeBody, {
-      commitTo: NODE.composeSent,
-      backTo: NODE.composeBodyPrompt,
+      backTo: "popTransient",
       action: true,
-      commitStackBehavior: "replace",
+      commitStackBehavior: "popTransient",
     }),
     {
       [NODE.composeSent]: {
-        enter: edgeNode(NODE.compose, "replace"),
-        back: edgeNode(NODE.compose, "replace"),
+        enter: edgePopTransient(),
+        back: edgePopTransient(),
       },
     },
   ];

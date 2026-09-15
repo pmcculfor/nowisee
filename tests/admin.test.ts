@@ -81,7 +81,7 @@ describe("usage recording and admin console", () => {
       method: "POST",
       url: "/api/apps/home/refresh",
       headers: apiHeaders(cookie, { "x-forwarded-for": "198.51.100.20" }),
-      body: { stack: [{ nodeId: "home:catalog:0", label: "x", location: null }] },
+      body: { nodeId: "home:catalog:0" },
     });
     expect(refreshed.status).toBe(200);
 
@@ -105,8 +105,8 @@ describe("usage recording and admin console", () => {
       url: "/api/apps/notes/refresh",
       headers: apiHeaders(signedCookie, { "x-forwarded-for": "192.0.2.44" }),
       body: {
-        stack: [{ nodeId: "notes:empty", label: "x", location: null }],
-        extras: { action: true },
+        nodeId: "notes:empty",
+        extras: { action: { triggerId: "notes:empty" } },
       },
     });
     expect(afterSignIn.status).toBe(200);
