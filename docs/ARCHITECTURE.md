@@ -43,13 +43,13 @@ server/index.ts   production entry (SPA + /api)
 
 ### Environment
 
-See [`.env.example`](../.env.example) (local) and [`.env.production.example`](../.env.production.example) (https://nowisee.app). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
+See [`.env.example`](../.env.example) (local), [`.env.production.example`](../.env.production.example) (https://nowisee.app), and [`.env.staging.example`](../.env.staging.example) (https://dev.nowisee.app). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service), [`deploy/nowisee-dev.service`](../deploy/nowisee-dev.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
 
 | Variable | Role |
 |----------|------|
 | `PORT` | Listen port (default `3000`) |
 | `NOWISEE_DB` | Host SQLite file (default `data/nowisee.db`) |
-| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Production: `https://nowisee.app`. If unset, every `/api` Origin check fails (no `Host` fallback). |
+| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Production: `https://nowisee.app`. Staging: `https://dev.nowisee.app`. If unset, every `/api` Origin check fails (no `Host` fallback). |
 | `NOWISEE_LOCKBOX_KEY` | 32-byte AES key, base64. Required if lockbox/OAuth apps are granted |
 | `NOWISEE_LOCKBOX_KEY_ID` | Optional key id (default `v1`) |
 | `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
