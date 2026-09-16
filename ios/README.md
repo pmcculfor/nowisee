@@ -27,8 +27,6 @@ The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 P
 
 Once the first vertical tick has fired, further movement is only measured on Y. A second tick needs another 8%; after that, 4% up is another `prev` and 4% down is a `next`, even if the finger also moves sideways. Reversing without lifting the finger walks back through items. Each left/right/up/down fire and the 1-second recents hold plays a light haptic, including every extra tick in a long vertical pan.
 
-Visible body text (overlay and input fields) is 2× the default Dynamic Type body size and still scales with the system text-size setting.
-
 On **input** nodes the overlay hides. VoiceOver uses the native field plus Cancel, Done, and Recent apps. Those buttons stay enabled; taps no-op while Navigator is blocked. Leaving input posts `.screenChanged` onto the overlay; a newer label waits until that overlay is focused, then `setLabel` plus `.announcement` may interrupt. After that, a new text label interrupts the previous utterance (no takeover delay). Connect Gmail opens the system auth sheet (`ASWebAuthenticationSession`); a failed start speaks a retry/back message; cancel leaves the Connect node.
 
 ## Local site instead of production

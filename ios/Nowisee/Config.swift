@@ -40,21 +40,6 @@ enum ScrubTicks {
   static let fastStepFraction: CGFloat = 0.04
 }
 
-enum ShellFont {
-  /// Overlay and input body text, relative to the default Dynamic Type body size.
-  static let sizeMultiplier: CGFloat = 2
-
-  static func body() -> UIFont {
-    let defaultTraits = UITraitCollection(preferredContentSizeCategory: .large)
-    let descriptor = UIFontDescriptor.preferredFontDescriptor(
-      withTextStyle: .body,
-      compatibleWith: defaultTraits
-    )
-    let base = UIFont(descriptor: descriptor, size: descriptor.pointSize * sizeMultiplier)
-    return UIFontMetrics(forTextStyle: .body).scaledFont(for: base)
-  }
-}
-
 enum NavHaptics {
   private static let generator = UIImpactFeedbackGenerator(style: .light)
 

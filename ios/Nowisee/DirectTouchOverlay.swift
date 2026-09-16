@@ -40,7 +40,7 @@ final class DirectTouchOverlay: UIView {
     textView.isUserInteractionEnabled = false
     textView.isAccessibilityElement = false
     textView.backgroundColor = .clear
-    textView.font = ShellFont.body()
+    textView.font = .preferredFont(forTextStyle: .body)
     textView.adjustsFontForContentSizeCategory = true
     textView.textContainerInset = UIEdgeInsets(top: 24, left: 16, bottom: 24, right: 16)
     textView.translatesAutoresizingMaskIntoConstraints = false
