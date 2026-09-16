@@ -36,12 +36,14 @@ enum RefreshDecoding {
       }
       clipboardText = text
     }
+    let stack = stackEntries(rec["stack"])
     return RefreshResult(
       navigationMap: navigationMap,
       warm: warm,
       node: node,
       location: location,
-      clipboardText: clipboardText
+      clipboardText: clipboardText,
+      stack: stack
     )
   }
 
@@ -77,9 +79,11 @@ enum RefreshDecoding {
         return nil
       }
       let toNodeId = rec["toNodeId"] as? String
+      let frame = rec["frame"] as? String
       return .node(
         toNodeId: toNodeId,
         stackBehavior: behavior,
+        frame: frame,
         passInputText: rec["passInputText"] as? Bool == true,
         action: rec["action"] as? Bool == true
       )
@@ -146,19 +150,8 @@ enum RefreshDecoding {
     ["path": path, "extras": wireExtras(extras)]
   }
 
-  static func wireBody(stack: [StackEntry], extras: RefreshExtras) -> [String: Any] {
-    [
-      "stack": stack.map { entry -> [String: Any] in
-        var rec: [String: Any] = ["nodeId": entry.nodeId, "label": entry.label]
-        if let location = entry.location {
-          rec["location"] = ["appId": location.appId, "path": location.path]
-        } else {
-          rec["location"] = NSNull()
-        }
-        return rec
-      },
-      "extras": wireExtras(extras),
-    ]
+  static func wireBody(nodeId: String, extras: RefreshExtras) -> [String: Any] {
+    ["nodeId": nodeId, "extras": wireExtras(extras)]
   }
 
   static func wireExtras(_ extras: RefreshExtras) -> [String: Any] {
@@ -166,13 +159,41 @@ enum RefreshDecoding {
     if let inputText = extras.inputText {
       rec["inputText"] = inputText
     }
-    if extras.action {
-      rec["action"] = true
+    if let action = extras.action, !action.triggerId.isEmpty {
+      rec["action"] = ["triggerId": action.triggerId]
     }
     if let ids = extras.parkedAppIds {
       rec["parkedAppIds"] = ids
     }
     return rec
+  }
+
+  /// Optional ancestry. Malformed entries yield nil (caller discards ancestry).
+  static func stackEntries(_ value: Any?) -> [StackEntry]? {
+    guard let raw = value as? [Any] else {
+      return nil
+    }
+    var out: [StackEntry] = []
+    for item in raw {
+      guard let rec = asObject(item),
+            let nodeId = rec["nodeId"] as? String,
+            !nodeId.isEmpty,
+            let label = rec["label"] as? String
+      else {
+        return nil
+      }
+      var location: AppLocation?
+      if rec["location"] == nil || rec["location"] is NSNull {
+        location = nil
+      } else {
+        guard let loc = appLocation(rec["location"]) else {
+          return nil
+        }
+        location = loc
+      }
+      out.append(StackEntry(nodeId: nodeId, label: label, location: location, frame: nil))
+    }
+    return out
   }
 
   private static func asObject(_ value: Any?) -> [String: Any]? {

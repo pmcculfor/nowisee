@@ -69,13 +69,14 @@ Full definitions live in [`src/core/types.ts`](../src/core/types.ts). The names 
 | Name | Role |
 |------|------|
 | `NavIntent` | `prev` / `next` / `enter` / `back`, plus app-defined symbolic intents |
-| `NavEdge` | `node` (push/replace/pop), `app` (`AppLocation`), `resume` (`appId`), or `external` (`href`); optional `action`, `passInputText` |
+| `NavEdge` | `node` (`push`/`replace`/`pop`/`stay`/`pushTransient`/`popTransient`), `app` (`AppLocation`), `resume` (`appId`), or `external` (`href`); optional `action`, `passInputText`, `frame` (pushTransient) |
 | `NavigationMap` | Nested `fromNodeId → intent → edge` (no delimiter) |
 | `NodePayload` | `id`, `label`, optional `kind` (`text` \| `input`), `secret`, `autocomplete`, `data` (`JsonValue`) |
 | `AppLocation` | `{ appId, path }` with `path` starting `/`. Apps never build browser URLs |
-| `RefreshExtras` | `inputText`, `action`, `parkedAppIds`, `signal` |
-| `RefreshResult` | `navigationMap`, `warm`, `node`, `location` (or `null`), optional `clipboardText` |
-| `AppModule` | `open(path, extras, ctx?)` and `refresh(stack, extras, ctx?)` |
+| `RefreshExtras` | `inputText`, `action?: { triggerId }`, `parkedAppIds`, `signal` |
+| `RefreshResult` | `navigationMap`, `warm`, `node`, `location` (or `null`), optional `clipboardText`. No `stack`. |
+| `OpenResult` | `RefreshResult` plus optional committed `stack` ancestry |
+| `AppModule` | `open(path, extras, ctx?)` and `refresh(nodeId, extras, ctx?)` |
 | `AppServerContext` | Server-only: `userId`, `sessionId`, `accountAppId`, optional `identity` / `lockbox` / `oauth` / `directory` |
 | `PlatformContext` | Client-only clipboard (and reserved `announce` / `requestRefresh`, not provided) |
 | `ShellConfig` | `rootAppId`; optional `recentsAppId`, `keyBindings` |
@@ -91,14 +92,16 @@ Side effects are ordinary navigation — there is no `activate()` and no separat
 | Rule | Owner |
 |------|-------|
 | Mark the deliberate trigger with `action: true` on the edge | App |
-| Set `extras.action = true` on exactly the call caused by traversing that edge | Core |
+| Set `extras.action = { triggerId }` on exactly the call caused by traversing that edge | Core |
 | Never set `extras.action` on bootstrap, revalidation, retry, replay, or any other call | Core |
 | Never re-issue, retry, or abort an action call | Core |
+| Block intents for the duration of every action call | Core |
+| On action failure, offer back only — never retry | Core |
 | Never coalesce or drop an action call (read-only revalidations: one in-flight + one pending) | Core |
-| Perform side effects only when `extras.action` is true; otherwise read-only | App |
+| Perform side effects only when `extras.action` is set; the write is chosen by `triggerId` | App |
 | Resolve with a status node on failure rather than rejecting | App |
 
-Sibling browsing uses `prev` / `next` (no flag). Background revalidation carries no flag. Returning to a status node later carries no flag. After the local move the tip is the status node, so a rapid double-press cannot re-fire the trigger. Status tips should return `location: null` so a reload does not land the user back on the action node.
+Sibling browsing uses `prev` / `next` (no flag). Background revalidation carries no flag. Returning to a node later carries no flag. Core blocks for the whole action call, including `stay` actions whose live map still carries `action: true`. After the call, the new map must drop `action: true` from that enter if a second press must not repeat the write. Status tips should return `location: null` so a reload does not land the user back on the action node.
 
 ---
 
@@ -143,7 +146,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **Router** is a pure boundary: `parse` / `hrefFor` / `setAddressBar`, and `popstate` → `openLocation`. It never owns stack, cache, map, or busy.
 
-**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. Read-only refreshes coalesce to one in-flight call and one pending; a covering stale result replaces warm and map without moving the tip. A warm miss moves the stack, keeps the previous label, and blocks until a covering or current-token refresh. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
+**Navigator** is the single owner of every state transition: stack, blocked, token, display, address bar, and clipboard fulfill. `onIntent` looks up the map. A warm hit paints locally then revalidates. Read-only refreshes coalesce to one in-flight call and one pending; a covering stale result replaces warm and map without moving the tip. A warm miss moves the stack, keeps the previous label, and blocks until a covering or current-token refresh. **Every action call blocks** until it settles; action failure offers back only. Warm-miss failure speaks recovery copy (retry / back); warm-hit and failed open stay last-good (see MODULES).
 
 **Display:** text tips use `role="application"`, remount, and focus, with no `aria-live`. Input tips use a textarea or password field plus Cancel/Done/Recent apps (click only). Hide NavPads while input is open.
 
@@ -176,7 +179,7 @@ The root app lives at `/` (canonical). `/<rootAppId>` may alias. Other apps are 
 3. On `pop` edges, omit `toNodeId`.
 4. Not embed foreign apps' node ids in the navigation map (use `app` edges).
 5. Not silently rewrite the stack to teleport the user after a workflow.
-6. Perform side effects only when `extras.action` is true.
+6. Perform side effects only when `extras.action` is set.
 7. Not throw through to freeze core busy state—prefer status text on failure. This matters most for action calls.
 8. Treat stack tip as possibly stale; return a valid fallback `node` when needed (repair, not teleport).
 9. Author edges by intent only; never assume a keystroke.
@@ -187,7 +190,7 @@ The root app lives at `/` (canonical). `/<rootAppId>` may alias. Other apps are 
 
 1. Prefetch likely neighbors via map edges + warm.
 2. Use app-kit helpers instead of copying edge boilerplate.
-3. Put the effectful transition on an `enter` edge with `action: true`, landing on a status node.
+3. Put the effectful transition on an `enter` edge with `action: true`. Fast local work uses `stay` and must change the label; slow work pushes a status node.
 4. Put instruction text on a normal node before an input node.
 5. Return `location: null` for status tips that should not change the address bar.
 6. Return stable canonical locations for bookmarkable tips.
@@ -205,7 +208,7 @@ Unit-test without the DOM where possible. The list below is the behavior to cove
 - Warm hit vs warm miss (block); warm-miss failure recovery copy; refresh failure clears busy.
 - Transition token: an A → B → A sequence discards the first A's in-flight result.
 - Read-only: one in-flight refresh plus one pending; a covering stale result replaces warm and map without moving the tip. A later read-only intent does not abort the in-flight call. An action call is never aborted.
-- `extras.action` is set on exactly the traversal of an `action: true` edge, and on no other call.
+- `extras.action` is `{ triggerId }` on exactly the traversal of an `action: true` edge, and on no other call.
 - Walking the full sibling option list past an effectful node performs no effect.
 - `passInputText` included only when flag set from input tip.
 - Home lists apps as `app` edges; app root `back` opens the root app.

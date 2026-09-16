@@ -21,6 +21,7 @@ import {
 } from "../src/apps/gmail/types.ts";
 import { OAuthError } from "../server/oauth/errors.ts";
 import type { AppServerContext, OAuthCapability, OAuthConnectionStatus } from "../src/core/types.ts";
+import { refreshApp } from "./helpers/refreshCall.ts";
 
 const OWNER = "user-1";
 const OTHER = "user-2";
@@ -240,17 +241,17 @@ describe("Gmail app graph", () => {
     const gmail = app(fakeClient({ inbox: [], send: (m) => sent.push(m) }));
     const ctx = signedIn(oauth);
 
-    await gmail.refresh(
+    await refreshApp(gmail,
       [{ nodeId: NODE.composeSubjectPrompt, label: "", location: null }],
       { action: true, inputText: "ada@example.com" },
       ctx,
     );
-    await gmail.refresh(
+    await refreshApp(gmail,
       [{ nodeId: NODE.composeBodyPrompt, label: "", location: null }],
       { action: true, inputText: "Hi" },
       ctx,
     );
-    const result = await gmail.refresh(
+    const result = await refreshApp(gmail,
       [{ nodeId: NODE.composeSent, label: "Sending…", location: null }],
       { action: true, inputText: "Hello Ada" },
       ctx,
@@ -260,7 +261,7 @@ describe("Gmail app graph", () => {
     expect(result.node.label).toBe("Sent.");
     expect(result.location).toBeNull();
     expect(result.navigationMap[NODE.composeSent]?.back).toMatchObject({
-      toNodeId: NODE.compose,
+      stackBehavior: "popTransient",
     });
   });
 
@@ -268,7 +269,7 @@ describe("Gmail app graph", () => {
     let called = 0;
     const oauth = mockOauth();
     const gmail = app(fakeClient({ send: () => { called += 1; } }));
-    const result = await gmail.refresh(
+    const result = await refreshApp(gmail,
       [{ nodeId: NODE.composeSent, label: "Sending…", location: null }],
       { action: true, inputText: "body" },
       signedIn(oauth),
@@ -292,12 +293,13 @@ describe("Gmail app graph", () => {
       fakeClient({ inbox: [{ id: "m1", from: "Ada", subject: "Hello" }] }),
     );
     const ctx = signedIn(oauth);
-    const done = await gmail.refresh(
-      [{ nodeId: NODE.disconnectStatus, label: "Disconnecting…", location: null }],
+    const done = await refreshApp(gmail,
+      [{ nodeId: NODE.disconnect, label: "Disconnect Gmail", location: null }],
       { action: true },
       ctx,
     );
     expect(oauth.disconnects).toBe(1);
+    expect(done.node.id).toBe(NODE.disconnect);
     expect(done.node.label).toBe("Gmail disconnected.");
     const next = await gmail.open("/", {}, ctx);
     expect(next.node.id).toBe(NODE.connect);

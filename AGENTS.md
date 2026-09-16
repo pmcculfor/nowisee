@@ -71,7 +71,7 @@ If any answer is “only our first apps,” it does **not** belong in core. Pref
 - Auto-dismissing status/confirmation text without an explicit intent
 - Escape-as-platform-exit from input nodes
 - Trusting a user or owner id that came from the client (`stack`, `path`, `extras`) instead of from the session cookie on the server
-- Resolving a node id out of the stack without the owner in the query — the browser resends that stack, unverified, on every refresh
+- Resolving a tip or `triggerId` without the owner in the query — the browser sends those ids, unverified, on every refresh
 - Core learning what "signed in" means: no `401` branch, no account app id in core, no shell-wide sign-in redirect. A signed-out user reaches the app like anyone else, and the app answers with an ordinary node
 - Splitting authentication between the host and the Account app. One identity service owns credentials, hashing, and sessions; the Account app owns only the screens over it, through an injected capability
 - The host calling an app in order to authenticate a request. The dependency runs Account app → identity service, never the reverse
@@ -85,13 +85,13 @@ These rows are the scanable form of the locks. The surrounding docs explain why.
 
 | Topic | Lock |
 |-------|------|
-| App API | `open(path)` + `refresh(stack, extras)` → navigation map + warm + tip + location |
+| App API | `open(path)` + `refresh(nodeId, extras)` → navigation map + warm + tip + location. `open` may also return committed `stack` ancestry. Refresh never carries `stack`. |
 | Prefetch | App pushes `warm` + navigation-map edges; core only stores/serves |
 | Navigation map | `(fromNodeId, intent) → node \| app \| external \| resume` edge; missing = silent no-op; nested structure, no delimiter |
 | Intents | Apps author `prev` / `next` / `enter` / `back`; **core alone** maps keystrokes, edge pads, and input Cancel/Done/Recent apps to intents. Reserved `recents` is intercepted by Navigator (opens `config.recentsAppId`) |
-| Actions | `action: true` on an edge; core sets `extras.action` on that traversal **only**; never re-issues, retries, aborts, or coalesces it; apps run side effects only then |
-| Stack | One **current** stack per session; Navigator parks the previous app's stack on successful cross-app `open`. `kind: "resume"` restores then `refresh`. URL `open` still resets **that** app |
-| Node edge stackBehavior | `push` / `replace` / `pop` (on `pop`, omit `toNodeId`; stack tip wins) |
+| Actions | `action: true` on an edge; core sets `extras.action = { triggerId }` (pre-move tip) on that traversal **only**; never re-issues, retries, aborts, or coalesces it; apps run side effects only then. The write is chosen by `triggerId`; rendering keys on the refresh tip. Core **blocks** for the duration of every action call. Action failure offers **back only** (never retry). |
+| Stack | One **current** stack per session; Navigator parks the previous app's stack on successful cross-app `open`. `kind: "resume"` restores then `refresh`. URL `open` still resets **that** app, then may install `OpenResult.stack` |
+| Node edge stackBehavior | `push` / `replace` / `pop` / `stay` / `pushTransient` / `popTransient`. `push`/`replace`/`pushTransient` require `toNodeId`. `pushTransient` also requires a non-empty `frame`. `pop`/`stay`/`popTransient` omit `toNodeId`. `replace` onto its own `fromNodeId` is malformed. `popTransient` never pops the last entry. |
 | Cross-app / leave app | `app` location edges (fresh `open`, drops destination park); `resume` restores a parked stack. App root `back` **MUST** be an `app` edge to home |
 | Home | An `AppModule`, not a core-special UI; identified by `config.rootAppId`, never a core constant |
 | Recents | A first-party app (`config.recentsAppId`). Hidden from Home (`homeRole: internal`, `parkable: false`). Navigator intercepts `recents`. Home is parkable but never listed |

@@ -14,12 +14,14 @@ import type {
   NavIntent,
   NodeKind,
   NodePayload,
+  OpenResult,
   RefreshExtras,
   RefreshResult,
   ShellConfig,
   StackBehavior,
   StackEntry,
 } from "./types.ts";
+import { isActionExtras } from "./types.ts";
 
 export interface NavigatorOptions {
   readonly config: ShellConfig;
@@ -59,6 +61,7 @@ type CallArgs = {
 };
 
 type LoadRecovery = {
+  readonly kind: "load" | "action";
   readonly stackBefore: readonly StackEntry[];
   readonly previous: NodePayload | null;
 };
@@ -66,6 +69,10 @@ type LoadRecovery = {
 /** Spoken on a warm-miss refresh failure. Core recovery copy, not an app node. */
 export const LOAD_FAILURE_LABEL =
   "Something went wrong. Please check your network connection. Navigate right to try again. Navigate left to go back.";
+
+/** Spoken on an action-call failure. Enter must not re-issue the action. */
+export const ACTION_FAILURE_LABEL =
+  "Something went wrong. Please check your network connection. Navigate left to go back.";
 
 /**
  * Single owner of every state transition: stack, cache, map, blocked, display,
@@ -166,7 +173,8 @@ export class Navigator {
       return;
     }
 
-    if (!isWellFormedEdge(edge)) {
+    if (!isWellFormedEdge(edge, tip.nodeId, tip.frame)) {
+      console.warn("Navigator: malformed edge", tip.nodeId, intent);
       return;
     }
 
@@ -177,7 +185,7 @@ export class Navigator {
       extras.inputText = this.display.getInputText();
     }
     if (edge.kind !== "external" && edge.kind !== "resume" && edge.action) {
-      extras.action = true;
+      extras.action = { triggerId: tip.nodeId };
     }
 
     this.transitionToken += 1;
@@ -229,7 +237,7 @@ export class Navigator {
 
     await this.startCall({
       token,
-      isAction: extras.action === true,
+      isAction: isActionExtras(extras),
       invoke: (callExtras) => app.open(path, callExtras),
       baseExtras: extras,
       applyAs: { kind: "open", appId },
@@ -266,13 +274,14 @@ export class Navigator {
 
     const stackBefore = parked.stack;
     const previous = this.payloadForParked(parked);
+    const tipId = this.stack.tip()!.nodeId;
     return this.startCall({
       token,
       isAction: false,
-      invoke: (callExtras) => dest.refresh(this.stack.snapshot(), callExtras),
+      invoke: (callExtras) => dest.refresh(tipId, callExtras),
       baseExtras: {},
       applyAs: { kind: "refresh" },
-      enterRecoveryOnFailure: { stackBefore, previous },
+      enterRecoveryOnFailure: { kind: "load", stackBefore, previous },
     });
   }
 
@@ -281,42 +290,77 @@ export class Navigator {
     extras: RefreshExtras,
     token: number,
   ): Promise<void> | void {
-    let destId: string;
-    let behavior: StackBehavior = edge.stackBehavior;
+    const behavior: StackBehavior = edge.stackBehavior;
     const stackBefore = this.stack.snapshot();
     const previous = this.payloadForCurrentTip();
+    const isAction = isActionExtras(extras);
+    const recovery: LoadRecovery = {
+      kind: isAction ? "action" : "load",
+      stackBefore,
+      previous,
+    };
 
-    if (edge.stackBehavior === "pop") {
+    if (behavior === "pop") {
       if (this.stack.length <= 1) {
         return this.openLocation({ appId: this.config.rootAppId, path: "/" });
       }
       this.stack.pop();
-      destId = this.stack.tip()!.nodeId;
-    } else {
-      destId = edge.toNodeId!;
+    } else if (behavior === "popTransient") {
+      const frame = this.stack.tip()?.frame;
+      if (!frame) {
+        return;
+      }
+      const snapshot = this.stack.snapshot();
+      let keep = snapshot.length - 1;
+      while (keep >= 0 && snapshot[keep]?.frame === frame) {
+        keep--;
+      }
+      if (keep < 0) {
+        return this.openLocation({ appId: this.config.rootAppId, path: "/" });
+      }
+      while (this.stack.length > keep + 1) {
+        this.stack.pop();
+      }
     }
+
+    const destId =
+      behavior === "stay" || behavior === "pop" || behavior === "popTransient"
+        ? this.stack.tip()!.nodeId
+        : edge.toNodeId!;
 
     const payload = this.cache.get(destId);
-    if (payload) {
-      this.applyLocalMove(behavior, payload, { updateDisplay: true });
-      return this.scheduleCall(this.refreshCall(token, extras));
+    if (isAction) {
+      this.blocked = true;
     }
 
-    // Warm miss: move stack, keep previous display, block until refresh.
+    if (payload) {
+      this.applyLocalMove(behavior, payload, {
+        updateDisplay: behavior !== "stay",
+        frame: edge.frame,
+      });
+      return this.scheduleCall(this.refreshCall(token, extras, isAction ? recovery : undefined));
+    }
+
     this.blocked = true;
     this.applyLocalMove(
       behavior,
       { id: destId, label: "" },
-      { updateDisplay: false },
+      { updateDisplay: false, frame: edge.frame },
     );
-    return this.scheduleCall(this.refreshCall(token, extras, { stackBefore, previous }));
+    return this.scheduleCall(this.refreshCall(token, extras, recovery));
   }
 
   private onLoadRecoveryIntent(intent: NavIntent): void | Promise<void> {
+    const recovery = this.loadRecovery;
+    if (!recovery) {
+      return;
+    }
     if (intent === "enter") {
+      if (recovery.kind === "action") {
+        return;
+      }
       const app = this.currentApp();
-      const recovery = this.loadRecovery;
-      if (!app || !recovery) {
+      if (!app) {
         return;
       }
       this.transitionToken += 1;
@@ -333,13 +377,14 @@ export class Navigator {
   private enterLoadRecovery(recovery: LoadRecovery): void {
     this.loadRecovery = recovery;
     this.tipKind = "text";
-    this.display.showText(LOAD_FAILURE_LABEL);
+    const label = recovery.kind === "action" ? ACTION_FAILURE_LABEL : LOAD_FAILURE_LABEL;
+    this.display.showText(label);
     if (this.currentAppId) {
       this.displayed = {
         appId: this.currentAppId,
         id: this.stack.tip()?.nodeId ?? "",
         kind: "text",
-        label: LOAD_FAILURE_LABEL,
+        label,
       };
     }
   }
@@ -379,16 +424,26 @@ export class Navigator {
   private applyLocalMove(
     behavior: StackBehavior,
     payload: NodePayload,
-    opts: { updateDisplay: boolean },
+    opts: { updateDisplay: boolean; frame?: string },
   ): void {
-    const entry = this.entryFromPayload(payload);
+    if (behavior === "stay") {
+      if (opts.updateDisplay) {
+        this.showPayload(payload);
+      }
+      return;
+    }
+
+    const existing = this.stack.tip();
     if (behavior === "push") {
-      this.stack.push(entry);
+      this.stack.push(this.entryFromPayload(payload));
+    } else if (behavior === "pushTransient") {
+      this.stack.push(this.entryFromPayload(payload, opts.frame ?? existing?.frame));
     } else if (behavior === "replace") {
-      this.stack.replaceTip(entry);
+      this.stack.replaceTip(this.entryFromPayload(payload, existing?.frame, existing?.location));
     } else {
-      // pop: stack already adjusted; refresh tip fields from payload
-      this.stack.replaceTip(entry);
+      this.stack.replaceTip(
+        this.entryFromPayload(payload, existing?.frame, existing?.location ?? null),
+      );
     }
 
     if (opts.updateDisplay) {
@@ -396,12 +451,20 @@ export class Navigator {
     }
   }
 
-  private entryFromPayload(payload: NodePayload): StackEntry {
-    return {
+  private entryFromPayload(
+    payload: NodePayload,
+    frame?: string,
+    location: AppLocation | null = null,
+  ): StackEntry {
+    const entry: StackEntry = {
       nodeId: payload.id,
       label: payload.label,
-      location: null,
+      location,
     };
+    if (frame) {
+      entry.frame = frame;
+    }
+    return entry;
   }
 
   private showPayload(payload: NodePayload): void {
@@ -456,12 +519,12 @@ export class Navigator {
     extras: RefreshExtras,
     enterRecoveryOnFailure?: LoadRecovery,
   ): CallArgs {
-    const stack = this.stack.snapshot();
+    const tipId = this.stack.tip()?.nodeId ?? "";
     const app = this.currentApp();
     return {
       token,
-      isAction: extras.action === true,
-      invoke: (callExtras) => app!.refresh(stack, callExtras),
+      isAction: isActionExtras(extras),
+      invoke: (callExtras) => app!.refresh(tipId, callExtras),
       baseExtras: extras,
       applyAs: { kind: "refresh" },
       enterRecoveryOnFailure,
@@ -483,6 +546,7 @@ export class Navigator {
   private scheduleCall(args: CallArgs): Promise<void> | void {
     if (args.isAction) {
       this.preemptReadOnly();
+      this.blocked = true;
       return this.startCall(args);
     }
     if (!this.inFlight) {
@@ -539,6 +603,7 @@ export class Navigator {
     };
 
     if (args.isAction) {
+      this.blocked = true;
       this.platform.beginClipboardWrite();
     }
 
@@ -546,9 +611,8 @@ export class Navigator {
       ...args.baseExtras,
       signal: controller.signal,
     };
-    // Action flag only when this traversal requested it — never invent on revalidation.
-    if (args.isAction) {
-      callExtras.action = true;
+    if (args.isAction && args.baseExtras.action) {
+      callExtras.action = args.baseExtras.action;
     } else {
       delete callExtras.action;
     }
@@ -589,8 +653,6 @@ export class Navigator {
       if (args.isAction) {
         this.platform.endClipboardWrite();
       }
-      // Only the owner of `inFlight` may start `pending`. A preempting action
-      // or open overwrites `inFlight`; the aborted call must not flush.
       if (this.inFlight?.token === args.token) {
         this.inFlight = null;
         this.flushPending();
@@ -635,11 +697,16 @@ export class Navigator {
       this.map.replace({});
       this.displayed = null;
       this.currentAppId = applyAs.appId;
+      const ancestry = openAncestry(result as OpenResult, result.node.id);
+      if (ancestry) {
+        this.stack.restore(ancestry);
+      }
     }
 
     this.map.replace(result.navigationMap);
 
     const priorLocation = this.stack.tip()?.location ?? null;
+    const existingFrame = this.stack.tip()?.frame;
     const location =
       result.location === null
         ? priorLocation
@@ -651,6 +718,7 @@ export class Navigator {
       nodeId: result.node.id,
       label: result.node.label,
       location,
+      ...(applyAs.kind === "open" ? {} : existingFrame ? { frame: existingFrame } : {}),
     };
 
     if (this.stack.length === 0) {
@@ -662,8 +730,6 @@ export class Navigator {
     const stackIds = this.stack.snapshot().map((e) => e.nodeId);
     this.cache.replaceWarm(result.warm, result.node, stackIds);
 
-    // Warm hit already painted this tip; remounting would restart screen readers.
-    // Still adopt a changed label (e.g. "Copying…" → "Copied") or a repaired id.
     if (!this.isAlreadyShowing(result.node)) {
       this.showPayload(result.node);
     } else {
@@ -766,9 +832,25 @@ function withStatusLabel(result: RefreshResult, label: string): RefreshResult {
   };
 }
 
-function isWellFormedEdge(edge: NavEdge): boolean {
+function isWellFormedEdge(edge: NavEdge, fromNodeId: string, tipFrame?: string): boolean {
   if (edge.kind === "node") {
-    return edge.stackBehavior === "pop" || Boolean(edge.toNodeId);
+    const behavior = edge.stackBehavior;
+    if (behavior === "pop" || behavior === "stay") {
+      return !edge.toNodeId;
+    }
+    if (behavior === "popTransient") {
+      return !edge.toNodeId && Boolean(tipFrame);
+    }
+    if (behavior === "pushTransient") {
+      return Boolean(edge.toNodeId) && typeof edge.frame === "string" && edge.frame.length > 0;
+    }
+    if (behavior === "replace" && edge.toNodeId === fromNodeId) {
+      return false;
+    }
+    if (behavior === "push" || behavior === "replace") {
+      return Boolean(edge.toNodeId);
+    }
+    return false;
   }
   if (edge.kind === "app") {
     return Boolean(edge.to.appId) && isCanonicalPath(edge.to.path);
@@ -777,6 +859,39 @@ function isWellFormedEdge(edge: NavEdge): boolean {
     return edge.appId.length > 0;
   }
   return edge.href.length > 0;
+}
+
+function openAncestry(result: OpenResult, tipId: string): StackEntry[] | null {
+  const raw = result.stack;
+  if (!raw || raw.length === 0) {
+    return null;
+  }
+  const last = raw[raw.length - 1];
+  if (!last || last.nodeId !== tipId) {
+    console.warn("Navigator: discarded open ancestry (last entry must be the tip)");
+    return null;
+  }
+  const out: StackEntry[] = [];
+  for (const entry of raw) {
+    if (typeof entry.nodeId !== "string" || entry.nodeId.length === 0) {
+      console.warn("Navigator: discarded open ancestry (invalid entry)");
+      return null;
+    }
+    if (typeof entry.label !== "string") {
+      console.warn("Navigator: discarded open ancestry (invalid entry)");
+      return null;
+    }
+    let location: AppLocation | null = null;
+    if (entry.location !== null && entry.location !== undefined) {
+      if (!entry.location.appId || !isCanonicalPath(entry.location.path)) {
+        console.warn("Navigator: discarded open ancestry (non-canonical location)");
+        return null;
+      }
+      location = { appId: entry.location.appId, path: entry.location.path };
+    }
+    out.push({ nodeId: entry.nodeId, label: entry.label, location });
+  }
+  return out;
 }
 
 function locationFromStack(stack: readonly StackEntry[]): AppLocation | null {

@@ -3,10 +3,9 @@ import { edgeApp } from "../src/app-kit/index.ts";
 import {
   CREATE_EDIT_NODE_ID,
   CREATE_NODE_ID,
-  CREATE_RESULT_NODE_ID,
   activeItemNodeId,
+  addEditNodeId,
   addNodeId,
-  addResultNodeId,
   catalogListNodeId,
   completedEmptyNodeId,
   completedItemNodeId,
@@ -16,7 +15,6 @@ import {
   deletedNodeId,
   firstLineLabel,
   itemDoneNodeId,
-  itemRestoredNodeId,
   itemUndoNodeId,
 } from "../src/apps/lists/ids.ts";
 import { createListsApp, type ListsApp } from "../src/apps/lists/index.ts";
@@ -27,6 +25,7 @@ import {
 } from "../src/apps/lists/store.ts";
 import type { ListItemRecord, ListRecord, ListsStore } from "../src/apps/lists/types.ts";
 import type { AppServerContext } from "../src/core/types.ts";
+import { refreshApp } from "./helpers/refreshCall.ts";
 
 const OWNER = "user-1";
 const OTHER = "user-2";
@@ -134,13 +133,16 @@ describe("Lists app", () => {
       stackBehavior: "replace",
     });
     const edit = await app.open("/create/edit", {}, signedIn());
-    expect(edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter).toMatchObject({
+    const createEnter = edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter;
+    expect(createEnter).toMatchObject({
       kind: "node",
-      toNodeId: CREATE_RESULT_NODE_ID,
       stackBehavior: "replace",
       passInputText: true,
       action: true,
     });
+    expect(createEnter && "toNodeId" in createEnter ? createEnter.toNodeId : "").toMatch(
+      /^lists:list:[0-9a-f-]{36}:add$/,
+    );
   });
 
   it("open with lists tips the most recently updated title; create sits above", async () => {
@@ -216,8 +218,7 @@ describe("Lists app", () => {
     );
     expect(interior.navigationMap[activeItemNodeId("older")]?.back).toEqual({
       kind: "node",
-      toNodeId: catalogListNodeId("shop"),
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
   });
 
@@ -236,21 +237,23 @@ describe("Lists app", () => {
       idFactory: () => `id-${clock}`,
       now: () => `2026-03-0${++clock}T00:00:00.000Z`,
     });
+    const edit = await app.open("/create/edit", {}, signedIn());
+    const dest =
+      edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter &&
+      "toNodeId" in edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!
+        ? edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!.toNodeId!
+        : "";
     const created = await app.refresh(
-      [{ nodeId: CREATE_RESULT_NODE_ID, label: "Saving…", location: null }],
-      { action: true, inputText: "Shopping" },
+      dest,
+      { action: { triggerId: CREATE_EDIT_NODE_ID }, inputText: "Shopping" },
       signedIn(),
     );
-    expect(created.node.id).toBe(addNodeId("id-1"));
+    expect(created.node.id).toBe(dest);
     expect(created.node.label).toBe("Add an item");
-    expect(await store.listLists(OWNER)).toEqual([
-      {
-        id: "id-1",
-        title: "Shopping",
-        createdAt: "2026-03-01T00:00:00.000Z",
-        updatedAt: "2026-03-01T00:00:00.000Z",
-      },
-    ]);
+    const lists = await store.listLists(OWNER);
+    expect(lists).toHaveLength(1);
+    expect(lists[0]?.title).toBe("Shopping");
+    expect(created.node.id).toBe(addNodeId(lists[0]!.id));
   });
 
   it("create item action lands on Add an item, not the new row", async () => {
@@ -261,8 +264,8 @@ describe("Lists app", () => {
       now: () => `2026-04-0${++clock}T00:00:00.000Z`,
     });
     const created = await app.refresh(
-      [{ nodeId: addResultNodeId("shop"), label: "Saving…", location: null }],
-      { action: true, inputText: "Milk" },
+      addNodeId("shop"),
+      { action: { triggerId: addEditNodeId("shop") }, inputText: "Milk" },
       signedIn(),
     );
     expect(created.node.id).toBe(addNodeId("shop"));
@@ -277,15 +280,15 @@ describe("Lists app", () => {
       lists: [listRow({ id: "shop", title: "Shopping" })],
     });
     await app.refresh(
-      [{ nodeId: CREATE_RESULT_NODE_ID, label: "Saving…", location: null }],
-      { action: true, inputText: "   " },
+      addNodeId("shop"),
+      { action: { triggerId: CREATE_EDIT_NODE_ID }, inputText: "   " },
       signedIn(),
     );
     expect(await store.listLists(OWNER)).toHaveLength(1);
 
     await app.refresh(
-      [{ nodeId: addResultNodeId("shop"), label: "Saving…", location: null }],
-      { action: true, inputText: "\n" },
+      addNodeId("shop"),
+      { action: { triggerId: addEditNodeId("shop") }, inputText: "\n" },
       signedIn(),
     );
     expect(await store.listItems(OWNER, "shop", "active")).toEqual([]);
@@ -304,7 +307,7 @@ describe("Lists app", () => {
       action: true,
     });
 
-    const done = await app.refresh(
+    const done = await refreshApp(app,
       [
         { nodeId: catalogListNodeId("shop"), label: "Shopping", location: null },
         { nodeId: activeItemNodeId("milk"), label: "Milk", location: null },
@@ -331,8 +334,7 @@ describe("Lists app", () => {
     });
     expect(done.navigationMap[itemUndoNodeId("milk")]?.enter).toMatchObject({
       action: true,
-      toNodeId: itemRestoredNodeId("milk"),
-      stackBehavior: "replace",
+      stackBehavior: "stay",
     });
     expect((await store.getItem(OWNER, "milk"))?.completedAt).not.toBeNull();
   });
@@ -349,7 +351,7 @@ describe("Lists app", () => {
         }),
       ],
     });
-    const repaired = await app.refresh(
+    const repaired = await refreshApp(app,
       [{ nodeId: activeItemNodeId("milk"), label: "Milk", location: null }],
       {},
       signedIn(),
@@ -370,12 +372,16 @@ describe("Lists app", () => {
       ],
     });
     const restored = await app.refresh(
-      [{ nodeId: itemRestoredNodeId("milk"), label: "Restored.", location: null }],
-      { action: true },
+      itemUndoNodeId("milk"),
+      { action: { triggerId: itemUndoNodeId("milk") } },
       signedIn(),
     );
-    expect(restored.node.id).toBe(itemRestoredNodeId("milk"));
+    expect(restored.node.id).toBe(itemUndoNodeId("milk"));
     expect(restored.node.label).toBe("Restored.");
+    expect(restored.navigationMap[itemUndoNodeId("milk")]).toEqual({
+      back: { kind: "node", stackBehavior: "pop" },
+      enter: { kind: "node", stackBehavior: "pop" },
+    });
     expect((await store.getItem(OWNER, "milk"))?.completedAt).toBeNull();
   });
 
@@ -404,8 +410,19 @@ describe("Lists app", () => {
     );
     expect(completed.navigationMap[completedItemNodeId("newDone")]?.enter).toMatchObject({
       action: true,
-      toNodeId: itemRestoredNodeId("newDone"),
-      stackBehavior: "replace",
+      stackBehavior: "stay",
+    });
+
+    const restored = await app.refresh(
+      completedItemNodeId("newDone"),
+      { action: { triggerId: completedItemNodeId("newDone") } },
+      signedIn(),
+    );
+    expect(restored.node.id).toBe(completedItemNodeId("newDone"));
+    expect(restored.node.label).toBe("Restored.");
+    expect(restored.navigationMap[completedItemNodeId("newDone")]).toEqual({
+      back: { kind: "node", stackBehavior: "pop" },
+      enter: { kind: "node", stackBehavior: "pop" },
     });
   });
 
@@ -438,7 +455,7 @@ describe("Lists app", () => {
       toNodeId: deletedNodeId("shop"),
     });
 
-    const gone = await app.refresh(
+    const gone = await refreshApp(app,
       [{ nodeId: deletedNodeId("shop"), label: "List deleted.", location: null }],
       { action: true },
       signedIn(),
@@ -460,7 +477,7 @@ describe("Lists app", () => {
       lists: [listRow({ id: "shop", title: "Shopping" })],
       items: [itemRow({ id: "milk", listId: "shop", body: "Milk" })],
     });
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: itemDoneNodeId("milk"), label: "Completed.", location: null }],
       {},
       signedIn(),
@@ -478,8 +495,8 @@ describe("Lists app", () => {
     expect(result.navigationMap[result.node.id]?.back).toEqual(
       edgeApp({ appId: "home", path: "/app/lists" }),
     );
-    await app.refresh(
-      [{ nodeId: CREATE_RESULT_NODE_ID, label: "Saving…", location: null }],
+    await refreshApp(app,
+      [{ nodeId: CREATE_EDIT_NODE_ID, label: "", location: null }],
       { action: true, inputText: "Nope" },
       signedOutCtx(),
     );
@@ -507,7 +524,7 @@ describe("Lists app", () => {
     expect(mine.node.label).toBe("My list");
     expect(mine.warm.some((n) => n.label.includes("Secret"))).toBe(false);
 
-    const forgedList = await app.refresh(
+    const forgedList = await refreshApp(app,
       [{ nodeId: catalogListNodeId("theirs"), label: "Secret list", location: null }],
       {},
       signedIn(OWNER),
@@ -515,14 +532,14 @@ describe("Lists app", () => {
     expect(forgedList.node.label).not.toContain("Secret");
     expect(forgedList.node.id).toBe(catalogListNodeId("mine"));
 
-    const forgedItem = await app.refresh(
+    const forgedItem = await refreshApp(app,
       [{ nodeId: activeItemNodeId("their-item"), label: "Secret item", location: null }],
       {},
       signedIn(OWNER),
     );
     expect(forgedItem.node.label).not.toContain("Secret");
 
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: itemDoneNodeId("their-item"), label: "Completed.", location: null }],
       { action: true },
       signedIn(OWNER),
@@ -540,7 +557,7 @@ describe("Lists app", () => {
       lists: [listRow({ id: "shop", title: "Shopping" })],
       items: [itemRow({ id: "milk", listId: "shop", body: "Milk" })],
     });
-    const result = await app.refresh(
+    const result = await refreshApp(app,
       [
         { nodeId: catalogListNodeId("shop"), label: "Shopping", location: null },
         { nodeId: activeItemNodeId("milk"), label: "Milk", location: null },
@@ -653,9 +670,15 @@ describe("Lists sqlite store", () => {
     const app = startListsApp({ rootAppId: "home", dbPath: ":memory:" });
     try {
       const ctx = signedIn();
+      const edit = await app.open("/create/edit", {}, ctx);
+      const dest =
+        edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter &&
+        "toNodeId" in edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!
+          ? edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!.toNodeId!
+          : "";
       const created = await app.refresh(
-        [{ nodeId: CREATE_RESULT_NODE_ID, label: "Saving…", location: null }],
-        { action: true, inputText: "Errands" },
+        dest,
+        { action: { triggerId: CREATE_EDIT_NODE_ID }, inputText: "Errands" },
         ctx,
       );
       expect(created.node.label).toBe("Add an item");

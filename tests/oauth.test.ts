@@ -32,7 +32,7 @@ function probe(id: string, seen: AppServerContext[]): AppModule {
       seen.push(ctx as AppServerContext);
       return emptyRefresh(id);
     },
-    async refresh(_stack, _extras, ctx) {
+    async refresh(_nodeId, _extras, ctx) {
       seen.push(ctx as AppServerContext);
       return emptyRefresh(id);
     },

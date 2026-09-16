@@ -22,10 +22,10 @@ Open `/` lands on the first inbox message (subject, then who it was from), or on
 
 Enter on a message **pushes** body chunk 1 (plain text, split by `splitText`). Chunks are siblings. `back` pops.
 
-Compose walks an instruction node, then input for To, Subject, and Body (`action` plus `passInputText` on each Done). Send stays on **Sent** or an error in place — there is **no stack teleport**. Cancel walks back without sending.
+Compose is a `compose` overlay over the inbox: instruction nodes, then To / Subject / Body. Send is `action` + `popTransient`. Cancel walks back without sending. A later contact picker would use a nested `contacts` frame.
 
-Disconnect is `action: true`: `ctx.oauth.disconnect`, clear the cache, then **Gmail disconnected.** `invalid_grant` or unauthorized returns the Connect node. Side effects run only when `extras.action` is true.
+Disconnect is `stay` + `action`: `ctx.oauth.disconnect`, clear the cache, then **Gmail disconnected.** `invalid_grant` or unauthorized returns the Connect node. Side effects run only when `extras.action` is set.
 
-Ownership: this `userId` → `getAccessToken` → `users/me`. Message ids on the stack are untrusted.
+Ownership: this `userId` → `getAccessToken` → `users/me`. Tip and trigger ids are untrusted.
 
 The requested scope is `gmail.modify` (restricted). Prefer `text/plain` in MIME. HTML is a conservative tag strip for reading; Display then uses `textContent`.

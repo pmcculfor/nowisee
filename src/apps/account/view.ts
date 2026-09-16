@@ -16,7 +16,6 @@ import type {
   NodePayload,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { ACCOUNT_APP_ID, NODE } from "./ids.ts";
 
@@ -69,15 +68,15 @@ export async function openAccount(
 
 export async function refreshAccount(
   deps: AccountViewDeps,
-  stack: readonly StackEntry[],
+  nodeId: string,
   extras: RefreshExtras,
   ctx: AppServerContext | undefined,
 ): Promise<RefreshResult> {
-  const tipId = stack[stack.length - 1]?.nodeId;
+  const tipId = nodeId;
   const userId = ctx?.userId ?? null;
 
   if (extras.action) {
-    return applyAction(deps, stack, extras, ctx);
+    return applyAction(deps, tipId, extras, ctx);
   }
 
   if (userId) {
@@ -107,11 +106,10 @@ export async function refreshAccount(
 
 async function applyAction(
   deps: AccountViewDeps,
-  stack: readonly StackEntry[],
+  tipId: string,
   extras: RefreshExtras,
   ctx: AppServerContext | undefined,
 ): Promise<RefreshResult> {
-  const tipId = stack[stack.length - 1]?.nodeId;
   const sessionId = ctx?.sessionId;
   const identity = ctx?.identity;
 

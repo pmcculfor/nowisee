@@ -50,11 +50,9 @@ Busy and dead-end are still identical silence for this audience. They cannot tel
 
 **When taken up:** add a second, screen-reader-only announcement channel in Display, distinct from the focused content surface. It is an announcement, not a competing interactive region. Pending work after a short delay can speak a polite “working”; a dead end can use a distinguishable cue (or silence as a setting). Warm-miss load failure already uses the content surface. Content announcement stays focus-only. Until this lands, apps **MUST** resolve action calls with a status node rather than reject — a rejection strands the user on the working label.
 
-### Deep-link ancestry
+### Deep-link ancestry — landed
 
-URL `open` resets the stack (locked), so a shared link starts with one entry. Reaching a node by navigating leaves parents on the stack, and `back` returns to the parent. Reaching the same node from a link makes `back` exit to Home. Apps can inspect stack length in `refresh` and author `back` accordingly; that is boilerplate, and the key’s meaning still depends on how the user arrived.
-
-**When taken up:** allow optional ancestry on `open` only (`RefreshResult.stack`). Core validates that the last entry matches `node.id` and ignores the field on `refresh`. This is rehydration at entry, not a teleport. The correct parent is not always obvious — inventing one is worse than having none — which is why this stayed deferred.
+`open` may return committed ancestry (`OpenResult.stack`). Core installs it when the last entry is the tip and every non-null ancestor location is canonical. Invalid ancestry is discarded and warned. `refresh` has no stack field. Overlay frames are client-only and never appear on open ancestry. Shared JSON fixtures for dual Navigator behavior live in `tests/fixtures/navigation-geometry.json`.
 
 ### Other reserved work
 

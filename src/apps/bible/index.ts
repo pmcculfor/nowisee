@@ -1,9 +1,9 @@
 import type {
   AppModule,
   AppServerContext,
+  OpenResult,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import type { BibleStore } from "./types.ts";
 import { openBibleView, refreshBibleView, type BibleViewDeps } from "./view/index.ts";
@@ -32,19 +32,18 @@ export function createBibleApp(deps: BibleAppDeps): BibleApp {
   return {
     id: BIBLE_APP_ID,
     label: "Bible",
-    open(path: string, extras: RefreshExtras = {}, ctx?: AppServerContext): RefreshResult {
+    open(path: string, extras: RefreshExtras = {}, ctx?: AppServerContext): OpenResult {
       return openBibleView(viewDeps, path, extras, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): RefreshResult {
-      const tipId = stack[stack.length - 1]?.nodeId;
-      if (!tipId) {
+      if (!nodeId) {
         return openBibleView(viewDeps, "/", extras, ctx);
       }
-      return refreshBibleView(viewDeps, tipId, extras, ctx);
+      return refreshBibleView(viewDeps, nodeId, extras, ctx);
     },
     close() {
       deps.store.close();

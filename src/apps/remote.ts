@@ -1,4 +1,4 @@
-import type { AppModule, RefreshExtras, StackEntry } from "../core/types.ts";
+import type { AppModule, RefreshExtras } from "../core/types.ts";
 import { toWireExtras, type AppRpc } from "./rpc.ts";
 
 export type RemoteAppOptions = {
@@ -21,8 +21,8 @@ export function createRemoteApp(options: RemoteAppOptions): AppModule {
     open(path: string, extras: RefreshExtras = {}) {
       return rpc.open(id, path, toWireExtras(extras), extras.signal);
     },
-    refresh(stack: readonly StackEntry[], extras: RefreshExtras = {}) {
-      return rpc.refresh(id, stack, toWireExtras(extras), extras.signal);
+    refresh(nodeId: string, extras: RefreshExtras = {}) {
+      return rpc.refresh(id, nodeId, toWireExtras(extras), extras.signal);
     },
   };
 }

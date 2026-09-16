@@ -18,6 +18,6 @@ export type NoteRecord = {
 export interface NotesStore {
   list(ownerId: string): Promise<readonly NoteRecord[]>;
   get(ownerId: string, id: string): Promise<NoteRecord | null>;
-  create(ownerId: string, body: string): Promise<NoteRecord>;
+  create(ownerId: string, body: string, id?: string): Promise<NoteRecord>;
   update(ownerId: string, id: string, body: string): Promise<NoteRecord | null>;
 }

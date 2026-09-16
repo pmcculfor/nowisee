@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { GMAIL_APP_ID, GMAIL_APP_LABEL } from "./ids.ts";
 import { buildGmailView, openGmailPath, type GmailViewDeps } from "./view.ts";
@@ -32,12 +31,11 @@ export function createGmailApp(deps: GmailAppDeps): GmailApp {
       return openGmailPath(viewDeps, path, extras, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
-      const tipId = stack[stack.length - 1]?.nodeId ?? null;
-      return buildGmailView(viewDeps, tipId, extras, ctx);
+      return buildGmailView(viewDeps, nodeId || null, extras, ctx);
     },
     close() {
       deps.close?.();

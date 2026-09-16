@@ -1,0 +1,61 @@
+{
+  "stackBehaviors": [
+    "push",
+    "replace",
+    "pop",
+    "stay",
+    "pushTransient",
+    "popTransient"
+  ],
+  "malformedEdges": [
+    {
+      "fromNodeId": "root",
+      "edge": { "kind": "node", "toNodeId": "root", "stackBehavior": "replace" },
+      "reason": "replace-to-self"
+    },
+    {
+      "fromNodeId": "root",
+      "edge": { "kind": "node", "toNodeId": "child", "stackBehavior": "pushTransient" },
+      "reason": "pushTransient-missing-frame"
+    },
+    {
+      "fromNodeId": "root",
+      "tipFrame": null,
+      "edge": { "kind": "node", "stackBehavior": "popTransient" },
+      "reason": "popTransient-on-committed-tip"
+    }
+  ],
+  "wellFormedEdges": [
+    {
+      "fromNodeId": "verse",
+      "edge": {
+        "kind": "node",
+        "toNodeId": "option-versions",
+        "stackBehavior": "pushTransient",
+        "frame": "verse-menu"
+      }
+    },
+    {
+      "fromNodeId": "option-copy",
+      "edge": { "kind": "node", "stackBehavior": "stay", "action": true }
+    },
+    {
+      "fromNodeId": "pick-kjv",
+      "tipFrame": "verse-menu",
+      "edge": { "kind": "node", "stackBehavior": "popTransient", "action": true }
+    }
+  ],
+  "openAncestry": {
+    "valid": [
+      { "nodeId": "book", "label": "John", "location": { "appId": "bible", "path": "/John" } },
+      { "nodeId": "verse", "label": "3:16", "location": { "appId": "bible", "path": "/John/3/16" } }
+    ],
+    "nonCanonicalLocation": [
+      { "nodeId": "book", "label": "John", "location": { "appId": "bible", "path": "John" } },
+      { "nodeId": "verse", "label": "3:16", "location": { "appId": "bible", "path": "/John/3/16" } }
+    ]
+  },
+  "refreshWire": {
+    "body": { "nodeId": "verse", "extras": { "action": { "triggerId": "pick-kjv" } } }
+  }
+}

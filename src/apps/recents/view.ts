@@ -7,7 +7,6 @@ import type {
   NodePayload,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { appRowId, EMPTY_NODE_ID, HOME_NODE_ID } from "./ids.ts";
 
@@ -27,12 +26,11 @@ export function openRecents(
 
 export function refreshRecents(
   deps: RecentsViewDeps,
-  stack: readonly StackEntry[],
+  nodeId: string,
   extras: RefreshExtras,
   ctx?: AppServerContext,
 ): RefreshResult {
-  const tipId = stack[stack.length - 1]?.nodeId;
-  return viewFor(deps, extras.parkedAppIds ?? [], tipId, ctx);
+  return viewFor(deps, extras.parkedAppIds ?? [], nodeId, ctx);
 }
 
 function viewFor(

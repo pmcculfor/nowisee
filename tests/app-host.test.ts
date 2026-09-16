@@ -59,23 +59,18 @@ describe("app host", () => {
   });
 
   it("Copy action returns clipboardText without needing a clipboard on extras", async () => {
-    const result = await host().refresh(
-      "bible",
-      [
-        {
-          nodeId: optionId(
+    const copyId = optionId(
             {
               bookId: getCanonBook("GEN")!.sort,
               chapter: 1,
               verse: 1,
             },
             "copy",
-          ),
-          label: "Copy",
-          location: null,
-        },
-      ],
-      { action: true },
+          );
+    const result = await host().refresh(
+      "bible",
+      copyId,
+      { action: { triggerId: copyId } },
     );
     expect(result.node.label).toBe("Copied");
     expect(result.clipboardText).toContain("Genesis 1:1.");
@@ -143,13 +138,24 @@ describe("app HTTP", () => {
     expect(out.status).toBe(405);
   });
 
-  it("rejects a malformed refresh stack", async () => {
+  it("rejects a refresh body that still sends stack", async () => {
     h = sessionHost();
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/bible/refresh",
       headers: headers(),
       body: { stack: "nope" },
+    });
+    expect(out.status).toBe(400);
+  });
+
+  it("rejects extras.action as a boolean", async () => {
+    h = sessionHost();
+    const out = await handleSessionHttp(h, {
+      method: "POST",
+      url: "/api/apps/bible/refresh",
+      headers: headers(),
+      body: { nodeId: "bible:t:OT", extras: { action: true } },
     });
     expect(out.status).toBe(400);
   });

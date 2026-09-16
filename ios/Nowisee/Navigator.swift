@@ -12,8 +12,14 @@ private enum ApplyAs {
 }
 
 private struct LoadRecovery {
+  var kind: Kind
   var stackBefore: [StackEntry]
   var previous: NodePayload?
+
+  enum Kind {
+    case load
+    case action
+  }
 }
 
 private struct CallArgs {
@@ -97,7 +103,8 @@ final class Navigator {
     guard let edge = map.lookup(fromNodeId: tip.nodeId, intent: intent.rawValue) else {
       return
     }
-    guard isWellFormed(edge) else {
+    guard isWellFormed(edge, fromNodeId: tip.nodeId, tipFrame: tip.frame) else {
+      print("Navigator: malformed edge \(tip.nodeId) \(intent.rawValue)")
       return
     }
 
@@ -112,7 +119,7 @@ final class Navigator {
         extras.inputText = display.getInputText()
       }
       if edge.action {
-        extras.action = true
+        extras.action = ActionExtras(triggerId: tip.nodeId)
       }
     }
 
@@ -127,8 +134,8 @@ final class Navigator {
       resumeApp(appId)
     case let .app(to, _, _):
       Task { await openLocation(to, extras: extras) }
-    case let .node(toNodeId, stackBehavior, _, _):
-      followNodeEdge(toNodeId: toNodeId, behavior: stackBehavior, extras: extras, token: token)
+    case let .node(_, stackBehavior, frame, _, _):
+      followNodeEdge(behavior: stackBehavior, frame: frame, extras: extras, token: token, edge: edge)
     }
   }
 
@@ -153,7 +160,7 @@ final class Navigator {
     await startCall(
       CallArgs(
         token: token,
-        isAction: extras.action,
+        isAction: extras.isAction,
         baseExtras: extras,
         applyAs: .open(appId: capturedAppId),
         invoke: { [rpc] extras in
@@ -189,70 +196,100 @@ final class Navigator {
     let stackBefore = parked.stack
     let previous = payloadForParked(parked)
     let capturedAppId = appId
+    let tipId = stack.tip()?.nodeId ?? ""
     startCall(
       CallArgs(
         token: token,
         isAction: false,
         baseExtras: RefreshExtras(),
         applyAs: .refresh,
-        invoke: { [rpc, stack] extras in
-          try await rpc.refresh(appId: capturedAppId, stack: stack.snapshot(), extras: extras)
+        invoke: { [rpc] extras in
+          try await rpc.refresh(appId: capturedAppId, nodeId: tipId, extras: extras)
         },
-        enterRecoveryOnFailure: LoadRecovery(stackBefore: stackBefore, previous: previous)
+        enterRecoveryOnFailure: LoadRecovery(kind: .load, stackBefore: stackBefore, previous: previous)
       )
     )
   }
 
   private func followNodeEdge(
-    toNodeId: String?,
     behavior: StackBehavior,
+    frame: String?,
     extras: RefreshExtras,
-    token: Int
+    token: Int,
+    edge: NavEdge
   ) {
     let stackBefore = stack.snapshot()
     let previous = payloadForCurrentTip()
-    let destId: String
+    let isAction = extras.isAction
+    let recovery = LoadRecovery(
+      kind: isAction ? .action : .load,
+      stackBefore: stackBefore,
+      previous: previous
+    )
+
     if behavior == .pop {
       if stack.length <= 1 {
         Task { await openLocation(AppLocation(appId: rootAppId, path: "/")) }
         return
       }
       stack.pop()
-      destId = stack.tip()!.nodeId
-    } else {
-      guard let toNodeId else {
+    } else if behavior == .popTransient {
+      guard let frameName = stack.tip()?.frame else {
         return
       }
+      let snapshot = stack.snapshot()
+      var keep = snapshot.count - 1
+      while keep >= 0, snapshot[keep].frame == frameName {
+        keep -= 1
+      }
+      if keep < 0 {
+        Task { await openLocation(AppLocation(appId: rootAppId, path: "/")) }
+        return
+      }
+      while stack.length > keep + 1 {
+        stack.pop()
+      }
+    }
+
+    let destId: String
+    if behavior == .stay || behavior == .pop || behavior == .popTransient {
+      destId = stack.tip()!.nodeId
+    } else if case let .node(toNodeId, _, _, _, _) = edge, let toNodeId {
       destId = toNodeId
+    } else {
+      return
+    }
+
+    if isAction {
+      blocked = true
     }
 
     if let payload = cache.get(destId) {
-      applyLocalMove(behavior: behavior, payload: payload, updateDisplay: true)
-      scheduleCall(refreshCall(token: token, extras: extras, recovery: nil))
+      applyLocalMove(behavior: behavior, payload: payload, updateDisplay: behavior != .stay, frame: frame)
+      scheduleCall(refreshCall(token: token, extras: extras, recovery: isAction ? recovery : nil))
       return
     }
 
     blocked = true
-    applyLocalMove(behavior: behavior, payload: NodePayload(id: destId, label: ""), updateDisplay: false)
-    scheduleCall(
-      refreshCall(
-        token: token,
-        extras: extras,
-        recovery: LoadRecovery(stackBefore: stackBefore, previous: previous)
-      )
+    applyLocalMove(
+      behavior: behavior,
+      payload: NodePayload(id: destId, label: ""),
+      updateDisplay: false,
+      frame: frame
     )
+    scheduleCall(refreshCall(token: token, extras: extras, recovery: recovery))
   }
 
   private func onLoadRecoveryIntent(_ intent: NavIntent) {
     if intent == .enter {
-      guard loadRecovery != nil, currentAppId != nil else {
+      guard let recovery = loadRecovery, recovery.kind == .load, currentAppId != nil else {
         return
       }
       transitionToken += 1
       let token = transitionToken
       preemptReadOnly()
       blocked = true
-      startCall(refreshCall(token: token, extras: RefreshExtras(), recovery: loadRecovery))
+      startCall(refreshCall(token: token, extras: RefreshExtras(), recovery: recovery))
       return
     }
     if intent == .back {
@@ -263,13 +300,14 @@ final class Navigator {
   private func enterLoadRecovery(_ recovery: LoadRecovery) {
     loadRecovery = recovery
     tipKind = .text
-    display.showText(LoadFailure.label)
+    let label = recovery.kind == .action ? ActionFailure.label : LoadFailure.label
+    display.showText(label)
     if let currentAppId {
       displayed = Displayed(
         appId: currentAppId,
         id: stack.tip()?.nodeId ?? "",
         kind: .text,
-        label: LoadFailure.label
+        label: label
       )
     }
   }
@@ -298,16 +336,37 @@ final class Navigator {
     return NodePayload(id: tip.nodeId, label: tip.label)
   }
 
-  private func applyLocalMove(behavior: StackBehavior, payload: NodePayload, updateDisplay: Bool) {
-    let entry = StackEntry(nodeId: payload.id, label: payload.label, location: nil)
-    if behavior == .push {
-      stack.push(entry)
-    } else {
-      stack.replaceTip(entry)
+  private func applyLocalMove(
+    behavior: StackBehavior,
+    payload: NodePayload,
+    updateDisplay: Bool,
+    frame: String?
+  ) {
+    if behavior == .stay {
+      if updateDisplay {
+        showPayload(payload)
+      }
+      return
     }
+
+    let existing = stack.tip()
+    if behavior == .push {
+      stack.push(entryFromPayload(payload, frame: nil, location: nil))
+    } else if behavior == .pushTransient {
+      stack.push(entryFromPayload(payload, frame: frame ?? existing?.frame, location: nil))
+    } else if behavior == .replace {
+      stack.replaceTip(entryFromPayload(payload, frame: existing?.frame, location: existing?.location))
+    } else {
+      stack.replaceTip(entryFromPayload(payload, frame: existing?.frame, location: existing?.location))
+    }
+
     if updateDisplay {
       showPayload(payload)
     }
+  }
+
+  private func entryFromPayload(_ payload: NodePayload, frame: String?, location: AppLocation?) -> StackEntry {
+    StackEntry(nodeId: payload.id, label: payload.label, location: location, frame: frame)
   }
 
   private func showPayload(_ payload: NodePayload) {
@@ -337,15 +396,15 @@ final class Navigator {
   }
 
   private func refreshCall(token: Int, extras: RefreshExtras, recovery: LoadRecovery?) -> CallArgs {
-    let snapshot = stack.snapshot()
+    let tipId = stack.tip()?.nodeId ?? ""
     let appId = currentAppId ?? rootAppId
     return CallArgs(
       token: token,
-      isAction: extras.action,
+      isAction: extras.isAction,
       baseExtras: extras,
       applyAs: .refresh,
       invoke: { [rpc] extras in
-        try await rpc.refresh(appId: appId, stack: snapshot, extras: extras)
+        try await rpc.refresh(appId: appId, nodeId: tipId, extras: extras)
       },
       enterRecoveryOnFailure: recovery
     )
@@ -361,6 +420,7 @@ final class Navigator {
   private func scheduleCall(_ args: CallArgs) {
     if args.isAction {
       preemptReadOnly()
+      blocked = true
       startCall(args)
       return
     }
@@ -415,11 +475,12 @@ final class Navigator {
   }
 
   private func runCall(_ args: CallArgs) async {
-    var callExtras = args.baseExtras
     if args.isAction {
-      callExtras.action = true
-    } else {
-      callExtras.action = false
+      blocked = true
+    }
+    var callExtras = args.baseExtras
+    if !args.isAction {
+      callExtras.action = nil
     }
     if shouldSendParkedIds(args.applyAs) {
       callExtras.parkedAppIds = parkedAppIdsForRecents()
@@ -491,11 +552,15 @@ final class Navigator {
       map.replace([:])
       displayed = nil
       currentAppId = appId
+      if let ancestry = openAncestry(result.stack, tipId: result.node.id) {
+        stack.restore(ancestry)
+      }
     }
 
     map.replace(result.navigationMap)
 
     let priorLocation = stack.tip()?.location
+    let existingFrame = stack.tip()?.frame
     let location: AppLocation?
     if result.location == nil {
       location = priorLocation
@@ -505,7 +570,17 @@ final class Navigator {
       location = priorLocation
     }
 
-    let tipEntry = StackEntry(nodeId: result.node.id, label: result.node.label, location: location)
+    let tipEntry = StackEntry(
+      nodeId: result.node.id,
+      label: result.node.label,
+      location: location,
+      frame: {
+        if case .open = applyAs {
+          return nil
+        }
+        return existingFrame
+      }()
+    )
     if stack.length == 0 {
       stack.push(tipEntry)
     } else {
@@ -619,10 +694,24 @@ private func withStatusLabel(_ result: RefreshResult, _ label: String) -> Refres
   return copy
 }
 
-private func isWellFormed(_ edge: NavEdge) -> Bool {
+private func isWellFormed(_ edge: NavEdge, fromNodeId: String, tipFrame: String?) -> Bool {
   switch edge {
-  case let .node(toNodeId, behavior, _, _):
-    return behavior == .pop || toNodeId != nil
+  case let .node(toNodeId, behavior, frame, _, _):
+    switch behavior {
+    case .pop, .stay:
+      return toNodeId == nil
+    case .popTransient:
+      return toNodeId == nil && !(tipFrame ?? "").isEmpty
+    case .pushTransient:
+      return toNodeId != nil && !(frame ?? "").isEmpty
+    case .replace:
+      if toNodeId == fromNodeId {
+        return false
+      }
+      return toNodeId != nil
+    case .push:
+      return toNodeId != nil
+    }
   case let .app(to, _, _):
     return !to.appId.isEmpty && PathRouter.isCanonicalPath(to.path)
   case let .resume(appId):
@@ -630,6 +719,29 @@ private func isWellFormed(_ edge: NavEdge) -> Bool {
   case let .external(href):
     return !href.isEmpty
   }
+}
+
+private func openAncestry(_ raw: [StackEntry]?, tipId: String) -> [StackEntry]? {
+  guard let raw, !raw.isEmpty else {
+    return nil
+  }
+  guard raw.last?.nodeId == tipId else {
+    print("Navigator: discarded open ancestry (last entry must be the tip)")
+    return nil
+  }
+  var out: [StackEntry] = []
+  for entry in raw {
+    if entry.nodeId.isEmpty {
+      print("Navigator: discarded open ancestry (invalid entry)")
+      return nil
+    }
+    if let location = entry.location, !PathRouter.isCanonicalPath(location.path) {
+      print("Navigator: discarded open ancestry (non-canonical location)")
+      return nil
+    }
+    out.append(StackEntry(nodeId: entry.nodeId, label: entry.label, location: entry.location, frame: nil))
+  }
+  return out
 }
 
 private func locationFromStack(_ stack: [StackEntry]) -> AppLocation? {

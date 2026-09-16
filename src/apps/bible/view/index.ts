@@ -2,12 +2,15 @@ import { buildMap, edgePop, rootBackToHome, type MapFragment } from "../../../ap
 import type {
   AppServerContext,
   NodePayload,
+  OpenResult,
   RefreshExtras,
   RefreshResult,
+  StackEntry,
 } from "../../../core/types.ts";
+import { isActionExtras } from "../../../core/types.ts";
 import { parseNodeId, searchEmptyId, verseNodeId } from "../ids.ts";
 import type { CanonRef } from "../types.ts";
-import { resolveCopy } from "./copy.ts";
+import { resolveCopy, type ActionContribution } from "./copy.ts";
 import {
   addNode,
   slotVerseId,
@@ -20,9 +23,9 @@ import {
   type ViewSession,
 } from "./helpers.ts";
 import { KIND } from "./kinds.ts";
-import { emptyId, firstTestamentId, parseBiblePath } from "./path.ts";
+import { emptyId, parseBiblePath } from "./path.ts";
 import { emptySearchLabel, searchHits } from "./search.ts";
-import { signInResult } from "./signin.ts";
+import { committedAncestry } from "./ancestry.ts";
 
 export type { BibleViewDeps };
 
@@ -31,9 +34,11 @@ export function openBibleView(
   path: string,
   extras: RefreshExtras = {},
   ctx?: AppServerContext,
-): RefreshResult {
+): OpenResult {
   const session = viewSession(deps, extras, ctx);
-  return buildBibleView(session, parseBiblePath(session, path));
+  const view = buildBibleView(session, parseBiblePath(session, path));
+  const stack = committedAncestry(session, view.node);
+  return stack ? { ...view, stack } : view;
 }
 
 export function refreshBibleView(
@@ -43,57 +48,76 @@ export function refreshBibleView(
   ctx?: AppServerContext,
 ): RefreshResult {
   const session = viewSession(deps, extras, ctx);
-  if (extras.action) {
-    const acted = applyAction(session, tipId);
-    if (acted) {
-      return acted;
+  if (isActionExtras(extras)) {
+    const search = applySearchAction(session, extras.action.triggerId);
+    if (search) {
+      return search;
     }
+    const contribution = applyAction(session, extras.action.triggerId);
+    const view = buildBibleView(session, tipId);
+    return applyContribution(view, contribution);
   }
   return buildBibleView(session, tipId);
 }
 
-function applyAction(session: ViewSession, tipId: string): RefreshResult | null {
-  const parsed = parseNodeId(tipId);
+function applySearchAction(session: ViewSession, triggerId: string): RefreshResult | null {
+  const parsed = parseNodeId(triggerId);
+  if (parsed?.kind === "search-working" || parsed?.kind === "search-input") {
+    return applySearch(session);
+  }
+  return null;
+}
+
+function applyAction(session: ViewSession, triggerId: string): ActionContribution | null {
+  const parsed = parseNodeId(triggerId);
   if (!parsed) {
     return null;
   }
   if (parsed.kind === "option" && parsed.option === "copy") {
-    return resolveCopy(session, parsed.ref, buildBibleView(session, tipId));
+    return resolveCopy(session, parsed.ref);
   }
   if (parsed.kind === "option" && parsed.option === "bookmark") {
-    return applyBookmarkToggle(session, parsed.ref, tipId);
-  }
-  if (parsed.kind === "search-working") {
-    return applySearch(session);
+    return applyBookmarkToggle(session, parsed.ref);
   }
   if (parsed.kind === "commentary-chunk") {
     touchCommentaryRecency(session, parsed.commentaryId);
     return null;
   }
   if (parsed.kind === "version-pick") {
-    return applyVersionPick(session, parsed.versionId, firstTestamentId(session.deps.store));
+    touchVersionRecency(session, parsed.versionId);
+    return null;
   }
   if (parsed.kind === "verse-version-pick") {
-    return applyVersionPick(session, parsed.targetVersionId, verseNodeId(parsed.seq, parsed.ref));
+    touchVersionRecency(session, parsed.targetVersionId);
+    return null;
   }
   return null;
 }
 
-function applyVersionPick(session: ViewSession, versionId: number, destId: string): RefreshResult {
-  touchVersionRecency(session, versionId);
-  return buildBibleView(session, destId);
-}
-
-function applyBookmarkToggle(session: ViewSession, ref: CanonRef, tipId: string): RefreshResult {
+function applyBookmarkToggle(session: ViewSession, ref: CanonRef): ActionContribution | null {
   if (!session.userId) {
-    return signInResult(session, { appId: session.deps.appId, path: "/bookmarks" });
+    return null;
   }
   const verseId = slotVerseId(session.deps.store, ref);
   if (verseId === null) {
-    return withTipLabel(buildBibleView(session, tipId), "Bookmark failed: verse not found.");
+    return { statusLabel: "Bookmark failed: verse not found." };
   }
   session.deps.store.toggleBookmark(session.userId, verseId);
-  return buildBibleView(session, tipId);
+  return null;
+}
+
+function applyContribution(view: RefreshResult, contribution: ActionContribution | null): RefreshResult {
+  if (!contribution) {
+    return view;
+  }
+  let next = view;
+  if (contribution.statusLabel) {
+    next = withTipLabel(next, contribution.statusLabel);
+  }
+  if (contribution.clipboardText) {
+    next = { ...next, clipboardText: contribution.clipboardText };
+  }
+  return next;
 }
 
 function applySearch(session: ViewSession): RefreshResult {
@@ -169,3 +193,5 @@ function emptyBibleView(session: ViewSession): RefreshResult {
     location: { appId: session.deps.appId, path: "/" },
   };
 }
+
+export type { StackEntry };

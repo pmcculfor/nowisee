@@ -9,7 +9,11 @@ export {
   edgeExternal,
   edgeNode,
   edgePop,
+  edgePopTransient,
+  edgePushTransient,
   edgeResume,
+  edgeStay,
+  type EdgeActionOpts,
   type EdgeFlags,
 } from "./edges.ts";
 

@@ -75,8 +75,15 @@ export function collectNeighborhood(opts: CollectNeighborhoodOptions): {
 }
 
 function destinationNodeId(edge: NavEdge): string | undefined {
-  if (edge.kind === "node" && edge.stackBehavior !== "pop") {
-    return edge.toNodeId;
+  if (edge.kind !== "node") {
+    return undefined;
   }
-  return undefined;
+  if (
+    edge.stackBehavior === "pop" ||
+    edge.stackBehavior === "stay" ||
+    edge.stackBehavior === "popTransient"
+  ) {
+    return undefined;
+  }
+  return edge.toNodeId;
 }

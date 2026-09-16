@@ -25,7 +25,7 @@ function probeApp(seen: AppServerContext[]): AppModule {
       seen.push(ctx as AppServerContext);
       return emptyRefresh("probe");
     },
-    async refresh(_stack, _extras, ctx) {
+    async refresh(_nodeId, _extras, ctx) {
       seen.push(ctx as AppServerContext);
       return emptyRefresh("probe");
     },
@@ -119,7 +119,7 @@ describe("lockbox", () => {
         notesSeen.push(ctx as AppServerContext);
         return emptyRefresh("notes");
       },
-      async refresh(_stack, _extras, ctx) {
+      async refresh(_nodeId, _extras, ctx) {
         notesSeen.push(ctx as AppServerContext);
         return emptyRefresh("notes");
       },
@@ -197,7 +197,7 @@ describe("lockbox", () => {
         seen.push(ctx as AppServerContext);
         return emptyRefresh("notes-spy");
       },
-      async refresh(_stack, _extras, ctx) {
+      async refresh(_nodeId, _extras, ctx) {
         seen.push(ctx as AppServerContext);
         return emptyRefresh("notes-spy");
       },

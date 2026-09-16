@@ -2,8 +2,6 @@ export const NOTES_APP_ID = "notes";
 
 export const CREATE_NODE_ID = "notes:create";
 export const CREATE_EDIT_NODE_ID = "notes:create:edit";
-/** Landing tip for create-action before the result repairs the tip id. */
-export const CREATE_RESULT_NODE_ID = "notes:create:result";
 
 export function noteNodeId(noteId: string): string {
   return `notes:note:${noteId}`;

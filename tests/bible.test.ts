@@ -37,6 +37,7 @@ import {
 } from "../src/apps/bible/ids.ts";
 import type { BibleRef, BibleSeed, CanonRef } from "../src/apps/bible/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { nodeIdOf, wireAction } from "./helpers/refreshCall.ts";
 import { fixtureBible, henryRangeParagraphs } from "./helpers/kjvFixture.ts";
 
 const KJV = catalogVersionId(VERSION_RECORDS[0]!);
@@ -94,11 +95,12 @@ afterEach(() => {
 
 async function refresh(
   instance: BibleApp,
-  stack: Parameters<BibleApp["refresh"]>[0],
-  extras: Parameters<BibleApp["refresh"]>[1] = {},
+  stack: string | readonly { readonly nodeId: string }[],
+  extras: Parameters<BibleApp["refresh"]>[1] & { action?: unknown } = {},
   ctx: AppServerContext = signedOut(),
 ): Promise<RefreshResult> {
-  return instance.refresh(stack, extras, ctx);
+  const nodeId = nodeIdOf(stack);
+  return instance.refresh(nodeId, wireAction(extras, nodeId), ctx);
 }
 
 describe("Bible app", () => {
@@ -151,29 +153,30 @@ describe("Bible app", () => {
     expect(opened.navigationMap[versionsHeadingId()]?.enter).toEqual({
       kind: "node",
       toNodeId: versionPickId(KJV),
-      stackBehavior: "push",
+      stackBehavior: "pushTransient",
+      frame: "root-versions",
     });
     const list = await refresh(instance, [{ nodeId: asvPick, label: "American Standard Version", location: null }]);
     expect(list.navigationMap[asvPick]?.enter).toEqual({
       kind: "node",
-      toNodeId: asvPick,
-      stackBehavior: "replace",
+      stackBehavior: "popTransient",
       action: true,
     });
-    const ot = await refresh(
+    const heading = await refresh(
       instance,
-      [{ nodeId: asvPick, label: "American Standard Version", location: null }],
-      { action: true },
+      versionsHeadingId(),
+      { action: { triggerId: asvPick } },
       signedIn(),
     );
-    expect(ot.node.id).toBe(testamentId("OT"));
-    expect(ot.location).toEqual({ appId: "bible", path: "/" });
+    expect(heading.node.id).toBe(versionsHeadingId());
+    expect(heading.location).toEqual({ appId: "bible", path: "/" });
     const remembered = await instance.open("/", {}, signedIn());
     expect(remembered.location).toEqual({ appId: "bible", path: "/" });
     expect(remembered.navigationMap[versionsHeadingId()]?.enter).toEqual({
       kind: "node",
       toNodeId: versionPickId(ASV),
-      stackBehavior: "push",
+      stackBehavior: "pushTransient",
+      frame: "root-versions",
     });
   });
 
@@ -184,24 +187,23 @@ describe("Bible app", () => {
     const result = await refresh(instance, [{ nodeId: pick, label: "American Standard Version", location: null }]);
     expect(result.navigationMap[pick]?.enter).toEqual({
       kind: "node",
-      toNodeId: pick,
-      stackBehavior: "replace",
+      stackBehavior: "popTransient",
       action: true,
     });
+    const verseId = verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, canon(MAT, 5, 8));
     const landed = await refresh(
       instance,
-      [{ nodeId: pick, label: "American Standard Version", location: null }],
-      { action: true },
+      verseId,
+      { action: { triggerId: pick } },
       signedOut(),
     );
-    expect(landed.node.id).toBe(
-      verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, canon(MAT, 5, 8)),
-    );
+    expect(landed.node.id).toBe(verseId);
     expect(landed.node.label).toContain("not in American Standard Version");
     expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(canon(MAT, 5, 8), "versions"),
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
     });
     expect(landed.location).toEqual({ appId: "bible", path: "/Matthew/5/8" });
   });
@@ -236,14 +238,12 @@ describe("Bible app", () => {
     expect(menu.node.label).toBe("Bookmark");
     expect(menu.navigationMap[option]?.enter).toMatchObject({
       kind: "node",
-      toNodeId: option,
-      stackBehavior: "replace",
+      stackBehavior: "stay",
       action: true,
     });
     expect(menu.navigationMap[option]?.back).toEqual({
       kind: "node",
-      toNodeId: verseNodeId({ type: "chapter", bookId: MAT, chapter: 5 }, verseRef),
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
 
     const added = await refresh(
@@ -344,7 +344,8 @@ describe("Bible app", () => {
     expect(context.navigationMap[contextId]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(canon(MAT, 5, 3), "versions", { type: "context", bookId: MAT, chapter: 5 }),
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
     });
     expect(context.navigationMap[contextId]?.prev).toEqual({
       kind: "node",
@@ -528,7 +529,7 @@ describe("Bible app", () => {
     expect(books.navigationMap[bookId(MAT)]?.enter).toEqual({
       kind: "node",
       toNodeId: first,
-      stackBehavior: "replace",
+      stackBehavior: "push",
     });
   });
 
@@ -567,7 +568,7 @@ describe("Bible app", () => {
     expect(matthew4.navigationMap[lastOf4]?.next?.toNodeId).not.toBe(firstOf5);
   });
 
-  it("verse enter replaces onto Versions; option next has no action flag", async () => {
+  it("verse enter opens the Versions overlay; option next has no action flag", async () => {
     const instance = bible();
     const verseRef = ref(GEN, 1, 1);
     const verseId = verseNodeId({ type: "chapter", bookId: GEN, chapter: 1 }, verseRef);
@@ -575,7 +576,8 @@ describe("Bible app", () => {
     expect(verse.navigationMap[verse.node.id]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(verseRef, "versions"),
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
     });
 
     const versionsId = optionId(verseRef, "versions");
@@ -583,12 +585,12 @@ describe("Bible app", () => {
     expect(result.navigationMap[versionsId]?.enter).toEqual({
       kind: "node",
       toNodeId: verseVersionPickId(verseRef, KJV),
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
     });
     expect(result.navigationMap[versionsId]?.back).toEqual({
       kind: "node",
-      toNodeId: verseId,
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
     expect(result.warm.some((node) => node.id === verseId)).toBe(true);
     expect(result.navigationMap[versionsId]?.next).toEqual({
@@ -612,8 +614,7 @@ describe("Bible app", () => {
     const menu = await refresh(instance, [{ nodeId: copyId, label: "Copy", location: null }]);
     expect(menu.navigationMap[copyId]?.enter).toMatchObject({
       kind: "node",
-      toNodeId: copyId,
-      stackBehavior: "replace",
+      stackBehavior: "stay",
       action: true,
     });
 
@@ -672,24 +673,27 @@ describe("Bible app", () => {
   it("URL-opened verse back walks chapter, book, then testament", async () => {
     const instance = bible();
     const verse = await instance.open("/Matthew/5/3", {}, signedOut());
+    expect(verse.stack?.map((e) => e.nodeId)).toEqual([
+      testamentId("NT"),
+      bookId(MAT),
+      chapterId(MAT, 5),
+      verse.node.id,
+    ]);
     expect(verse.navigationMap[verse.node.id]?.back).toEqual({
       kind: "node",
-      toNodeId: chapterId(MAT, 5),
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
     const chapter = await refresh(instance, [
       { nodeId: chapterId(MAT, 5), label: "5 (chapter)", location: null },
     ]);
     expect(chapter.navigationMap[chapterId(MAT, 5)]?.back).toEqual({
       kind: "node",
-      toNodeId: bookId(MAT),
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
     const book = await refresh(instance, [{ nodeId: bookId(MAT), label: "Matthew", location: null }]);
     expect(book.navigationMap[bookId(MAT)]?.back).toEqual({
       kind: "node",
-      toNodeId: testamentId("NT"),
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
   });
 
@@ -702,7 +706,8 @@ describe("Bible app", () => {
     expect(menu.navigationMap[option]?.enter).toEqual({
       kind: "node",
       toNodeId: firstPick,
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
     });
     const list = await refresh(instance, [
       { nodeId: option, label: "Versions", location: null },
@@ -711,14 +716,12 @@ describe("Bible app", () => {
     expect(list.node.id).toBe(firstPick);
     expect(list.navigationMap[firstPick]?.enter).toMatchObject({
       kind: "node",
-      toNodeId: firstPick,
-      stackBehavior: "replace",
+      stackBehavior: "popTransient",
       action: true,
     });
     expect(list.navigationMap[firstPick]?.back).toEqual({
       kind: "node",
-      toNodeId: option,
-      stackBehavior: "replace",
+      stackBehavior: "pop",
     });
     expect(list.warm.some((node) => node.id === option)).toBe(true);
     expect(
@@ -747,7 +750,8 @@ describe("Bible app", () => {
     expect(root.navigationMap[versionsHeadingId()]?.enter).toEqual({
       kind: "node",
       toNodeId: versionPickId(ASV),
-      stackBehavior: "push",
+      stackBehavior: "pushTransient",
+      frame: "root-versions",
     });
 
     const verseRef = canon(MAT, 5, 3);
@@ -777,13 +781,14 @@ describe("Bible app", () => {
       ctx,
     );
     const pick = verseVersionPickId(verseRef, ASV, { type: "bookmarks" });
+    const verseId = verseNodeId({ type: "bookmarks" }, verseRef);
     const landed = await refresh(
       instance,
-      [{ nodeId: pick, label: "American Standard Version", location: null }],
-      { action: true },
+      verseId,
+      { action: { triggerId: pick } },
       ctx,
     );
-    expect(landed.node.id).toBe(verseNodeId({ type: "bookmarks" }, verseRef));
+    expect(landed.node.id).toBe(verseId);
     expect(landed.node.label).toContain("heavens and the earth");
     expect(landed.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
     expect(landed.navigationMap[landed.node.id]?.back).toEqual({
@@ -793,7 +798,8 @@ describe("Bible app", () => {
     expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
       kind: "node",
       toNodeId: optionId(verseRef, "versions", { type: "bookmarks" }),
-      stackBehavior: "replace",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
     });
     const deep = await instance.open("/bookmarks/Genesis/1/1", {}, ctx);
     expect(deep.node.id).toBe(landed.node.id);
@@ -819,8 +825,8 @@ describe("Bible app", () => {
     });
     const context = await refresh(
       instance,
-      [{ nodeId: pick, label: "American Standard Version", location: null }],
-      { action: true },
+      contextId,
+      { action: { triggerId: pick } },
       ctx,
     );
     expect(context.node.id).toBe(contextId);

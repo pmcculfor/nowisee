@@ -16,6 +16,9 @@ enum StackBehavior: String, Equatable {
   case push
   case replace
   case pop
+  case stay
+  case pushTransient
+  case popTransient
 }
 
 struct AppLocation: Equatable {
@@ -49,29 +52,47 @@ struct StackEntry: Equatable {
   var nodeId: String
   var label: String
   var location: AppLocation?
+  var frame: String?
+}
+
+struct ActionExtras: Equatable {
+  var triggerId: String
 }
 
 struct RefreshExtras: Equatable {
   var inputText: String?
-  var action: Bool
+  var action: ActionExtras?
   var parkedAppIds: [String]?
 
-  init(inputText: String? = nil, action: Bool = false, parkedAppIds: [String]? = nil) {
+  init(inputText: String? = nil, action: ActionExtras? = nil, parkedAppIds: [String]? = nil) {
     self.inputText = inputText
     self.action = action
     self.parkedAppIds = parkedAppIds
   }
+
+  var isAction: Bool {
+    guard let triggerId = action?.triggerId else {
+      return false
+    }
+    return !triggerId.isEmpty
+  }
 }
 
 enum NavEdge: Equatable {
-  case node(toNodeId: String?, stackBehavior: StackBehavior, passInputText: Bool, action: Bool)
+  case node(
+    toNodeId: String?,
+    stackBehavior: StackBehavior,
+    frame: String?,
+    passInputText: Bool,
+    action: Bool
+  )
   case app(to: AppLocation, passInputText: Bool, action: Bool)
   case external(href: String)
   case resume(appId: String)
 
   var passInputText: Bool {
     switch self {
-    case let .node(_, _, pass, _): return pass
+    case let .node(_, _, _, pass, _): return pass
     case let .app(_, pass, _): return pass
     case .external, .resume: return false
     }
@@ -79,9 +100,16 @@ enum NavEdge: Equatable {
 
   var action: Bool {
     switch self {
-    case let .node(_, _, _, action): return action
+    case let .node(_, _, _, _, action): return action
     case let .app(_, _, action): return action
     case .external, .resume: return false
+    }
+  }
+
+  var frame: String? {
+    switch self {
+    case let .node(_, _, frame, _, _): return frame
+    case .app, .external, .resume: return nil
     }
   }
 }
@@ -94,6 +122,8 @@ struct RefreshResult: Equatable {
   var node: NodePayload
   var location: AppLocation?
   var clipboardText: String?
+  /// Honored only on `open`. Ignored on refresh (decision 1).
+  var stack: [StackEntry]?
 }
 
 protocol DisplayPort: AnyObject {

@@ -263,7 +263,7 @@ A host mailer (`server/mail/`) sends the plaintext code. Drivers: `console` (loc
 
 ## 9. Where the verified user id enters an app
 
-The host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(stack, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). `RefreshExtras` still comes from the client (`inputText`, `action`). `ctx` never crosses to the browser.
+The host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(nodeId, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). `RefreshExtras` still comes from the client (`inputText`, `action?: { triggerId }`). `ctx` never crosses to the browser.
 
 | Rule | Note |
 |------|------|
@@ -279,15 +279,17 @@ The host passes the verified user as a third, server-only context argument — `
 
 `ctx` may carry host **capabilities** (methods), not only data — see §11.3. That does not weaken the app boundary: the plain-data rule in [`ARCHITECTURE.md`](ARCHITECTURE.md) governs *payloads* (`stack`, `RefreshResult`, `NodePayload`, `NavigationMap`), and `PlatformContext` already establishes that capabilities are method-bearing.
 
-### The stack is attacker-controlled input
+### The tip id and triggerId are attacker-controlled input
 
-`refresh(appId, stack, extras)` takes the whole stack **from the browser**, and node ids are exactly where an app naturally puts record ids (`note:123`). The browser sends that stack again on every single refresh, so anyone can edit it and ask for a node that belongs to someone else. If the app resolves `note:123` by fetching note 123 and returning its text as the tip label, one user reads another user's notes.
+`refresh(appId, nodeId, extras)` takes the tip **from the browser**, and node ids are exactly where an app naturally puts record ids (`note:123`). `extras.action.triggerId` is a second client-controlled string: a client can send `{ nodeId: <benign>, action: { triggerId: <anything> } }` and try to drive a write keyed to a node it is not on. Apps must validate both against their own graph and owner scope.
+
+Mint-on-edge means the client now names the primary key for create: inserts must be owner-scoped (`WHERE id = ? AND owner = ?`) and must fail closed if that id already exists under a different owner, so a guessed or replayed id cannot make an app treat someone else's row as the caller's.
 
 Therefore, normative for every user-scoped app:
 
-- Resolve node ids from the stack **with the owner in the query** (`WHERE id = ? AND owner_id = ?`), never by id alone.
-- Do this on **every** call, not only on `open`. There is no "already checked" state; each request arrives with a fresh, untrusted stack.
-- The same applies to writes. `action: true` on a node id you did not authorize is how one user deletes another user's record.
+- Resolve node ids **with the owner in the query** (`WHERE id = ? AND owner_id = ?`), never by id alone.
+- Do this on **every** call, not only on `open`. There is no "already checked" state; each request arrives with a fresh, untrusted tip and trigger.
+- The same applies to writes. `action.triggerId` on a node id you did not authorize is how one user deletes another user's record.
 - A node the user does not own is "not found," not "forbidden" — do not confirm that the record exists.
 
 This discipline is also the backstop for §10: with the owner in every query, a signed-out user (`userId` null) matches no rows and sees nothing, even if the app forgot to write a friendlier signed-out screen.

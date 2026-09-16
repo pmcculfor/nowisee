@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { NODE, WEATHER_APP_ID, WEATHER_APP_LABEL } from "./ids.ts";
 import { buildWeatherView, openWeatherPath, type WeatherViewDeps } from "./view.ts";
@@ -38,12 +37,11 @@ export function createWeatherApp(deps: WeatherAppDeps): WeatherApp {
       return openWeatherPath(viewDeps, path, extras, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
-      const tipId = stack[stack.length - 1]?.nodeId ?? NODE.current;
-      return buildWeatherView(viewDeps, tipId, extras, ctx);
+      return buildWeatherView(viewDeps, nodeId || NODE.current, extras, ctx);
     },
     close() {
       deps.close?.();

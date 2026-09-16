@@ -58,8 +58,8 @@ Core talks to apps only through `open` / `refresh`. Apps never import Navigator,
 1. Return a usable `node`, `navigationMap`, and `warm` from every `open` / `refresh`.
 2. Make root `back` an `app` edge to `config.rootAppId` (Home).
 3. On `pop` edges, omit `toNodeId`.
-4. Run side effects only when `extras.action` is true.
-5. Resolve actions with a status node (including errors). Do not reject an action call — that strands the user on the working label.
+4. Run side effects only when `extras.action` is set.
+5. Resolve actions with a changed label or a status node (including errors). Do not reject an action call — that strands the user on the working label.
 6. Repair a stale stack tip; do not teleport.
 7. Return plain data only. No browser URLs, no browser APIs, no live objects.
 8. Scope user data by `ctx.userId` from the cookie, not by an id the client sent on the stack.
@@ -207,17 +207,18 @@ The map is nested (`fromNodeId → intent → edge`), so no delimiter is needed 
 ### Responsibilities
 
 - Maintain `StackEntry[]` for the current app only.
-- Operations: `push(entry)`, `replaceTip(entry)`, `pop() → entry | null`, `clear()`, `snapshot()` for refresh, `restore(snapshot)` when the user backs out of load recovery.
+- Operations: `push(entry)`, `replaceTip(entry)`, `pop() → entry | null`, `clear()`, `snapshot()` for park, `restore(snapshot)` when the user backs out of load recovery. `snapshot` is **not** sent to `refresh`.
 - `replaceTip` refuses when the stack is empty (callers that mean push must `push`).
 - Tip = last entry.
 
 ### Pop rules
 
 - `pop` when stack length is 1: Navigator must not leave the user nowhere. **Apps MUST offer root `back` as an `app` edge to `config.rootAppId`** before the user is stuck. If a buggy app authors a `pop` on the last entry, core recovers by calling `openLocation({ appId: config.rootAppId, path: "/" })` **without popping first**, so a failed recovery leaves the last screen intact.
+- `popTransient` unwinds every trailing entry whose `frame` matches the tip's frame. It **never pops the last entry**: if the unwind would empty the stack, core does the same root-app recovery without popping first.
 
-### Known consequence: deep links have a one-entry stack
+### Deep links rehydrate ancestry on `open`
 
-An `open` resets the stack, so a shared link lands the user with no ancestry, and `back` at that node exits to the root app rather than to the conceptual parent. Apps that care can inspect the stack in `refresh` (length 1 ⇒ arrived by link) and author `back` accordingly. Rehydrating ancestry from `open` is **deferred** — see [`PREPAREDNESS.md`](PREPAREDNESS.md) — because the correct parent is not always obvious, and adding an optional `stack` to `RefreshResult` later is additive.
+An `open` still resets the stack, then honors optional `OpenResult.stack` when the last entry's `nodeId` equals `node.id` and every non-null ancestor location passes `isCanonicalPath`. Invalid ancestry is discarded (one-entry stack) and **warned**. `refresh` cannot install ancestry. Overlay `frame` is client-only and is never present on open ancestry.
 
 ### Non-goals
 
@@ -239,7 +240,8 @@ Navigator is the **single owner** of every state transition: stack, cache, map, 
 - Own **SessionPark**: one stack snapshot per `appId` (plus tip kind and optional input text). Park on successful cross-app `open`. `kind: "resume"` restores then `refresh`. A plain `app` open drops the destination's park.
 - Intercept intent `recents` (opens `config.recentsAppId` with `parkedAppIds`). Missing config or already there: fall through to the map.
 - Read input text from Display when `passInputText` is set, and when parking an input tip.
-- Set `extras.action` on exactly the traversal of an `action: true` edge.
+- Set `extras.action = { triggerId }` on exactly the traversal of an `action: true` edge (`triggerId` is the pre-move tip).
+- Block intents for the duration of every action call. Action failure offers back only.
 
 ### Intent handling algorithm
 
@@ -247,7 +249,10 @@ Navigator is the **single owner** of every state transition: stack, cache, map, 
 onIntent(intent):
   if blocked: return
   if loadRecovery:
-    if intent == enter: refresh current stack (no extras.action); return
+    if recovery.kind == action:
+      if intent == back: restore stack+display snapshot; return
+      return                                         // enter does not re-issue
+    if intent == enter: refresh current tip (no extras.action); return
     if intent == back: restore stack+display snapshot; return
     return                                           // prev/next silent no-op
   if intent == recents and config.recentsAppId and current app is not recents:
@@ -255,8 +260,9 @@ onIntent(intent):
     // else fall through (missing config or already there: typically no map edge)
   edge = map.lookup(tip.id, intent)
   if !edge: return                                   // silent no-op
-  if edge is malformed (push/replace missing toNodeId,
-     app location path not canonical, empty external href,
+  if edge is malformed (unknown stackBehavior, missing toNodeId when required,
+     missing/blank frame on pushTransient, popTransient on a committed tip,
+     replace onto its own fromNodeId, app path not canonical, empty href,
      resume missing appId):
     return                                           // no token bump
 
@@ -264,7 +270,7 @@ onIntent(intent):
   if edge.passInputText and tip.kind == "input":
     extras.inputText = display.getInputText()
   if edge.action:
-    extras.action = true                             // this traversal only
+    extras.action = { triggerId: tip.id }            // this traversal only
 
   token = ++transitionToken                          // stale for full apply; read-only stays in flight
 
@@ -276,28 +282,33 @@ onIntent(intent):
     openLocation(edge.to, extras); return
 
   // node edge
-  snapshot stack and current payload                  // load-recovery back
+  snapshot stack and current payload                  // recovery back
   if edge.stackBehavior == "pop":
     if stack.length <= 1:
       openLocation({ appId: config.rootAppId, path: "/" }); return
     stack.pop()
-    destId = stack.tip.nodeId
-  else:
-    destId = edge.toNodeId                           // required; already validated
+  else if edge.stackBehavior == "popTransient":
+    unwind trailing entries whose frame matches the tip's frame
+    if that would empty the stack:
+      openLocation({ appId: config.rootAppId, path: "/" }); return
+  else if edge.stackBehavior == "stay":
+    // no stack change
+  destId = stay | pop | popTransient ? stack.tip.nodeId : edge.toNodeId
+  if edge.action: blocked = true
 
   payload = cache.get(destId)
   if payload:
-    applyLocalMove(edge.stackBehavior, payload)      // update stack + display now
-    scheduleCall(refresh, extras, token)             // one in-flight; else pending
+    applyLocalMove(edge.stackBehavior, payload)      // stay does not remount
+    scheduleCall(refresh(destId), extras, token)
   else:
     blocked = true
     applyLocalMove(edge.stackBehavior, { nodeId: destId, label: "" })
     // stack moves so refresh sees the intended tip; Display keeps the previous
     // label (no placeholder, no empty flash) until a covering or current-token result
-    scheduleCall(refresh, extras, token)
+    scheduleCall(refresh(destId), extras, token)
     // current-token result: full apply; blocked = false
     // stale result that still warms the live tip: replace map+warm, show dest if needed
-    // on current-token failure: load recovery (below); stack stays on dest
+    // on current-token failure: recovery (below); stack stays on dest
 ```
 
 `openLocation(location, extras)` increments the token, sets `blocked = true`, and calls `app.open(location.path, extras)` **without** discarding the current session first. On success it parks the outgoing app (if the destination app id differs), drops any park for the destination, then clears stack, cache, and map, sets the current app, and applies. On failure it unblocks and leaves stack, cache, map, and display as they were. `kind: "resume"` restores a parked stack locally, then `refresh`es — it does not call `open`. If `config.recentsAppId` is set, Recents `open`/`refresh` extras include `parkedAppIds`.
@@ -312,14 +323,15 @@ onIntent(intent):
 - On completion, a **current-token** result is a full `applyResult` (tip, display, location, map, warm).
 - A **stale** read-only refresh result still **replaces** map and warm when the live stack tip id is in `result.warm` (or is `result.node.id`). It does not adopt `result.node` as the tip or write the address bar from that result. If the live tip is missing from that warm set, discard the result.
 - Comparing tip ids is *not* sufficient for a full apply: an A → B → A sequence returns to the same id, and the first visit's stale result would pass an id check.
-- Read-only `refresh` is coalesced: at most one in-flight call and one pending (latest stack). The in-flight read-only call is not aborted when a later read-only intent arrives. When it settles, the pending call starts (one extra round trip).
+- Read-only `refresh` is coalesced: at most one in-flight call and one pending (latest tip). The in-flight read-only call is not aborted when a later read-only intent arrives. When it settles, the pending call starts (one extra round trip).
 - Action and `openLocation` preempt: drop the read-only pending, abort an in-flight **read-only** call, and start immediately. **Action** calls are never aborted — only their results are discarded if the token is stale.
 
 ### Action calls
 
-- `extras.action` is set on exactly one call: the one caused by traversing an edge with `action: true`.
-- Core never re-issues that call — no automatic retry, no replay after a discarded result, no repeat on later revalidation. A failed action is re-triggered by the user pressing the intent again. Load-recovery `enter` is a new read refresh, not a re-issue of a failed action.
-- Core coalesces read-only revalidations to one in-flight `refresh` and one pending (latest stack). A covering in-flight result replaces warm and map; it does not merge them. Action calls are never coalesced or dropped.
+- `extras.action` is `{ triggerId }` on exactly one call: the one caused by traversing an edge with `action: true`. `triggerId` is the node that was tip before the local move.
+- Core **blocks** for the duration of every action call.
+- Core never re-issues that call — no automatic retry, no replay after a discarded result, no repeat on later revalidation. Action failure recovery offers **back only**; `enter` there does not re-issue.
+- Core coalesces read-only revalidations to one in-flight `refresh` and one pending (latest tip). A covering in-flight result replaces warm and map; it does not merge them. Action calls are never coalesced or dropped.
 
 ### Address bar
 
@@ -331,9 +343,9 @@ onIntent(intent):
 
 - Log/debug as appropriate.
 - `blocked = false`, busy clear.
-- **Warm miss:** keep the dest on the stack. Map and cache stay last-good. Display the core recovery copy (`LOAD_FAILURE_LABEL`). `enter` retries `refresh` on the current stack with **no** `extras.action`. `back` restores the pre-miss stack and the previous payload. Other intents are a silent no-op. This is Navigator recovery, not an app-authored edge.
+- **Warm miss:** keep the dest on the stack. Map and cache stay last-good. Display the core recovery copy (`LOAD_FAILURE_LABEL`). `enter` retries `refresh` on the current tip with **no** `extras.action`. `back` restores the pre-miss stack and the previous payload. Other intents are a silent no-op. This is Navigator recovery, not an app-authored edge.
 - **Warm hit or failed open:** display, stack, map, and cache unchanged (last good). Do not overwrite cached dest text.
-- A rejected action call still leaves the user reading a working label if the dest was warm. Apps **MUST** resolve with a status node instead of rejecting. Busy and dead-end remain silent — [`PREPAREDNESS.md`](PREPAREDNESS.md).
+- A rejected action call still leaves the user reading a working label if the dest was warm. Apps **MUST** resolve with a changed label or a status node instead of rejecting. Busy and dead-end remain silent — [`PREPAREDNESS.md`](PREPAREDNESS.md).
 
 ### Non-goals
 
@@ -494,7 +506,7 @@ Apps **do not write the clipboard**. On an action they return `clipboardText` on
 ```text
 keydown → edge has action: true
   ├─ open a pending clipboard write (a promise core will resolve)
-  ├─ call app.refresh (may be HTTP) with extras.action = true
+  ├─ call app.refresh(nodeId, extras) (may be HTTP) with extras.action = { triggerId }
   │     └─ result.clipboardText  → core writeText → resolves the pending write
   └─ if the result has no clipboardText, cancel the pending write
 ```
@@ -527,8 +539,8 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 | Helper | Purpose |
 |--------|---------|
-| `edgeNode / edgePop / edgeApp / edgeResume / edgeExternal` | Construct `NavEdge` values; `edgePop` omits `toNodeId` |
-| `edgeAction(toNodeId)` | `enter` edge with `action: true` — the one-line button press |
+| `edgeNode / edgePop / edgeStay / edgePushTransient / edgePopTransient / edgeApp / edgeResume / edgeExternal` | Construct `NavEdge` values; `pop`/`stay`/`popTransient` omit `toNodeId` |
+| `edgeAction(toNodeId)` | `enter` edge with `action: true` — default push onto a status node |
 | `siblingListEdges(ids, opts)` | `prev` / `next` `replace` edges; `wrap?: boolean`; `around?: { index, radius }` windows the emitted rows |
 | `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) commits; `back` abandons (`backTo` is a node id or `"pop"`) |
 | `rootBackToHome(rootId, rootAppId, fromAppId)` | `back` app edge to that app's Home catalog row (`/app/:fromAppId`) |

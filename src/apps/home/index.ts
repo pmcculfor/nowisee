@@ -3,7 +3,6 @@ import type {
   AppServerContext,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { HOME_APP_ID } from "./ids.ts";
 import { buildHomeView, openHomePath, type HomeViewDeps } from "./view.ts";
@@ -34,12 +33,11 @@ export function createHomeApp(deps: HomeAppDeps = {}): HomeApp {
       return openHomePath(viewDeps, path, extras, ctx);
     },
     refresh(
-      stack: readonly StackEntry[],
+      nodeId: string,
       extras: RefreshExtras = {},
       ctx?: AppServerContext,
     ): Promise<RefreshResult> {
-      const tipId = stack[stack.length - 1]?.nodeId;
-      return buildHomeView(viewDeps, tipId, extras, ctx);
+      return buildHomeView(viewDeps, nodeId || undefined, extras, ctx);
     },
     close() {
       deps.close?.();

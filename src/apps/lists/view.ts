@@ -4,6 +4,8 @@ import {
   edgeApp,
   edgeNode,
   edgePop,
+  edgePushTransient,
+  edgeStay,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -13,21 +15,21 @@ import {
 import type {
   AppLocation,
   AppServerContext,
-  NavEdge,
   NavigationMap,
   NodePayload,
+  OpenResult,
   RefreshExtras,
   RefreshResult,
+  StackEntry,
 } from "../../core/types.ts";
+import { isActionExtras } from "../../core/types.ts";
 import {
   CREATE_EDIT_NODE_ID,
   CREATE_NODE_ID,
-  CREATE_RESULT_NODE_ID,
   LISTS_APP_ID,
   activeItemNodeId,
   addEditNodeId,
   addNodeId,
-  addResultNodeId,
   catalogListNodeId,
   completedEmptyNodeId,
   completedItemNodeId,
@@ -38,7 +40,6 @@ import {
   firstLineLabel,
   itemDoneNodeId,
   itemIdFromNode,
-  itemRestoredNodeId,
   itemUndoNodeId,
   listIdFromNode,
   parseListsNode,
@@ -64,7 +65,7 @@ const EMPTY_COMPLETED_LABEL = "No completed items.";
 const SIGNED_OUT_TEXT = "Sign in to use Lists.";
 const EMPTY_LIST_LABEL = "Empty list";
 const EMPTY_ITEM_LABEL = "Empty item";
-const SAVING_LABEL = "Saving…";
+const LIST_ADD_FRAME = "list-add";
 
 type GraphState = {
   readonly lists: readonly ListRecord[];
@@ -84,7 +85,6 @@ type FocusList = {
 export async function buildListsView(
   deps: ListsViewDeps,
   tipId: string,
-  stackDepth: number,
   extras: RefreshExtras = {},
   ctx?: AppServerContext,
 ): Promise<RefreshResult> {
@@ -93,19 +93,35 @@ export async function buildListsView(
     return signedOutLists(deps, ctx);
   }
 
-  if (extras.action) {
-    return applyAction(deps, ownerId, tipId, stackDepth, extras);
+  if (isActionExtras(extras)) {
+    await applyAction(deps, ownerId, tipId, extras);
   }
 
   const state = await loadState(deps, ownerId, tipId);
-  return viewFromState(deps, state, tipId, stackDepth);
+  const view = viewFromState(deps, state, tipId);
+  const trigger = isActionExtras(extras) ? parseListsNode(extras.action.triggerId) : null;
+  if (
+    trigger &&
+    (trigger.kind === "itemUndo" || trigger.kind === "completedItem") &&
+    view.node.id === tipId
+  ) {
+    const labeled = withTipLabel(view, RESTORED_LABEL);
+    return {
+      ...labeled,
+      navigationMap: {
+        ...labeled.navigationMap,
+        [tipId]: { back: edgePop(), enter: edgePop() },
+      },
+    };
+  }
+  return view;
 }
 
 export async function openListsPath(
   deps: ListsViewDeps,
   path: string,
   ctx?: AppServerContext,
-): Promise<RefreshResult> {
+): Promise<OpenResult> {
   const ownerId = ctx?.userId ?? null;
   if (!ownerId) {
     return signedOutLists(deps, ctx);
@@ -113,7 +129,9 @@ export async function openListsPath(
   const lists = await deps.store.listLists(ownerId);
   const tipId = await tipIdForPath(deps, ownerId, path, lists);
   const state = await loadState(deps, ownerId, tipId);
-  return viewFromState(deps, state, tipId, 1);
+  const view = viewFromState(deps, state, tipId);
+  const stack = interiorAncestry(state, view);
+  return stack ? { ...view, stack } : view;
 }
 
 function signedOutLists(deps: ListsViewDeps, ctx: AppServerContext | undefined): RefreshResult {
@@ -278,68 +296,66 @@ async function applyAction(
   deps: ListsViewDeps,
   ownerId: string,
   tipId: string,
-  stackDepth: number,
   extras: RefreshExtras,
-): Promise<RefreshResult> {
-  const parsed = parseListsNode(tipId);
+): Promise<void> {
+  const triggerId = extras.action?.triggerId ?? tipId;
+  const trigger = parseListsNode(triggerId);
 
-  if (parsed?.kind === "createResult") {
+  if (trigger?.kind === "createEdit") {
     const title = extras.inputText?.trim() ?? "";
     if (title.length === 0) {
-      const state = await loadState(deps, ownerId, CREATE_NODE_ID);
-      return viewFromState(deps, state, CREATE_NODE_ID, stackDepth);
+      return;
     }
-    const created = await deps.store.createList(ownerId, title);
-    const state = await loadState(deps, ownerId, addNodeId(created.id));
-    return viewFromState(deps, state, addNodeId(created.id), stackDepth);
+    const minted = parseListsNode(tipId);
+    const mintedId = minted && "listId" in minted ? minted.listId : undefined;
+    await deps.store.createList(ownerId, title, mintedId);
+    return;
   }
 
-  if (parsed?.kind === "addResult") {
+  if (trigger?.kind === "addEdit") {
     const body = extras.inputText?.trim() ?? "";
-    const addId = addNodeId(parsed.listId);
     if (body.length === 0) {
-      const state = await loadState(deps, ownerId, addId);
-      return viewFromState(deps, state, addId, stackDepth);
+      return;
     }
-    await deps.store.createItem(ownerId, parsed.listId, body);
-    const state = await loadState(deps, ownerId, addId);
-    return viewFromState(deps, state, addId, stackDepth);
+    await deps.store.createItem(ownerId, trigger.listId, body);
+    return;
   }
 
-  if (parsed?.kind === "itemDone") {
-    await deps.store.completeItem(ownerId, parsed.itemId);
-    const state = await loadState(deps, ownerId, tipId);
-    return viewFromState(deps, state, tipId, stackDepth);
+  if (trigger?.kind === "itemDone") {
+    await deps.store.completeItem(ownerId, trigger.itemId);
+    return;
   }
 
-  if (parsed?.kind === "itemRestored") {
-    await deps.store.restoreItem(ownerId, parsed.itemId);
-    const state = await loadState(deps, ownerId, tipId);
-    return viewFromState(deps, state, tipId, stackDepth);
+  if (
+    trigger?.kind === "itemUndo" ||
+    trigger?.kind === "completedItem"
+  ) {
+    await deps.store.restoreItem(ownerId, trigger.itemId);
+    return;
   }
 
-  if (parsed?.kind === "deleted") {
-    await deps.store.deleteList(ownerId, parsed.listId);
-    const lists = await deps.store.listLists(ownerId);
-    const firstActive = await deps.store.firstActiveItems(ownerId);
-    return viewFromState(deps, { lists, firstActive, focus: null }, tipId, stackDepth);
+  if (trigger?.kind === "deleted") {
+    await deps.store.deleteList(ownerId, trigger.listId);
   }
+}
 
-  const state = await loadState(deps, ownerId, tipId);
-  return viewFromState(deps, state, tipId, stackDepth);
+function withTipLabel(result: RefreshResult, label: string): RefreshResult {
+  return {
+    ...result,
+    node: { ...result.node, label },
+    warm: result.warm.map((n) => (n.id === result.node.id ? { ...n, label } : n)),
+  };
 }
 
 function viewFromState(
   deps: ListsViewDeps,
   state: GraphState,
   requestedTipId: string,
-  stackDepth: number,
 ): RefreshResult {
   const payloads = new Map<string, NodePayload>();
 
   payloads.set(CREATE_NODE_ID, { id: CREATE_NODE_ID, label: CREATE_LABEL });
   payloads.set(CREATE_EDIT_NODE_ID, { id: CREATE_EDIT_NODE_ID, label: "", kind: "input" });
-  payloads.set(CREATE_RESULT_NODE_ID, { id: CREATE_RESULT_NODE_ID, label: SAVING_LABEL });
 
   for (const list of state.lists) {
     const id = catalogListNodeId(list.id);
@@ -364,6 +380,9 @@ function viewFromState(
   if (parsed?.kind === "deleted") {
     payloads.set(requestedTipId, { id: requestedTipId, label: DELETED_LABEL });
   }
+  if (parsed?.kind === "completedItem" && !payloads.has(requestedTipId)) {
+    payloads.set(requestedTipId, { id: requestedTipId, label: RESTORED_LABEL });
+  }
 
   let tipId = requestedTipId;
   if (!payloads.has(tipId)) {
@@ -374,7 +393,7 @@ function viewFromState(
   const tip = payloads.get(tipId)!;
 
   return {
-    navigationMap: buildNavigationMap(deps.rootAppId, state, payloads, stackDepth),
+    navigationMap: buildNavigationMap(deps.rootAppId, state, payloads),
     warm: [...payloads.values()],
     node: tip,
     location: locationFor(tipId, state),
@@ -398,7 +417,6 @@ function addFocusPayloads(payloads: Map<string, NodePayload>, focus: FocusList):
   });
   payloads.set(addNodeId(listId), { id: addNodeId(listId), label: ADD_LABEL });
   payloads.set(addEditNodeId(listId), { id: addEditNodeId(listId), label: "", kind: "input" });
-  payloads.set(addResultNodeId(listId), { id: addResultNodeId(listId), label: SAVING_LABEL });
   payloads.set(deletedNodeId(listId), { id: deletedNodeId(listId), label: DELETED_LABEL });
 
   const allItems = [...focus.active, ...focus.completed];
@@ -410,10 +428,6 @@ function addFocusPayloads(payloads: Map<string, NodePayload>, focus: FocusList):
     payloads.set(itemUndoNodeId(item.id), {
       id: itemUndoNodeId(item.id),
       label: UNDO_LABEL,
-    });
-    payloads.set(itemRestoredNodeId(item.id), {
-      id: itemRestoredNodeId(item.id),
-      label: RESTORED_LABEL,
     });
   }
   for (const item of focus.active) {
@@ -436,12 +450,6 @@ function coerceTip(state: GraphState, parsed: ListsNode | null, tipId: string): 
       return interiorDefaultFromFocus(state.focus);
     }
   }
-  if (parsed.kind === "completedItem") {
-    const stillCompleted = state.focus.completed.some((i) => i.id === parsed.itemId);
-    if (!stillCompleted) {
-      return completedListTip(state.focus);
-    }
-  }
   return tipId;
 }
 
@@ -451,9 +459,7 @@ function repairTip(state: GraphState, parsed: ListsNode | null): string {
   }
   if (state.focus) {
     if (
-      parsed?.kind === "completedItem" ||
-      parsed?.kind === "completedEmpty" ||
-      parsed?.kind === "itemRestored"
+      parsed?.kind === "completedItem" || parsed?.kind === "completedEmpty"
     ) {
       return completedListTip(state.focus);
     }
@@ -473,9 +479,9 @@ function buildNavigationMap(
   rootAppId: string,
   state: GraphState,
   payloads: Map<string, NodePayload>,
-  stackDepth: number,
 ): NavigationMap {
   const catalogIds = [CREATE_NODE_ID, ...state.lists.map((l) => catalogListNodeId(l.id))];
+  const mintedListId = crypto.randomUUID();
   const fragments: MapFragment[] = [
     siblingListEdges(catalogIds, { wrap: false }),
     {
@@ -484,12 +490,11 @@ function buildNavigationMap(
       },
     },
     inputEdges(CREATE_EDIT_NODE_ID, {
-      commitTo: CREATE_RESULT_NODE_ID,
+      commitTo: addNodeId(mintedListId),
       backTo: CREATE_NODE_ID,
       action: true,
       commitStackBehavior: "replace",
     }),
-    rootBackToHome(CREATE_RESULT_NODE_ID, rootAppId, LISTS_APP_ID),
   ];
 
   for (const id of catalogIds) {
@@ -510,7 +515,7 @@ function buildNavigationMap(
   }
 
   if (state.focus) {
-    fragments.push(...focusFragments(state.focus, stackDepth));
+    fragments.push(...focusFragments(state.focus));
   }
 
   const deletedId = [...payloads.keys()].find((id) => parseListsNode(id)?.kind === "deleted");
@@ -537,10 +542,9 @@ function enterFromCatalog(state: GraphState, listId: string): string {
   return addNodeId(listId);
 }
 
-function focusFragments(focus: FocusList, stackDepth: number): MapFragment[] {
+function focusFragments(focus: FocusList): MapFragment[] {
   const listId = focus.list.id;
-  const catalogId = catalogListNodeId(listId);
-  const back = interiorBack(stackDepth, catalogId);
+  const back = edgePop();
   const interiorIds = [
     deleteNodeId(listId),
     completedOpenNodeId(listId),
@@ -575,33 +579,26 @@ function focusFragments(focus: FocusList, stackDepth: number): MapFragment[] {
     },
     {
       [completedEmptyNodeId(listId)]: {
-        back: stackDepth > 1 ? edgePop() : edgeNode(completedOpenNodeId(listId), "replace"),
+        back: edgePop(),
       },
     },
     {
       [addNodeId(listId)]: {
-        enter: edgeNode(addEditNodeId(listId), "replace"),
+        enter: edgePushTransient(addEditNodeId(listId), LIST_ADD_FRAME),
         back,
       },
     },
     inputEdges(addEditNodeId(listId), {
-      commitTo: addResultNodeId(listId),
-      backTo: addNodeId(listId),
+      backTo: "popTransient",
       action: true,
-      commitStackBehavior: "replace",
+      commitStackBehavior: "popTransient",
     }),
-    {
-      [addResultNodeId(listId)]: {
-        back,
-      },
-    },
   ];
 
   for (const item of focus.active) {
     const id = activeItemNodeId(item.id);
     const doneId = itemDoneNodeId(item.id);
     const undoId = itemUndoNodeId(item.id);
-    const restoredId = itemRestoredNodeId(item.id);
     fragments.push({
       [id]: {
         enter: edgeAction(doneId),
@@ -618,14 +615,8 @@ function focusFragments(focus: FocusList, stackDepth: number): MapFragment[] {
     fragments.push({
       [undoId]: {
         prev: edgeNode(doneId, "replace"),
-        enter: edgeAction(restoredId, { stackBehavior: "replace" }),
+        enter: edgeStay({ action: true }),
         back: edgePop(),
-      },
-    });
-    fragments.push({
-      [restoredId]: {
-        back: edgePop(),
-        enter: edgePop(),
       },
     });
   }
@@ -634,16 +625,14 @@ function focusFragments(focus: FocusList, stackDepth: number): MapFragment[] {
   if (completedIds.length > 0) {
     fragments.push(siblingListEdges(completedIds, { wrap: false }));
   }
-  const completedBack =
-    stackDepth > 1 ? edgePop() : edgeNode(completedOpenNodeId(listId), "replace");
+  const completedBack = edgePop();
   for (const item of focus.completed) {
     const id = completedItemNodeId(item.id);
-    const restoredId = itemRestoredNodeId(item.id);
     const doneId = itemDoneNodeId(item.id);
     const undoId = itemUndoNodeId(item.id);
     fragments.push({
       [id]: {
-        enter: edgeAction(restoredId, { stackBehavior: "replace" }),
+        enter: edgeStay({ action: true }),
         back: completedBack,
       },
     });
@@ -657,14 +646,8 @@ function focusFragments(focus: FocusList, stackDepth: number): MapFragment[] {
     fragments.push({
       [undoId]: {
         prev: edgeNode(doneId, "replace"),
-        enter: edgeAction(restoredId, { stackBehavior: "replace" }),
+        enter: edgeStay({ action: true }),
         back: edgePop(),
-      },
-    });
-    fragments.push({
-      [restoredId]: {
-        back: edgePop(),
-        enter: edgePop(),
       },
     });
   }
@@ -672,11 +655,28 @@ function focusFragments(focus: FocusList, stackDepth: number): MapFragment[] {
   return fragments;
 }
 
-function interiorBack(stackDepth: number, catalogNodeId: string): NavEdge {
-  if (stackDepth > 1) {
-    return edgePop();
+function interiorAncestry(state: GraphState, view: RefreshResult): readonly StackEntry[] | undefined {
+  if (!state.focus) {
+    return undefined;
   }
-  return edgeNode(catalogNodeId, "replace");
+  const parsed = parseListsNode(view.node.id);
+  if (!parsed || parsed.kind === "catalogList") {
+    return undefined;
+  }
+  const listId = state.focus.list.id;
+  const catalogId = catalogListNodeId(listId);
+  return [
+    {
+      nodeId: catalogId,
+      label: firstLineLabel(state.focus.list.title, EMPTY_LIST_LABEL),
+      location: { appId: LISTS_APP_ID, path: `/l/${listId}` },
+    },
+    {
+      nodeId: view.node.id,
+      label: view.node.label,
+      location: view.location,
+    },
+  ];
 }
 
 function locationFor(tipId: string, state: GraphState): AppLocation | null {
@@ -689,11 +689,8 @@ function locationFor(tipId: string, state: GraphState): AppLocation | null {
       return { appId: LISTS_APP_ID, path: "/create" };
     case "createEdit":
       return { appId: LISTS_APP_ID, path: "/create/edit" };
-    case "createResult":
-    case "addResult":
     case "itemDone":
     case "itemUndo":
-    case "itemRestored":
     case "deleted":
       return null;
     case "catalogList":

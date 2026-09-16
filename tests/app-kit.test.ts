@@ -7,7 +7,10 @@ import {
   edgeExternal,
   edgeNode,
   edgePop,
+  edgePopTransient,
+  edgePushTransient,
   edgeResume,
+  edgeStay,
   inputEdges,
   rootBackToHome,
   siblingListEdges,
@@ -33,7 +36,22 @@ describe("edge builders", () => {
       kind: "external",
       href: "https://example.com",
     });
-    expect(edgeResume("notes")).toEqual({ kind: "resume", appId: "notes" });
+    expect(edgeStay({ action: true })).toEqual({
+      kind: "node",
+      stackBehavior: "stay",
+      action: true,
+    });
+    expect(edgePushTransient("menu", "verse-menu")).toEqual({
+      kind: "node",
+      toNodeId: "menu",
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
+    });
+    expect(edgePopTransient({ action: true })).toEqual({
+      kind: "node",
+      stackBehavior: "popTransient",
+      action: true,
+    });
   });
 
   it("edgeAction marks action: true and defaults to push", () => {

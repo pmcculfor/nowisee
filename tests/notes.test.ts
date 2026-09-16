@@ -3,7 +3,6 @@ import { edgeApp } from "../src/app-kit/index.ts";
 import {
   CREATE_EDIT_NODE_ID,
   CREATE_NODE_ID,
-  CREATE_RESULT_NODE_ID,
   firstLineLabel,
   noteEditNodeId,
   noteNodeId,
@@ -16,6 +15,7 @@ import {
 } from "../src/apps/notes/store.ts";
 import type { NoteRecord, NotesStore } from "../src/apps/notes/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { refreshApp } from "./helpers/refreshCall.ts";
 
 const OWNER = "user-1";
 const OTHER = "user-2";
@@ -100,13 +100,16 @@ describe("Notes app", () => {
       stackBehavior: "replace",
     });
     const edit = await app.open("/create/edit", {}, signedIn());
-    expect(edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter).toMatchObject({
+    const createEnter = edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter;
+    expect(createEnter).toMatchObject({
       kind: "node",
-      toNodeId: CREATE_RESULT_NODE_ID,
       stackBehavior: "replace",
       passInputText: true,
       action: true,
     });
+    expect(createEnter && "toNodeId" in createEnter ? createEnter.toNodeId : "").toMatch(
+      /^notes:note:[0-9a-f-]{36}$/,
+    );
     expect(edit.navigationMap[CREATE_EDIT_NODE_ID]?.back).toEqual({
       kind: "node",
       toNodeId: CREATE_NODE_ID,
@@ -211,17 +214,24 @@ describe("Notes app", () => {
       now: () => `2026-03-0${++clock}T00:00:00.000Z`,
     });
     const ctx = signedIn();
+    const edit = await app.open("/create/edit", {}, ctx);
+    const dest =
+      edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter &&
+      "toNodeId" in edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!
+        ? edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!.toNodeId!
+        : "";
 
     const created = await app.refresh(
-      [{ nodeId: "notes:create:result", label: "Saving…", location: null }],
-      { action: true, inputText: "Brand new\nsecond" },
+      dest,
+      { action: { triggerId: CREATE_EDIT_NODE_ID }, inputText: "Brand new\nsecond" },
       ctx,
     );
-    expect(created.node.id).toBe(noteNodeId("id-1"));
+    const createdId = created.node.id.replace(/^notes:note:/, "");
+    expect(created.node.id).toBe(dest);
     expect(created.node.label).toBe("Brand new");
     expect(await store.list(OWNER)).toEqual([
       {
-        id: "id-1",
+        id: createdId,
         body: "Brand new\nsecond",
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
@@ -229,8 +239,8 @@ describe("Notes app", () => {
     ]);
 
     const updated = await app.refresh(
-      [{ nodeId: noteNodeId("id-1"), label: "Brand new", location: null }],
-      { action: true, inputText: "Revised title\nmore" },
+      dest,
+      { action: { triggerId: noteEditNodeId(createdId) }, inputText: "Revised title\nmore" },
       ctx,
     );
     expect(updated.node.label).toBe("Revised title");
@@ -244,7 +254,7 @@ describe("Notes app", () => {
     const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
       { inputText: "should not save" },
       signedIn(),
@@ -256,7 +266,7 @@ describe("Notes app", () => {
     const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    await app.refresh(
+    await refreshApp(app,
       [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
       { action: true },
       signedIn(),
@@ -268,7 +278,7 @@ describe("Notes app", () => {
     const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    const result = await app.refresh(
+    const result = await refreshApp(app,
       [{ nodeId: noteNodeId("gone"), label: "Gone", location: null }],
       { action: true, inputText: "nope" },
       signedIn(),
@@ -298,8 +308,8 @@ describe("Notes app", () => {
       edgeApp({ appId: "home", path: "/app/notes" }),
     );
 
-    await app.refresh(
-      [{ nodeId: CREATE_RESULT_NODE_ID, label: "Saving…", location: null }],
+    await refreshApp(app,
+      [{ nodeId: CREATE_EDIT_NODE_ID, label: "", location: null }],
       { action: true, inputText: "should not save" },
       signedOutCtx(),
     );
@@ -323,7 +333,7 @@ describe("Notes app", () => {
     expect(mine.node.label).toBe("My note");
     expect(mine.warm.some((n) => n.label.includes("Secret"))).toBe(false);
 
-    const forged = await app.refresh(
+    const forged = await refreshApp(app,
       [{ nodeId: noteNodeId("theirs"), label: "Secret other note", location: null }],
       {},
       signedIn(OWNER),
@@ -331,7 +341,7 @@ describe("Notes app", () => {
     expect(forged.node.label).not.toContain("Secret");
     expect(forged.node.id).toBe(noteNodeId("mine"));
 
-    const stolenWrite = await app.refresh(
+    const stolenWrite = await refreshApp(app,
       [{ nodeId: noteNodeId("theirs"), label: "Secret other note", location: null }],
       { action: true, inputText: "pwned" },
       signedIn(OWNER),
@@ -382,9 +392,15 @@ describe("Notes sqlite store", () => {
     const app = startNotesApp({ rootAppId: "home", dbPath: ":memory:" });
     try {
       const ctx = signedIn();
+      const edit = await app.open("/create/edit", {}, ctx);
+      const dest =
+        edit.navigationMap[CREATE_EDIT_NODE_ID]?.enter &&
+        "toNodeId" in edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!
+          ? edit.navigationMap[CREATE_EDIT_NODE_ID]!.enter!.toNodeId!
+          : "";
       const created = await app.refresh(
-        [{ nodeId: CREATE_RESULT_NODE_ID, label: "Saving…", location: null }],
-        { action: true, inputText: "Hello sqlite\nbody" },
+        dest,
+        { action: { triggerId: CREATE_EDIT_NODE_ID }, inputText: "Hello sqlite\nbody" },
         ctx,
       );
       expect(created.node.label).toBe("Hello sqlite");

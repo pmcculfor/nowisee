@@ -2,7 +2,6 @@ import type {
   AppModule,
   RefreshExtras,
   RefreshResult,
-  StackEntry,
 } from "../../core/types.ts";
 import { TUTORIAL_APP_ID, TUTORIAL_APP_LABEL } from "./ids.ts";
 import { openTutorial, refreshTutorial, type TutorialViewDeps } from "./view.ts";
@@ -20,9 +19,8 @@ export function createTutorialApp(deps: TutorialAppDeps): AppModule {
     open(path: string, extras: RefreshExtras = {}): RefreshResult {
       return openTutorial(viewDeps, path, extras);
     },
-    refresh(stack: readonly StackEntry[], extras: RefreshExtras = {}): RefreshResult {
-      const tipId = stack[stack.length - 1]?.nodeId;
-      return refreshTutorial(viewDeps, tipId, extras);
+    refresh(nodeId: string, extras: RefreshExtras = {}): RefreshResult {
+      return refreshTutorial(viewDeps, nodeId, extras);
     },
   };
 }
