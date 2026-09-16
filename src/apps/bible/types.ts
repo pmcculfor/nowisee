@@ -59,12 +59,38 @@ export type CommentarySection = {
   readonly id: number;
   readonly commentaryId: number;
   readonly body: string;
-  readonly xrefs: readonly string[];
 };
 
 export type CommentaryWork = {
   readonly id: number;
   readonly label: string;
+  readonly sortOrder: number;
+};
+
+export type CatalogWork = {
+  readonly id: number;
+  readonly label: string;
+  readonly sortOrder: number;
+};
+
+export type XrefPhrase = {
+  readonly id: number;
+  readonly xrefWorkId: number;
+  readonly verseId: number;
+  readonly sortOrder: number;
+  readonly phrase: string;
+};
+
+export type DictionaryWord = {
+  readonly position: number;
+  readonly strongs: string;
+  readonly english: string;
+  readonly lemma: string;
+  readonly translit: string;
+  readonly body: string;
+};
+
+export type XrefTarget = VerseReading & {
   readonly sortOrder: number;
 };
 
@@ -91,13 +117,42 @@ export type BibleSeedSection = {
   readonly endChapter: number;
   readonly endVerse: number;
   readonly body: string;
-  readonly xrefs?: readonly string[];
+};
+
+export type BibleSeedXrefPhrase = {
+  readonly workId: string;
+  readonly bookId: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly sort: number;
+  readonly phrase: string;
+  readonly refs: string;
+};
+
+export type BibleSeedToken = {
+  readonly bookId: string;
+  readonly chapter: number;
+  readonly verse: number;
+  readonly position: number;
+  readonly strongs: string;
+  readonly english: string;
+};
+
+export type BibleSeedDictionaryEntry = {
+  readonly workId: string;
+  readonly strongs: string;
+  readonly lemma: string;
+  readonly translit: string;
+  readonly body: string;
 };
 
 /** Tiny in-test corpus. Never a full translation. */
 export type BibleSeed = {
   readonly verses: readonly BibleSeedVerse[];
   readonly sections?: readonly BibleSeedSection[];
+  readonly xrefPhrases?: readonly BibleSeedXrefPhrase[];
+  readonly tokens?: readonly BibleSeedToken[];
+  readonly dictionaryEntries?: readonly BibleSeedDictionaryEntry[];
 };
 
 export type SearchQueryRecord = {
@@ -124,6 +179,16 @@ export interface BibleStore {
   listCommentaries(userId?: string | null, sessionId?: string | null): readonly CommentaryWork[];
   getCommentary(id: number): CommentaryWork | undefined;
   findSection(commentaryId: number, verseId: number): CommentarySection | undefined;
+  touchXrefRecency(userId: string | null, sessionId: string | null, xrefWorkId: number): void;
+  listXrefWorks(userId?: string | null, sessionId?: string | null): readonly CatalogWork[];
+  getXrefWork(id: number): CatalogWork | undefined;
+  listXrefPhrases(workId: number, verseId: number): readonly XrefPhrase[];
+  getXrefPhrase(id: number): XrefPhrase | undefined;
+  listXrefRefReadings(phraseId: number, versionId: number): readonly XrefTarget[];
+  touchDictionaryRecency(userId: string | null, sessionId: string | null, dictionaryWorkId: number): void;
+  listDictionaryWorks(userId?: string | null, sessionId?: string | null): readonly CatalogWork[];
+  getDictionaryWork(id: number): CatalogWork | undefined;
+  listDictionaryWords(workId: number, verseId: number): readonly DictionaryWord[];
   createSearchQuery(
     sessionId: string,
     query: string,

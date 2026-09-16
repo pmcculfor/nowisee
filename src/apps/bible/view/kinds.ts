@@ -10,6 +10,9 @@ import {
   commentaryChunkId,
   commentaryWorkId,
   commentaryListId,
+  dictionaryEmptyId,
+  dictionaryWordId,
+  dictionaryWorkId,
   optionId,
   searchEmptyId,
   searchId,
@@ -21,11 +24,31 @@ import {
   verseVersionPickId,
   versionPickId,
   versionsHeadingId,
+  xrefEmptyId,
+  xrefPhraseId,
+  xrefRefId,
+  xrefWorkId,
   type ParsedNode,
 } from "../ids.ts";
 import { addBookLevel, addChapterLevel, addRootLevel } from "./root.ts";
 import { addBookmarksEmpty } from "./bookmarks.ts";
 import { addCommentaryWorks, commentaryChunkLabel } from "./commentary.ts";
+import {
+  addDictionaryEmpty,
+  addDictionaryWords,
+  addDictionaryWorks,
+  dictionaryEmptyLabel,
+  dictionaryWordLabelFor,
+} from "./dictionary.ts";
+import {
+  addXrefEmpty,
+  addXrefPhrases,
+  addXrefRefs,
+  addXrefWorks,
+  xrefEmptyLabel,
+  xrefPhraseLabel,
+  xrefRefLabelFor,
+} from "./xref.ts";
 import {
   activeVersion,
   addNode,
@@ -353,6 +376,101 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
     addLevel: (s, pay, frag, parsed) => {
       addCommentaryWorks(s, pay, frag, asKind(parsed, "commentary-chunk").ref);
+    },
+  },
+  "xref-empty": {
+    version: active,
+    location: seqLocation,
+    payload: (_s, parsed) => {
+      const n = asKind(parsed, "xref-empty");
+      return { id: xrefEmptyId(n.ref), label: xrefEmptyLabel() };
+    },
+    addLevel: (_s, pay, frag, parsed) => {
+      addXrefEmpty(pay, frag, asKind(parsed, "xref-empty").ref);
+    },
+  },
+  "xref-work": {
+    version: active,
+    location: seqLocation,
+    payload: (s, parsed) => {
+      const n = asKind(parsed, "xref-work");
+      return {
+        id: xrefWorkId(n.ref, n.workId),
+        label: s.deps.store.getXrefWork(n.workId)?.label ?? String(n.workId),
+      };
+    },
+    addLevel: (s, pay, frag, parsed, version) => {
+      addXrefWorks(s, pay, frag, asKind(parsed, "xref-work").ref, version);
+    },
+  },
+  "xref-phrase": {
+    version: active,
+    location: seqLocation,
+    payload: (s, parsed) => {
+      const n = asKind(parsed, "xref-phrase");
+      return {
+        id: xrefPhraseId(n.ref, n.workId, n.phraseId),
+        label: xrefPhraseLabel(s, n.phraseId),
+      };
+    },
+    addLevel: (s, pay, frag, parsed, version) => {
+      const n = asKind(parsed, "xref-phrase");
+      addXrefPhrases(s, pay, frag, n.ref, version, n.workId, n.phraseId);
+    },
+  },
+  "xref-ref": {
+    version: active,
+    location: seqLocation,
+    payload: (s, parsed, version) => {
+      const n = asKind(parsed, "xref-ref");
+      return {
+        id: xrefRefId(n.ref, n.workId, n.phraseId, n.sortOrder),
+        label: xrefRefLabelFor(s, n.phraseId, n.sortOrder, version),
+      };
+    },
+    addLevel: (s, pay, frag, parsed, version) => {
+      const n = asKind(parsed, "xref-ref");
+      addXrefRefs(s, pay, frag, n.ref, version, n.workId, n.phraseId, n.sortOrder);
+    },
+  },
+  "dictionary-empty": {
+    version: active,
+    location: seqLocation,
+    payload: (_s, parsed) => {
+      const n = asKind(parsed, "dictionary-empty");
+      return { id: dictionaryEmptyId(n.ref), label: dictionaryEmptyLabel() };
+    },
+    addLevel: (_s, pay, frag, parsed) => {
+      addDictionaryEmpty(pay, frag, asKind(parsed, "dictionary-empty").ref);
+    },
+  },
+  "dictionary-work": {
+    version: active,
+    location: seqLocation,
+    payload: (s, parsed) => {
+      const n = asKind(parsed, "dictionary-work");
+      return {
+        id: dictionaryWorkId(n.ref, n.workId),
+        label: s.deps.store.getDictionaryWork(n.workId)?.label ?? String(n.workId),
+      };
+    },
+    addLevel: (s, pay, frag, parsed) => {
+      addDictionaryWorks(s, pay, frag, asKind(parsed, "dictionary-work").ref);
+    },
+  },
+  "dictionary-word": {
+    version: active,
+    location: seqLocation,
+    payload: (s, parsed) => {
+      const n = asKind(parsed, "dictionary-word");
+      return {
+        id: dictionaryWordId(n.ref, n.workId, n.position),
+        label: dictionaryWordLabelFor(s, n.ref, n.workId, n.position),
+      };
+    },
+    addLevel: (s, pay, frag, parsed) => {
+      const n = asKind(parsed, "dictionary-word");
+      addDictionaryWords(s, pay, frag, n.ref, n.workId, n.position);
     },
   },
 };

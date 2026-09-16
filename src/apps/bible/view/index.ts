@@ -15,10 +15,14 @@ import {
   addNode,
   slotVerseId,
   touchCommentaryRecency,
+  touchDictionaryRecency,
   touchVersionRecency,
+  touchXrefRecency,
   viewSession,
   withTipLabel,
   activeVersion,
+  listedDictionaryWorks,
+  listedXrefWorks,
   type BibleViewDeps,
   type ViewSession,
 } from "./helpers.ts";
@@ -89,6 +93,28 @@ function applyAction(session: ViewSession, triggerId: string): ActionContributio
   }
   if (parsed.kind === "verse-version-pick") {
     touchVersionRecency(session, parsed.targetVersionId);
+    return null;
+  }
+  if (parsed.kind === "option" && parsed.option === "cross-references") {
+    const first = listedXrefWorks(session)[0];
+    if (first) {
+      touchXrefRecency(session, first.id);
+    }
+    return null;
+  }
+  if (parsed.kind === "option" && parsed.option === "dictionaries") {
+    const first = listedDictionaryWorks(session)[0];
+    if (first) {
+      touchDictionaryRecency(session, first.id);
+    }
+    return null;
+  }
+  if (parsed.kind === "xref-work") {
+    touchXrefRecency(session, parsed.workId);
+    return null;
+  }
+  if (parsed.kind === "dictionary-work") {
+    touchDictionaryRecency(session, parsed.workId);
     return null;
   }
   return null;

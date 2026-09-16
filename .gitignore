@@ -10,8 +10,8 @@ public/data/kjv.raw.json
 /data/
 src/apps/bible/data/*.bblx
 src/apps/bible/data/*.cmtx
-# Import sources (VPL txt, HelloAO JSON, TSK table) are committed so production
-# can seed Bible SQLite. Ignore bulky backups only.
+# Import sources (VPL txt, HelloAO JSON, TSK table, Strong's XML, token TSV)
+# are committed so production can seed Bible SQLite. Ignore bulky backups only.
 src/apps/bible/data/raw/bibles/*.zip
 src/apps/bible/data/raw/bibles/*_usfm/
 src/apps/bible/data/raw/sword/

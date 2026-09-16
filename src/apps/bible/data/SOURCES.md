@@ -1,6 +1,6 @@
 # Bible corpus sources
 
-Downloaded 2026-08-24 into [`raw/`](raw/). **Import sources are committed** (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`) so a production clone can seed `data/apps/bible.db`. Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups with `node scripts/download-bible-sources.mjs`.
+Downloaded 2026-08-24 into [`raw/`](raw/). **Import sources are committed** (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`, Strong’s XML, `alignments/kjv_strongs.tsv`) so a production clone can seed `data/apps/bible.db`. Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups with `node scripts/download-bible-sources.mjs`.
 
 Do **not** import e-Sword `.bblx`/`.cmtx` blobs (encrypted). Prefer verse-aligned files below.
 
@@ -51,7 +51,29 @@ Two copies; prefer the plaintext table for import:
 2. **CrossWire SWORD module** (backup, compressed zCom): `raw/sword/tsk.zip`  
    Same work, ThML inside ZIP blocks — needs a SWORD reader. Also `mhc.zip` / `jfb.zip` as backups for Henry/JFB.
 
+TSK `reference_list` abbreviations (`ge`, `joh`, `jude` vs `jud`, …) are a dedicated map in [`catalog.ts`](../catalog.ts). They are **not** URL aliases.
+
+## Dictionaries
+
+### Strong’s Greek (1890)
+
+- **Source:** [morphgnt/strongs-dictionary-xml](https://github.com/morphgnt/strongs-dictionary-xml) v1.9
+- **License:** [CC0](https://creativecommons.org/publicdomain/zero/1.0/)
+- **File:** `raw/dictionaries/strongs-greek.xml`
+
+### Strong’s Hebrew
+
+- **Source:** [openscriptures/HebrewLexicon](https://github.com/openscriptures/HebrewLexicon) `HebrewStrong.xml`
+- **License:** dictionary text is public domain; XML markup is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Credit: Open Scriptures Hebrew Bible Project.
+- **File:** `raw/dictionaries/hebrewstrong.xml`
+
+### King James original-language tokens
+
+eBible KJV USFM tags `\w word|strong="H1234"\w*`. The VPL import has no numbers. A derived table `raw/alignments/kjv_strongs.tsv` (`book`, `chapter`, `verse`, `position`, `strongs`, `english`) is rebuilt from the USFM zip by the download script. Consecutive spans that share a Strong’s id collapse; `\add` / notes are dropped; comma-split `strong=` values become two tokens.
+
 ## What we are not using
 
 - e-Sword `.bblx` / `.cmtx` modules (deleted; encrypted).
 - Extra translations or commentaries not listed above.
+- Vine’s Expository Dictionary (US copyright restored under URAA/GATT 1996; CrossWire withdrew the module).
+- The withdrawn CrossWire “Thayer” module.

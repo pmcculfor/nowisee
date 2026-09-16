@@ -12,11 +12,15 @@ import type {
   BibleStore,
   BibleVersion,
   BookmarkRecord,
+  CatalogWork,
   CommentarySection,
   CommentaryWork,
+  DictionaryWord,
   SearchHit,
   SearchQueryRecord,
   VerseReading,
+  XrefPhrase,
+  XrefTarget,
 } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -217,16 +221,92 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       if (!row) {
         return undefined;
       }
-      const xrefs = db.all<{ refs: string }>(
-        "SELECT refs FROM commentary_xref WHERE section_id = ? ORDER BY sort_order ASC",
-        row.id,
-      );
       return {
         id: row.id,
         commentaryId: row.commentary_id,
         body: row.body,
-        xrefs: xrefs.map((x) => x.refs),
       } satisfies CommentarySection;
+    },
+    touchXrefRecency(userId, sessionId, xrefWorkId) {
+      touchRecency(db, "xref_recency", "xref_work_id", userId, sessionId, xrefWorkId);
+    },
+    listXrefWorks(userId, sessionId) {
+      return listCatalogWorks(db, "xref_work", "xref_recency", "xref_work_id", userId, sessionId);
+    },
+    getXrefWork(id) {
+      return db.get<CatalogWork>(
+        "SELECT id, label, sort_order AS sortOrder FROM xref_work WHERE id = ?",
+        id,
+      );
+    },
+    listXrefPhrases(workId, verseId) {
+      return db.all<XrefPhrase>(
+        `SELECT id, xref_work_id AS xrefWorkId, verse_id AS verseId, sort_order AS sortOrder, phrase
+         FROM xref_phrase
+         WHERE xref_work_id = ? AND verse_id = ?
+         ORDER BY sort_order ASC, id ASC`,
+        workId,
+        verseId,
+      );
+    },
+    getXrefPhrase(id) {
+      return db.get<XrefPhrase>(
+        `SELECT id, xref_work_id AS xrefWorkId, verse_id AS verseId, sort_order AS sortOrder, phrase
+         FROM xref_phrase WHERE id = ?`,
+        id,
+      );
+    },
+    listXrefRefReadings(phraseId, versionId) {
+      return db.all<XrefTarget>(
+        `SELECT r.sort_order AS sortOrder, ${HIT_COLUMNS}, t.text
+         FROM xref_ref r
+         JOIN verse v ON v.id = r.verse_id
+         JOIN chapter c ON c.id = v.chapter_id
+         JOIN book b ON b.id = c.book_id
+         LEFT JOIN verse_text t ON t.verse_id = v.id AND t.version_id = ?
+         WHERE r.phrase_id = ?
+         ORDER BY r.sort_order ASC`,
+        versionId,
+        phraseId,
+      );
+    },
+    touchDictionaryRecency(userId, sessionId, dictionaryWorkId) {
+      touchRecency(
+        db,
+        "dictionary_recency",
+        "dictionary_work_id",
+        userId,
+        sessionId,
+        dictionaryWorkId,
+      );
+    },
+    listDictionaryWorks(userId, sessionId) {
+      return listCatalogWorks(
+        db,
+        "dictionary_work",
+        "dictionary_recency",
+        "dictionary_work_id",
+        userId,
+        sessionId,
+      );
+    },
+    getDictionaryWork(id) {
+      return db.get<CatalogWork>(
+        "SELECT id, label, sort_order AS sortOrder FROM dictionary_work WHERE id = ?",
+        id,
+      );
+    },
+    listDictionaryWords(workId, verseId) {
+      return db.all<DictionaryWord>(
+        `SELECT t.position, t.strongs, t.english, e.lemma, e.translit, e.body
+         FROM verse_token t
+         JOIN dictionary_entry e
+           ON e.strongs = t.strongs AND e.dictionary_work_id = ?
+         WHERE t.verse_id = ?
+         ORDER BY t.position ASC`,
+        workId,
+        verseId,
+      );
     },
     createSearchQuery(sessionId, query, versionId, hits) {
       return db.transaction(() => {
@@ -321,16 +401,49 @@ export function createSqliteBibleStore(db: Db): BibleStore {
   };
 }
 
+function listCatalogWorks(
+  db: Db,
+  table: "xref_work" | "dictionary_work",
+  recency: "xref_recency" | "dictionary_recency",
+  idColumn: "xref_work_id" | "dictionary_work_id",
+  userId?: string | null,
+  sessionId?: string | null,
+): readonly CatalogWork[] {
+  if (userId) {
+    return db.all<CatalogWork>(
+      `SELECT w.id, w.label, w.sort_order AS sortOrder
+       FROM ${table} w
+       LEFT JOIN ${recency} r ON r.user_id = ? AND r.${idColumn} = w.id
+       ORDER BY r.used_at DESC, w.sort_order ASC, w.id ASC`,
+      userId,
+    );
+  }
+  if (sessionId) {
+    return db.all<CatalogWork>(
+      `SELECT w.id, w.label, w.sort_order AS sortOrder
+       FROM ${table} w
+       LEFT JOIN ${recency} r ON r.session_id = ? AND r.${idColumn} = w.id
+       ORDER BY r.used_at DESC, w.sort_order ASC, w.id ASC`,
+      sessionId,
+    );
+  }
+  return db.all<CatalogWork>(
+    `SELECT id, label, sort_order AS sortOrder FROM ${table} ORDER BY sort_order ASC, id ASC`,
+  );
+}
+
 function purgeExpiredSessionRecency(db: Db): void {
   const cutoff = Date.now() - RECENCY_TTL_MS;
   db.run("DELETE FROM version_recency WHERE session_id IS NOT NULL AND used_at < ?", cutoff);
   db.run("DELETE FROM commentary_recency WHERE session_id IS NOT NULL AND used_at < ?", cutoff);
+  db.run("DELETE FROM xref_recency WHERE session_id IS NOT NULL AND used_at < ?", cutoff);
+  db.run("DELETE FROM dictionary_recency WHERE session_id IS NOT NULL AND used_at < ?", cutoff);
 }
 
 function touchRecency(
   db: Db,
-  table: "version_recency" | "commentary_recency",
-  idColumn: "version_id" | "commentary_id",
+  table: "version_recency" | "commentary_recency" | "xref_recency" | "dictionary_recency",
+  idColumn: "version_id" | "commentary_id" | "xref_work_id" | "dictionary_work_id",
   userId: string | null,
   sessionId: string | null,
   id: number,

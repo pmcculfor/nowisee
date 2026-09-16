@@ -1,4 +1,5 @@
 import {
+  edgeAction,
   edgeNode,
   edgePop,
   edgePopTransient,
@@ -14,6 +15,7 @@ import {
   VERSE_OPTIONS,
   contextSeq,
   optionLabel,
+  type VerseOptionType,
   type VerseSequence,
 } from "../catalog.ts";
 import {
@@ -27,12 +29,18 @@ import {
   chapterId,
   commentaryListId,
   commentaryWorkId,
+  dictionaryEmptyId,
+  dictionaryWordId,
+  dictionaryWorkId,
   optionId,
   searchLimitedId,
   signInId,
   verseNodeId,
   verseVersionPickId,
   versionPickId,
+  xrefEmptyId,
+  xrefPhraseId,
+  xrefWorkId,
 } from "../ids.ts";
 import { searchLimitedLabel } from "./search.ts";
 import type { BibleRef, CanonRef, VerseReading } from "../types.ts";
@@ -41,7 +49,9 @@ import {
   activeVersion,
   bookLabel,
   listedCommentaries,
+  listedDictionaryWorks,
   listedVersions,
+  listedXrefWorks,
   slotVerseId,
   withDisplayVersion,
   type ViewSession,
@@ -272,7 +282,7 @@ export function optionEnter(
   session: ViewSession,
   seq: VerseSequence,
   ref: CanonRef,
-  option: "copy" | "bookmark" | "versions" | "commentary",
+  option: VerseOptionType,
 ) {
   if (option === "copy") {
     const id = optionId(ref, "copy", seq);
@@ -294,11 +304,53 @@ export function optionEnter(
     }
     return edgePushTransient(verseVersionPickId(ref, firstVersion.id, seq), VERSE_MENU_FRAME);
   }
+  if (option === "cross-references") {
+    return xrefOptionEnter(session, ref);
+  }
+  if (option === "dictionaries") {
+    return dictionaryOptionEnter(session, ref);
+  }
   const firstWork = listedCommentaries(session)[0];
   if (!firstWork) {
     return edgeNode(commentaryListId(ref), "push");
   }
   return edgeNode(commentaryWorkId(ref, firstWork.id), "push");
+}
+
+function xrefOptionEnter(session: ViewSession, ref: CanonRef) {
+  const works = listedXrefWorks(session);
+  const first = works[0];
+  if (!first) {
+    return edgeNode(xrefEmptyId(ref), "push");
+  }
+  const verseId = slotVerseId(session.deps.store, ref);
+  const phrases =
+    verseId === null ? [] : session.deps.store.listXrefPhrases(first.id, verseId);
+  if (phrases.length === 0) {
+    return edgeNode(xrefEmptyId(ref), "push");
+  }
+  if (works.length === 1) {
+    return edgeAction(xrefPhraseId(ref, first.id, phrases[0]!.id));
+  }
+  return edgeNode(xrefWorkId(ref, first.id), "push");
+}
+
+function dictionaryOptionEnter(session: ViewSession, ref: CanonRef) {
+  const works = listedDictionaryWorks(session);
+  const first = works[0];
+  if (!first) {
+    return edgeNode(dictionaryEmptyId(ref), "push");
+  }
+  const verseId = slotVerseId(session.deps.store, ref);
+  const words =
+    verseId === null ? [] : session.deps.store.listDictionaryWords(first.id, verseId);
+  if (words.length === 0) {
+    return edgeNode(dictionaryEmptyId(ref), "push");
+  }
+  if (works.length === 1) {
+    return edgeAction(dictionaryWordId(ref, first.id, words[0]!.position));
+  }
+  return edgeNode(dictionaryWorkId(ref, first.id), "push");
 }
 
 function justCopied(session: ViewSession, copyId: string): boolean {
@@ -308,7 +360,7 @@ function justCopied(session: ViewSession, copyId: string): boolean {
 export function optionNodeLabel(
   session: ViewSession,
   ref: CanonRef,
-  option: "copy" | "bookmark" | "versions" | "commentary",
+  option: VerseOptionType,
 ): string {
   if (option === "bookmark" && session.userId) {
     const verseId = slotVerseId(session.deps.store, ref);

@@ -8,16 +8,30 @@ import { fileURLToPath } from "node:url";
 import {
   CANON_BOOKS,
   COMMENTARY_RECORDS,
+  DICTIONARY_RECORDS,
   VERSION_RECORDS,
+  XREF_RECORDS,
   canonBookBySort,
   catalogCommentaryId,
+  catalogDictionaryWorkId,
   catalogVersionId,
+  catalogXrefWorkId,
   getCanonBook,
   resolveBookToken,
   type CommentaryRecord,
   type VersionRecord,
 } from "./catalog.ts";
-import type { BibleSeed, BibleSeedSection, BibleSeedVerse } from "./types.ts";
+import { parseTskCitationRanges } from "./tskCitations.ts";
+import { parseHebrewStrongXml, parseStrongsGreekXml } from "./strongsXml.ts";
+import { parseStrongsTsv } from "./usfmTokens.ts";
+import type {
+  BibleSeed,
+  BibleSeedDictionaryEntry,
+  BibleSeedSection,
+  BibleSeedToken,
+  BibleSeedVerse,
+  BibleSeedXrefPhrase,
+} from "./types.ts";
 import type { Db } from "../../../server/sqlite.ts";
 
 const DEFAULT_RAW_DIR = join(dirname(fileURLToPath(import.meta.url)), "data", "raw");
@@ -54,6 +68,13 @@ function upsertDescriptors(db: Db): void {
     "INSERT INTO commentary (id, label, sort_order) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order",
   );
 
+  const insertXrefWork = db.prepare(
+    "INSERT INTO xref_work (id, label, sort_order) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order",
+  );
+  const insertDictionaryWork = db.prepare(
+    "INSERT INTO dictionary_work (id, label, sort_order) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, sort_order = excluded.sort_order",
+  );
+
   db.transaction(() => {
     for (const book of CANON_BOOKS) {
       insertBook.run(book.sort, book.label, book.testament, book.sort);
@@ -70,6 +91,12 @@ function upsertDescriptors(db: Db): void {
     for (const commentary of COMMENTARY_RECORDS) {
       insertCommentary.run(catalogCommentaryId(commentary), commentary.label, commentary.sortOrder);
     }
+    for (const work of XREF_RECORDS) {
+      insertXrefWork.run(catalogXrefWorkId(work), work.label, work.sortOrder);
+    }
+    for (const work of DICTIONARY_RECORDS) {
+      insertDictionaryWork.run(catalogDictionaryWorkId(work), work.label, work.sortOrder);
+    }
   });
 }
 
@@ -81,6 +108,15 @@ function seedFixture(db: Db, seed: BibleSeed): void {
     insertVerses(db, seed.verses);
     for (const section of seed.sections ?? []) {
       insertSeedSection(db, section);
+    }
+    for (const entry of seed.dictionaryEntries ?? []) {
+      insertSeedDictionaryEntry(db, entry);
+    }
+    for (const phrase of seed.xrefPhrases ?? []) {
+      insertSeedXrefPhrase(db, phrase);
+    }
+    for (const token of seed.tokens ?? []) {
+      insertSeedToken(db, token);
     }
   });
 }
@@ -110,6 +146,13 @@ function importRaw(db: Db, rawDir: string): void {
       continue;
     }
     db.transaction(() => importCommentary(db, commentary, source));
+  }
+  importXrefWorks(db, commentariesDir);
+  const dictionariesDir = join(rawDir);
+  importDictionaryWorks(db, dictionariesDir);
+  const tokenPath = join(rawDir, "alignments", "kjv_strongs.tsv");
+  if (existsSync(tokenPath) && !hasTokens(db)) {
+    db.transaction(() => importTokens(db, readFileSync(tokenPath, "utf8")));
   }
 }
 
@@ -239,17 +282,54 @@ function insertSeedSection(db: Db, section: BibleSeedSection): void {
     start: { sort: canon.sort, chapter: section.startChapter, verse: section.startVerse },
     end: { sort: canon.sort, chapter: section.endChapter, verse: section.endVerse },
     body: section.body,
-    xrefs: section.xrefs ?? [],
   });
+}
+
+function insertSeedXrefPhrase(db: Db, row: BibleSeedXrefPhrase): void {
+  const record = XREF_RECORDS.find((item) => item.id === row.workId);
+  const canon = getCanonBook(row.bookId);
+  if (!record || !canon) {
+    return;
+  }
+  const slots = new SlotWriter(db);
+  const verseId = slots.ensure(canon.sort, row.chapter, row.verse);
+  insertXrefPhrase(db, catalogXrefWorkId(record), verseId, row.sort, row.phrase, row.refs);
+}
+
+function insertSeedDictionaryEntry(db: Db, row: BibleSeedDictionaryEntry): void {
+  const record = DICTIONARY_RECORDS.find((item) => item.id === row.workId);
+  if (!record) {
+    return;
+  }
+  db.run(
+    "INSERT OR IGNORE INTO dictionary_entry (dictionary_work_id, strongs, lemma, translit, body) VALUES (?, ?, ?, ?, ?)",
+    catalogDictionaryWorkId(record),
+    row.strongs,
+    row.lemma,
+    row.translit,
+    row.body,
+  );
+}
+
+function insertSeedToken(db: Db, row: BibleSeedToken): void {
+  const canon = getCanonBook(row.bookId);
+  if (!canon) {
+    return;
+  }
+  const slots = new SlotWriter(db);
+  const verseId = slots.ensure(canon.sort, row.chapter, row.verse);
+  db.run(
+    "INSERT OR IGNORE INTO verse_token (verse_id, position, strongs, english) VALUES (?, ?, ?, ?)",
+    verseId,
+    row.position,
+    row.strongs,
+    row.english,
+  );
 }
 
 function importCommentary(db: Db, record: CommentaryRecord, source: string): void {
   if (record.format === "helloao-chapter-json") {
     importHelloAo(db, catalogCommentaryId(record), source);
-    return;
-  }
-  if (record.format === "tsk-xref-table") {
-    importTsk(db, catalogCommentaryId(record), readFileSync(source, "utf8"));
   }
 }
 
@@ -330,7 +410,6 @@ function importHelloAo(db: Db, commentaryId: number, dir: string): void {
           start: { sort: book.sort, chapter: chapter.chapter, verse: entry.number },
           end: { sort: book.sort, chapter: chapter.chapter, verse: end },
           body: entry.text,
-          xrefs: [],
         });
       }
     }
@@ -375,37 +454,123 @@ export function parseTsk(text: string): ParsedTskRow[] {
   return rows;
 }
 
-function importTsk(db: Db, commentaryId: number, text: string): void {
-  const slots = new SlotWriter(db);
-  const grouped = new Map<string, ParsedTskRow[]>();
-  for (const row of parseTsk(text)) {
-    const key = `${row.bookId}:${row.chapter}:${row.verse}`;
-    const list = grouped.get(key);
-    if (list) {
-      list.push(row);
-    } else {
-      grouped.set(key, [row]);
+function importXrefWorks(db: Db, commentariesDir: string): void {
+  for (const record of XREF_RECORDS) {
+    const workId = catalogXrefWorkId(record);
+    if (hasXrefPhrases(db, workId)) {
+      continue;
     }
+    const source = join(commentariesDir, record.sourcePath);
+    if (!existsSync(source)) {
+      continue;
+    }
+    db.transaction(() => importTskXref(db, workId, readFileSync(source, "utf8")));
   }
-  for (const group of grouped.values()) {
-    group.sort((a, b) => a.sort - b.sort);
-    const first = group[0]!;
-    const canon = getCanonBook(first.bookId);
+}
+
+function importTskXref(db: Db, workId: number, text: string): void {
+  const slots = new SlotWriter(db);
+  for (const row of parseTsk(text)) {
+    const canon = getCanonBook(row.bookId);
     if (!canon) {
       continue;
     }
-    const body = group
-      .map((row) => (row.refs ? `${row.phrase}: ${row.refs}` : row.phrase))
-      .filter(Boolean)
-      .join("\n");
-    slots.ensure(canon.sort, first.chapter, first.verse);
-    insertSection(db, {
-      commentaryId,
-      start: { sort: canon.sort, chapter: first.chapter, verse: first.verse },
-      end: { sort: canon.sort, chapter: first.chapter, verse: first.verse },
-      body,
-      xrefs: group.map((row) => row.refs).filter(Boolean),
+    const verseId = slots.ensure(canon.sort, row.chapter, row.verse);
+    insertXrefPhrase(db, workId, verseId, row.sort, row.phrase, row.refs);
+  }
+}
+
+function insertXrefPhrase(
+  db: Db,
+  workId: number,
+  verseId: number,
+  sort: number,
+  phrase: string,
+  refs: string,
+): void {
+  const result = db.run(
+    "INSERT INTO xref_phrase (xref_work_id, verse_id, sort_order, phrase) VALUES (?, ?, ?, ?)",
+    workId,
+    verseId,
+    sort,
+    phrase,
+  );
+  const phraseId = Number(result.lastInsertRowid);
+  const insertRef = db.prepare(
+    "INSERT INTO xref_ref (phrase_id, sort_order, verse_id) VALUES (?, ?, ?)",
+  );
+  let order = 0;
+  for (const range of parseTskCitationRanges(refs)) {
+    const canon = getCanonBook(range.bookId);
+    if (!canon) {
+      continue;
+    }
+    const targets = db.all<{ id: number }>(
+      `SELECT v.id
+       FROM verse v
+       JOIN chapter c ON c.id = v.chapter_id
+       JOIN book b ON b.id = c.book_id
+       WHERE b.sort_order = ?
+         AND (c.number, v.number) >= (?, ?)
+         AND (c.number, v.number) <= (?, ?)
+       ORDER BY c.number ASC, v.number ASC`,
+      canon.sort,
+      range.startChapter,
+      range.startVerse,
+      range.endChapter,
+      range.endVerse,
+    );
+    for (const target of targets) {
+      insertRef.run(phraseId, order, target.id);
+      order += 1;
+    }
+  }
+}
+
+function importDictionaryWorks(db: Db, rawDir: string): void {
+  for (const record of DICTIONARY_RECORDS) {
+    const workId = catalogDictionaryWorkId(record);
+    if (hasDictionaryEntries(db, workId)) {
+      continue;
+    }
+    const greekPath = join(rawDir, record.greekPath);
+    const hebrewPath = join(rawDir, record.hebrewPath);
+    const entries = [
+      ...(existsSync(greekPath) ? parseStrongsGreekXml(readFileSync(greekPath, "utf8")) : []),
+      ...(existsSync(hebrewPath) ? parseHebrewStrongXml(readFileSync(hebrewPath, "utf8")) : []),
+    ];
+    if (entries.length === 0) {
+      continue;
+    }
+    const insert = db.prepare(
+      "INSERT OR IGNORE INTO dictionary_entry (dictionary_work_id, strongs, lemma, translit, body) VALUES (?, ?, ?, ?, ?)",
+    );
+    db.transaction(() => {
+      for (const entry of entries) {
+        insert.run(workId, entry.strongs, entry.lemma, entry.translit, entry.body);
+      }
     });
+  }
+}
+
+function importTokens(db: Db, text: string): void {
+  const slots = new SlotWriter(db);
+  const known = new Set(
+    db.all<{ strongs: string }>("SELECT strongs FROM dictionary_entry").map((row) => row.strongs),
+  );
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO verse_token (verse_id, position, strongs, english) VALUES (?, ?, ?, ?)",
+  );
+  for (const token of parseStrongsTsv(text)) {
+    if (known.size > 0 && !known.has(token.strongs)) {
+      continue;
+    }
+    const canon = getCanonBook(token.bookId);
+    if (!canon) {
+      continue;
+    }
+    const verseId = slots.ensure(canon.sort, token.chapter, token.verse);
+    insert.run(verseId, token.position, token.strongs, token.english);
   }
 }
 
@@ -422,7 +587,6 @@ function insertSection(
     start: CanonPoint;
     end: CanonPoint;
     body: string;
-    xrefs: readonly string[];
   },
 ): void {
   const result = db.run(
@@ -450,12 +614,6 @@ function insertSection(
   );
   for (const row of covered) {
     insertCover.run(sectionId, row.id);
-  }
-  const insertXref = db.prepare(
-    "INSERT INTO commentary_xref (section_id, sort_order, refs) VALUES (?, ?, ?)",
-  );
-  for (const [index, refs] of section.xrefs.entries()) {
-    insertXref.run(sectionId, index, refs);
   }
 }
 
@@ -500,4 +658,18 @@ function hasSections(db: Db, commentaryId: number): boolean {
   return Boolean(
     db.get("SELECT 1 FROM commentary_section WHERE commentary_id = ? LIMIT 1", commentaryId),
   );
+}
+
+function hasXrefPhrases(db: Db, workId: number): boolean {
+  return Boolean(db.get("SELECT 1 FROM xref_phrase WHERE xref_work_id = ? LIMIT 1", workId));
+}
+
+function hasDictionaryEntries(db: Db, workId: number): boolean {
+  return Boolean(
+    db.get("SELECT 1 FROM dictionary_entry WHERE dictionary_work_id = ? LIMIT 1", workId),
+  );
+}
+
+function hasTokens(db: Db): boolean {
+  return Boolean(db.get("SELECT 1 FROM verse_token LIMIT 1"));
 }

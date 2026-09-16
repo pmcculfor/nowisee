@@ -18,7 +18,7 @@ Typical sites force tabbing through chrome or exploring by touch, so users canno
 1. **Home** lists the user’s home apps (and Manage Apps) and links to each by URL.
 2. **Recents** is the session app switcher. It is not on Home. Desktop **r** (and the input **Recent apps** button) opens it.
 3. **Tutorial** is a short walkthrough of intents, lists, and typing. It is the first catalog item.
-4. **Bible** offers public-domain translations and commentaries: testament → book → chapter → verse → options (copy, bookmark, versions, commentary). Search and bookmarks are ordinary nodes.
+4. **Bible** offers public-domain translations, commentaries, cross-references, and Strong’s: testament → book → chapter → verse → options (versions, commentary, cross-references, dictionaries, bookmark, copy). Search and bookmarks are ordinary nodes.
 5. **Notes** is per-user list/create/edit. Signed out offers a way to sign in. Titles are the first line; newest `updatedAt` first.
 6. **Lists** is per-user named lists of items. Signed out offers a way to sign in. Enter a list to check items off; completed items and delete sit above the active rows.
 7. **Weather** is per-user ZIP, current conditions, and daily forecast from the National Weather Service. Signed out offers a way to sign in. Weather is looked up live and not stored.
