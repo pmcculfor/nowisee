@@ -506,7 +506,7 @@ function insertXrefPhrase(
   );
   const phraseId = Number(result.lastInsertRowid);
   const insertRef = db.prepare(
-    "INSERT INTO xref_ref (phrase_id, sort_order, verse_id) VALUES (?, ?, ?)",
+    "INSERT OR IGNORE INTO xref_ref (phrase_id, sort_order, verse_id) VALUES (?, ?, ?)",
   );
   let order = 0;
   for (const range of parseTskCitationRanges(refs)) {

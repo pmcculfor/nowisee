@@ -13,6 +13,7 @@ import { isActionExtras } from "../../../core/types.ts";
 import {
   SEARCH_POLICY,
   VERSE_OPTIONS,
+  XREF_POLICY,
   contextSeq,
   optionLabel,
   type VerseOptionType,
@@ -30,7 +31,6 @@ import {
   commentaryListId,
   commentaryWorkId,
   dictionaryEmptyId,
-  dictionaryWordId,
   dictionaryWorkId,
   optionId,
   searchLimitedId,
@@ -70,10 +70,9 @@ export function addVerseLevel(
   const siblings = siblingReadings(session, seq, versionId);
   const ids = sequenceIds(seq, siblings);
   const focusIndex = siblings.findIndex((r) => sameCanon(canonReading(r), ref));
+  const radius = listRadius(seq);
   const around =
-    seq.type === "search" && focusIndex >= 0
-      ? { index: focusIndex, radius: SEARCH_POLICY.siblingRadius }
-      : undefined;
+    radius !== undefined && focusIndex >= 0 ? { index: focusIndex, radius } : undefined;
   addSequenceWindow(session, payloads, fragments, seq, versionId, siblings, ids, around);
   fragments.push(siblingListEdges(ids, { wrap: seq.type === "chapter" || seq.type === "context", around }));
 
@@ -85,7 +84,7 @@ export function addVerseLevel(
       back: seq.type === "chapter" ? edgePop() : edgePop(),
     },
   });
-  if (seq.type === "search") {
+  if (pushesContext(seq)) {
     addVerseLevel(session, payloads, fragments, contextSeq(ref.bookId, ref.chapter), ref);
   } else {
     addOptionPayloads(session, payloads, seq, ref);
@@ -99,13 +98,27 @@ export function addVerseLevel(
 }
 
 function verseEnter(seq: VerseSequence, ref: CanonRef) {
-  if (seq.type === "search") {
+  if (pushesContext(seq)) {
     return edgeNode(verseNodeId(contextSeq(ref.bookId, ref.chapter), ref), "push");
   }
   const firstOption = VERSE_OPTIONS[0];
   return firstOption
     ? edgePushTransient(optionId(ref, firstOption.type, seq), VERSE_MENU_FRAME)
     : undefined;
+}
+
+function pushesContext(seq: VerseSequence): boolean {
+  return seq.type === "search" || seq.type === "bookmarks" || seq.type === "xref";
+}
+
+function listRadius(seq: VerseSequence): number | undefined {
+  if (seq.type === "search") {
+    return SEARCH_POLICY.siblingRadius;
+  }
+  if (seq.type === "xref") {
+    return XREF_POLICY.siblingRadius;
+  }
+  return undefined;
 }
 
 function sameCanon(a: CanonRef, b: CanonRef): boolean {
@@ -195,6 +208,9 @@ function siblingReadings(session: ViewSession, seq: VerseSequence, versionId: nu
   }
   if (seq.type === "search" && session.sessionId) {
     return [...store.listSearchHitReadings(seq.queryId, session.sessionId)];
+  }
+  if (seq.type === "xref") {
+    return [...store.listXrefRefReadings(seq.phraseId, versionId)];
   }
   return [];
 }
@@ -336,19 +352,9 @@ function xrefOptionEnter(session: ViewSession, ref: CanonRef) {
 }
 
 function dictionaryOptionEnter(session: ViewSession, ref: CanonRef) {
-  const works = listedDictionaryWorks(session);
-  const first = works[0];
+  const first = listedDictionaryWorks(session)[0];
   if (!first) {
     return edgeNode(dictionaryEmptyId(ref), "push");
-  }
-  const verseId = slotVerseId(session.deps.store, ref);
-  const words =
-    verseId === null ? [] : session.deps.store.listDictionaryWords(first.id, verseId);
-  if (words.length === 0) {
-    return edgeNode(dictionaryEmptyId(ref), "push");
-  }
-  if (works.length === 1) {
-    return edgeAction(dictionaryWordId(ref, first.id, words[0]!.position));
   }
   return edgeNode(dictionaryWorkId(ref, first.id), "push");
 }

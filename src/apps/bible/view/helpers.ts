@@ -75,6 +75,14 @@ export function verseLocation(appId: string, store: BibleStore, seq: VerseSequen
   if (seq.type === "search") {
     return { appId, path: "/search" };
   }
+  if (seq.type === "xref") {
+    const phrase = store.getXrefPhrase(seq.phraseId);
+    const source = phrase ? store.getCanonRef(phrase.verseId) : undefined;
+    if (!source) {
+      throw new Error(`Bible view: missing xref phrase ${seq.phraseId}`);
+    }
+    return { appId, path: canonPath(store, source) };
+  }
   return { appId, path: canonPath(store, ref) };
 }
 

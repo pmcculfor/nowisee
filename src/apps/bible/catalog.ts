@@ -85,7 +85,8 @@ export type VerseSequence =
   | { readonly type: "chapter"; readonly bookId: number; readonly chapter: number }
   | { readonly type: "context"; readonly bookId: number; readonly chapter: number }
   | { readonly type: "bookmarks" }
-  | { readonly type: "search"; readonly queryId: number };
+  | { readonly type: "search"; readonly queryId: number }
+  | { readonly type: "xref"; readonly phraseId: number };
 
 export function chapterSeq(bookId: number, chapter: number): VerseSequence {
   return { type: "chapter", bookId, chapter };
@@ -93,6 +94,10 @@ export function chapterSeq(bookId: number, chapter: number): VerseSequence {
 
 export function contextSeq(bookId: number, chapter: number): VerseSequence {
   return { type: "context", bookId, chapter };
+}
+
+export function xrefSeq(phraseId: number): VerseSequence {
+  return { type: "xref", phraseId };
 }
 
 export const SEARCH_POLICY: SearchPolicy = { maxHits: 1000, siblingRadius: 24 };

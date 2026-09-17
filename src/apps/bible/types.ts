@@ -90,10 +90,6 @@ export type DictionaryWord = {
   readonly body: string;
 };
 
-export type XrefTarget = VerseReading & {
-  readonly sortOrder: number;
-};
-
 export type SearchHit = {
   readonly verseId: number;
   readonly bookId: number;
@@ -171,6 +167,7 @@ export interface BibleStore {
   getChapter(bookId: number, number: number): BibleChapter | undefined;
   listChapters(bookId: number): readonly BibleChapter[];
   getVerseSlot(bookId: number, chapter: number, verse: number): BibleVerseSlot | undefined;
+  getCanonRef(verseId: number): CanonRef | undefined;
   getVerseText(versionId: number, verseId: number): string | null;
   listVerseReadings(versionId: number, chapterId: number): readonly VerseReading[];
   isBookmarked(userId: string, verseId: number): boolean;
@@ -184,7 +181,7 @@ export interface BibleStore {
   getXrefWork(id: number): CatalogWork | undefined;
   listXrefPhrases(workId: number, verseId: number): readonly XrefPhrase[];
   getXrefPhrase(id: number): XrefPhrase | undefined;
-  listXrefRefReadings(phraseId: number, versionId: number): readonly XrefTarget[];
+  listXrefRefReadings(phraseId: number, versionId: number): readonly VerseReading[];
   touchDictionaryRecency(userId: string | null, sessionId: string | null, dictionaryWorkId: number): void;
   listDictionaryWorks(userId?: string | null, sessionId?: string | null): readonly CatalogWork[];
   getDictionaryWork(id: number): CatalogWork | undefined;

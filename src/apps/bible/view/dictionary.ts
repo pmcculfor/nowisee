@@ -1,5 +1,6 @@
 import {
   edgeAction,
+  edgeNode,
   edgePop,
   siblingListEdges,
   type MapFragment,
@@ -49,9 +50,9 @@ export function addDictionaryWorks(
     const first = words[0];
     fragments.push({
       [id]: {
-        ...(first
-          ? { enter: edgeAction(dictionaryWordId(ref, work.id, first.position)) }
-          : {}),
+        enter: first
+          ? edgeAction(dictionaryWordId(ref, work.id, first.position))
+          : edgeNode(dictionaryEmptyId(ref), "push"),
         back: edgePop(),
       },
     });
@@ -83,7 +84,7 @@ export function addDictionaryWords(
       ? dictionaryWordId(ref, workId, focusPosition)
       : ids[0]!;
   const around = siblingWindow(ids, focusId, DICTIONARY_POLICY.siblingRadius);
-  fragments.push(siblingListEdges(ids, { wrap: true, around }));
+  fragments.push(siblingListEdges(ids, { wrap: false, around }));
   addWindowedNodes(payloads, ids, around, (_id, index) => ({
     id: ids[index]!,
     label: dictionaryWordLabel(words[index]!),
@@ -102,8 +103,7 @@ export function dictionaryEmptyLabel(): string {
 }
 
 export function dictionaryWordLabel(word: DictionaryWord): string {
-  const original = [word.lemma, word.translit].filter(Boolean).join(", ");
-  return [word.english, original, word.strongs, word.body].filter(Boolean).join(". ");
+  return [word.english, word.translit, word.strongs, word.body].filter(Boolean).join(". ");
 }
 
 export function dictionaryWordLabelFor(

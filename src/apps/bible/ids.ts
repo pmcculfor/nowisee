@@ -1,4 +1,4 @@
-import { chapterSeq, contextSeq, type VerseOptionType, type VerseSequence } from "./catalog.ts";
+import { chapterSeq, contextSeq, xrefSeq, type VerseOptionType, type VerseSequence } from "./catalog.ts";
 import type { CanonRef } from "./types.ts";
 
 export function testamentId(testament: string): string {
@@ -63,6 +63,8 @@ export function verseNodeId(seq: VerseSequence, ref: CanonRef): string {
       return `bible:bm:${ref.bookId}:${ref.chapter}:${ref.verse}`;
     case "search":
       return `bible:q:${seq.queryId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
+    case "xref":
+      return `bible:xr:${seq.phraseId}:${ref.bookId}:${ref.chapter}:${ref.verse}`;
   }
 }
 
@@ -106,15 +108,6 @@ export function xrefPhraseId(ref: CanonRef, workId: number, phraseId: number): s
   return `bible:xp:${ref.bookId}:${ref.chapter}:${ref.verse}:${workId}:${phraseId}`;
 }
 
-export function xrefRefId(
-  ref: CanonRef,
-  workId: number,
-  phraseId: number,
-  sortOrder: number,
-): string {
-  return `bible:xr:${ref.bookId}:${ref.chapter}:${ref.verse}:${workId}:${phraseId}:${sortOrder}`;
-}
-
 export function dictionaryEmptyId(ref: CanonRef): string {
   return `bible:de:${ref.bookId}:${ref.chapter}:${ref.verse}`;
 }
@@ -155,7 +148,6 @@ export type ParsedNode =
   | { kind: "xref-empty"; ref: CanonRef }
   | { kind: "xref-work"; ref: CanonRef; workId: number }
   | { kind: "xref-phrase"; ref: CanonRef; workId: number; phraseId: number }
-  | { kind: "xref-ref"; ref: CanonRef; workId: number; phraseId: number; sortOrder: number }
   | { kind: "dictionary-empty"; ref: CanonRef }
   | { kind: "dictionary-work"; ref: CanonRef; workId: number }
   | { kind: "dictionary-word"; ref: CanonRef; workId: number; position: number };
@@ -246,6 +238,15 @@ export function parseNodeId(id: string): ParsedNode | null {
     };
   }
 
+  const xr = /^bible:xr:(\d+):(\d+):(\d+):(\d+)$/.exec(id);
+  if (xr) {
+    return {
+      kind: "verse",
+      seq: xrefSeq(Number(xr[1])),
+      ref: canonRef(xr[2]!, xr[3]!, xr[4]!),
+    };
+  }
+
   const o = new RegExp(
     `^bible:o:${SEQ}:${CANON}:(copy|bookmark|versions|commentary|cross-references|dictionaries)$`,
   ).exec(id);
@@ -315,17 +316,6 @@ export function parseNodeId(id: string): ParsedNode | null {
       ref: canonRef(xp[1]!, xp[2]!, xp[3]!),
       workId: Number(xp[4]),
       phraseId: Number(xp[5]),
-    };
-  }
-
-  const xr = new RegExp(`^bible:xr:${CANON}:(\\d+):(\\d+):(\\d+)$`).exec(id);
-  if (xr) {
-    return {
-      kind: "xref-ref",
-      ref: canonRef(xr[1]!, xr[2]!, xr[3]!),
-      workId: Number(xr[4]),
-      phraseId: Number(xr[5]),
-      sortOrder: Number(xr[6]),
     };
   }
 

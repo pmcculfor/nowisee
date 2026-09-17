@@ -12,6 +12,7 @@ import type {
   BibleStore,
   BibleVersion,
   BookmarkRecord,
+  CanonRef,
   CatalogWork,
   CommentarySection,
   CommentaryWork,
@@ -20,7 +21,6 @@ import type {
   SearchQueryRecord,
   VerseReading,
   XrefPhrase,
-  XrefTarget,
 } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -115,6 +115,16 @@ export function createSqliteBibleStore(db: Db): BibleStore {
         bookId,
         chapter,
         verse,
+      );
+    },
+    getCanonRef(verseId) {
+      return db.get<CanonRef>(
+        `SELECT b.id AS bookId, c.number AS chapter, v.number AS verse
+         FROM verse v
+         JOIN chapter c ON c.id = v.chapter_id
+         JOIN book b ON b.id = c.book_id
+         WHERE v.id = ?`,
+        verseId,
       );
     },
     getVerseText(versionId, verseId) {
@@ -257,8 +267,8 @@ export function createSqliteBibleStore(db: Db): BibleStore {
       );
     },
     listXrefRefReadings(phraseId, versionId) {
-      return db.all<XrefTarget>(
-        `SELECT r.sort_order AS sortOrder, ${HIT_COLUMNS}, t.text
+      return db.all<VerseReading>(
+        `SELECT ${HIT_COLUMNS}, t.text
          FROM xref_ref r
          JOIN verse v ON v.id = r.verse_id
          JOIN chapter c ON c.id = v.chapter_id

@@ -20,6 +20,7 @@ import {
   catalogVersionId,
   catalogXrefWorkId,
   contextSeq,
+  xrefSeq,
   getCanonBook,
 } from "../src/apps/bible/catalog.ts";
 import {
@@ -30,6 +31,7 @@ import {
   commentaryChunkId,
   commentaryWorkId,
   dictionaryWordId,
+  dictionaryWorkId,
   optionId,
   searchId,
   searchInputId,
@@ -42,7 +44,6 @@ import {
   versionPickId,
   versionsHeadingId,
   xrefPhraseId,
-  xrefRefId,
 } from "../src/apps/bible/ids.ts";
 import { expandTskHeadings, parseTskCitationRanges } from "../src/apps/bible/tskCitations.ts";
 import { parseHebrewStrongXml, parseStrongsGreekXml } from "../src/apps/bible/strongsXml.ts";
@@ -297,6 +298,31 @@ describe("Bible app", () => {
       "Matthew 5:3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
     );
     expect(first.navigationMap[first.node.id]?.next).toBeUndefined();
+    const contextId = verseNodeId(contextSeq(MAT, 5), verseRef);
+    expect(first.navigationMap[first.node.id]?.enter).toEqual({
+      kind: "node",
+      toNodeId: contextId,
+      stackBehavior: "push",
+    });
+    const context = await refresh(
+      instance,
+      [
+        { nodeId: first.node.id, label: first.node.label, location: null },
+        { nodeId: contextId, label: "x", location: null },
+      ],
+      {},
+      ctx,
+    );
+    expect(context.node.label).toBe(
+      "3 (context). Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
+    );
+    expect(context.navigationMap[contextId]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
+    expect(context.navigationMap[contextId]?.enter).toEqual({
+      kind: "node",
+      toNodeId: optionId(verseRef, "versions", contextSeq(MAT, 5)),
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
+    });
 
     const removed = await refresh(
       instance,
@@ -788,7 +814,7 @@ describe("Bible app", () => {
     });
   });
 
-  it("bookmark verse version switch stays on the bookmark verse", async () => {
+  it("bookmark list enter is a context verse; version switch stays on that context", async () => {
     const instance = bible();
     const ctx = signedIn();
     const verseRef = canon(GEN, 1, 1);
@@ -798,29 +824,35 @@ describe("Bible app", () => {
       { action: true },
       ctx,
     );
-    const pick = verseVersionPickId(verseRef, ASV, { type: "bookmarks" });
-    const verseId = verseNodeId({ type: "bookmarks" }, verseRef);
+    const hitId = verseNodeId({ type: "bookmarks" }, verseRef);
+    const contextId = verseNodeId(contextSeq(GEN, 1), verseRef);
+    const hit = await refresh(instance, [{ nodeId: hitId, label: "x", location: null }], {}, ctx);
+    expect(hit.node.id).toBe(hitId);
+    expect(hit.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
+    expect(hit.navigationMap[hitId]?.enter).toEqual({
+      kind: "node",
+      toNodeId: contextId,
+      stackBehavior: "push",
+    });
+    const pick = verseVersionPickId(verseRef, ASV, contextSeq(GEN, 1));
     const landed = await refresh(
       instance,
-      verseId,
+      contextId,
       { action: { triggerId: pick } },
       ctx,
     );
-    expect(landed.node.id).toBe(verseId);
+    expect(landed.node.id).toBe(contextId);
     expect(landed.node.label).toContain("heavens and the earth");
-    expect(landed.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
-    expect(landed.navigationMap[landed.node.id]?.back).toEqual({
-      kind: "node",
-      stackBehavior: "pop",
-    });
+    expect(landed.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
     expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
       kind: "node",
-      toNodeId: optionId(verseRef, "versions", { type: "bookmarks" }),
+      toNodeId: optionId(verseRef, "versions", contextSeq(GEN, 1)),
       stackBehavior: "pushTransient",
       frame: "verse-menu",
     });
     const deep = await instance.open("/bookmarks/Genesis/1/1", {}, ctx);
-    expect(deep.node.id).toBe(landed.node.id);
+    expect(deep.node.id).toBe(hitId);
+    expect(deep.node.label).toContain("heavens and the earth");
   });
 
   it("search hits stay on the searched version after an active-version change", async () => {
@@ -1059,7 +1091,9 @@ describe("Bible importers", () => {
     expect(phrases.warm.find((node) => node.id === secondPhrase)?.label).toBe(
       "for theirs is the kingdom of heaven.",
     );
-    const firstRef = xrefRefId(verseRef, TSK, 1, 0);
+    const firstRef = verseNodeId(xrefSeq(1), canon(MAT, 5, 5));
+    const secondRef = verseNodeId(xrefSeq(1), canon(MAT, 5, 6));
+    const thirdRef = verseNodeId(xrefSeq(1), canon(MAT, 5, 7));
     expect(phrases.navigationMap[firstPhrase]?.enter).toEqual({
       kind: "node",
       toNodeId: firstRef,
@@ -1067,14 +1101,15 @@ describe("Bible importers", () => {
     });
     const refs = await refresh(instance, [{ nodeId: firstRef, label: "x", location: null }]);
     expect(refs.node.label).toMatch(/^Matthew 5:5\./);
+    expect(refs.location).toEqual({ appId: "bible", path: "/Matthew/5/3" });
     expect(refs.navigationMap[firstRef]?.next).toEqual({
       kind: "node",
-      toNodeId: xrefRefId(verseRef, TSK, 1, 1),
+      toNodeId: secondRef,
       stackBehavior: "replace",
     });
-    expect(refs.navigationMap[xrefRefId(verseRef, TSK, 1, 1)]?.next).toEqual({
+    expect(refs.navigationMap[secondRef]?.next).toEqual({
       kind: "node",
-      toNodeId: xrefRefId(verseRef, TSK, 1, 2),
+      toNodeId: thirdRef,
       stackBehavior: "replace",
     });
     const related = verseNodeId(contextSeq(MAT, 5), canon(MAT, 5, 5));
@@ -1105,29 +1140,47 @@ describe("Bible importers", () => {
     const verseRef = canon(GEN, 1, 1);
     const option = optionId(verseRef, "dictionaries");
     const menu = await refresh(instance, [{ nodeId: option, label: "Dictionaries", location: null }]);
-    const first = dictionaryWordId(verseRef, STRONGS, 0);
+    const work = dictionaryWorkId(verseRef, STRONGS);
     expect(menu.navigationMap[option]?.enter).toEqual({
+      kind: "node",
+      toNodeId: work,
+      stackBehavior: "push",
+    });
+    const works = await refresh(instance, [{ nodeId: work, label: "x", location: null }]);
+    expect(works.node.label).toBe("Strong's Concordance (King James wording)");
+    expect(works.navigationMap[work]?.next).toBeUndefined();
+    const first = dictionaryWordId(verseRef, STRONGS, 0);
+    const second = dictionaryWordId(verseRef, STRONGS, 1);
+    expect(works.navigationMap[work]?.enter).toEqual({
       kind: "node",
       toNodeId: first,
       stackBehavior: "push",
       action: true,
     });
-    const word = await refresh(instance, [{ nodeId: first, label: "x", location: null }]);
+    const word = await refresh(instance, [
+      { nodeId: work, label: "x", location: null },
+      { nodeId: first, label: "x", location: null },
+    ]);
     expect(word.node.label).toBe(
-      "In the beginning. רֵאשִׁית, reshith. H7225. the first, in place, time, order or rank",
+      "In the beginning. reshith. H7225. the first, in place, time, order or rank",
     );
     expect(word.navigationMap[first]?.enter).toBeUndefined();
+    expect(word.navigationMap[first]?.prev).toBeUndefined();
     expect(word.navigationMap[first]?.next).toEqual({
       kind: "node",
-      toNodeId: dictionaryWordId(verseRef, STRONGS, 1),
+      toNodeId: second,
       stackBehavior: "replace",
     });
+    expect(word.navigationMap[second]?.next).toBeUndefined();
     const emptyVerse = optionId(canon(MAT, 5, 3), "dictionaries");
     const emptyMenu = await refresh(
       instance,
       [{ nodeId: emptyVerse, label: "Dictionaries", location: null }],
     );
-    expect(emptyMenu.navigationMap[emptyVerse]?.enter?.toNodeId).toMatch(/^bible:de:/);
+    const emptyWork = dictionaryWorkId(canon(MAT, 5, 3), STRONGS);
+    expect(emptyMenu.navigationMap[emptyVerse]?.enter?.toNodeId).toBe(emptyWork);
+    const emptyWorks = await refresh(instance, [{ nodeId: emptyWork, label: "x", location: null }]);
+    expect(emptyWorks.navigationMap[emptyWork]?.enter?.toNodeId).toMatch(/^bible:de:/);
   });
 });
 

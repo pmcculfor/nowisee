@@ -21,7 +21,6 @@ import {
   viewSession,
   withTipLabel,
   activeVersion,
-  listedDictionaryWorks,
   listedXrefWorks,
   type BibleViewDeps,
   type ViewSession,
@@ -99,13 +98,6 @@ function applyAction(session: ViewSession, triggerId: string): ActionContributio
     const first = listedXrefWorks(session)[0];
     if (first) {
       touchXrefRecency(session, first.id);
-    }
-    return null;
-  }
-  if (parsed.kind === "option" && parsed.option === "dictionaries") {
-    const first = listedDictionaryWorks(session)[0];
-    if (first) {
-      touchDictionaryRecency(session, first.id);
     }
     return null;
   }

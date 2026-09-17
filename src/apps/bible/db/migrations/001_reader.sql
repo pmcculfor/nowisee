@@ -126,7 +126,8 @@ CREATE TABLE xref_ref (
   phrase_id INTEGER NOT NULL REFERENCES xref_phrase (id) ON DELETE CASCADE,
   sort_order INTEGER NOT NULL,
   verse_id INTEGER NOT NULL REFERENCES verse (id),
-  PRIMARY KEY (phrase_id, sort_order)
+  PRIMARY KEY (phrase_id, sort_order),
+  UNIQUE (phrase_id, verse_id)
 );
 
 CREATE INDEX xref_ref_verse ON xref_ref (verse_id);

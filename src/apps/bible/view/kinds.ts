@@ -26,7 +26,6 @@ import {
   versionsHeadingId,
   xrefEmptyId,
   xrefPhraseId,
-  xrefRefId,
   xrefWorkId,
   type ParsedNode,
 } from "../ids.ts";
@@ -43,11 +42,9 @@ import {
 import {
   addXrefEmpty,
   addXrefPhrases,
-  addXrefRefs,
   addXrefWorks,
   xrefEmptyLabel,
   xrefPhraseLabel,
-  xrefRefLabelFor,
 } from "./xref.ts";
 import {
   activeVersion,
@@ -416,21 +413,6 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     addLevel: (s, pay, frag, parsed, version) => {
       const n = asKind(parsed, "xref-phrase");
       addXrefPhrases(s, pay, frag, n.ref, version, n.workId, n.phraseId);
-    },
-  },
-  "xref-ref": {
-    version: active,
-    location: seqLocation,
-    payload: (s, parsed, version) => {
-      const n = asKind(parsed, "xref-ref");
-      return {
-        id: xrefRefId(n.ref, n.workId, n.phraseId, n.sortOrder),
-        label: xrefRefLabelFor(s, n.phraseId, n.sortOrder, version),
-      };
-    },
-    addLevel: (s, pay, frag, parsed, version) => {
-      const n = asKind(parsed, "xref-ref");
-      addXrefRefs(s, pay, frag, n.ref, version, n.workId, n.phraseId, n.sortOrder);
     },
   },
   "dictionary-empty": {
