@@ -19,6 +19,15 @@ function xmlText(fragment: string): string {
     .trim();
 }
 
+function xmlTextKeepGreek(fragment: string): string {
+  return xmlText(
+    fragment.replace(/<greek\b([^>]*)\/?>/gi, (_full, attrs: string) => {
+      const unicode = /unicode="([^"]*)"/.exec(attrs)?.[1];
+      return unicode ?? " ";
+    }),
+  );
+}
+
 function attr(tag: string, name: string): string {
   const match = new RegExp(`${name}="([^"]*)"`).exec(tag);
   return match?.[1] ?? "";
@@ -52,12 +61,12 @@ export function parseStrongsGreekXml(xml: string): StrongsEntry[] {
     if (!strongs?.startsWith("G")) {
       continue;
     }
-    const greekTag = /<greek\b[^/]*\/?>/.exec(block)?.[0] ?? "";
+    const greekTag = /<greek\b([^>]*)\/?>/i.exec(block)?.[0] ?? "";
     const lemma = attr(greekTag, "unicode");
     const translit = attr(greekTag, "translit") || attr(child(block, "pronunciation"), "strongs");
-    const derivation = xmlText(childInner(block, "strongs_derivation"));
-    const def = xmlText(childInner(block, "strongs_def"));
-    const kjv = xmlText(childInner(block, "kjv_def")).replace(/^:--/, "");
+    const derivation = xmlTextKeepGreek(childInner(block, "strongs_derivation"));
+    const def = xmlTextKeepGreek(childInner(block, "strongs_def"));
+    const kjv = xmlTextKeepGreek(childInner(block, "kjv_def")).replace(/^:--/, "");
     const body = [derivation, def, kjv].filter(Boolean).join(" ");
     if (!body) {
       continue;

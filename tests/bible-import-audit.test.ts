@@ -44,9 +44,8 @@ describe.skipIf(!run)("Bible corpus import accounting", () => {
     expect(greek.length).toBeGreaterThan(5000);
     expect(hebrew.length).toBeGreaterThan(8000);
 
-    if (!existsSync(tokenPath)) {
-      return;
-    }
+    expect(existsSync(tokenPath)).toBe(true);
+
     const tokens = parseStrongsTsv(readFileSync(tokenPath, "utf8"));
     const known = new Set([...greek, ...hebrew].map((entry) => entry.strongs));
     const missing = tokens.filter((token) => !known.has(token.strongs)).length;

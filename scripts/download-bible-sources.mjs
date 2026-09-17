@@ -1,7 +1,7 @@
 /**
  * Download public-domain verse-aligned Bibles (eBible USFM + VPL),
  * commentaries (HelloAO JSON + TSK plaintext xref + CrossWire SWORD zips),
- * and Strong's XML. Rebuilds kjv_strongs.tsv from KJV USFM when that zip is present.
+ * and Strong's XML. Rebuilds kjv_strongs.tsv from KJV USFM.
  * Matthew Henry Song of Solomon is filled from LyteWord markdown (HelloAO omits it).
  * Import texts the importer reads live under src/apps/bible/data/raw/ (committed).
  * Zips, USFM, and SWORD backups stay gitignored; this script re-fetches those.

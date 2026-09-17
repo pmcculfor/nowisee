@@ -6,7 +6,7 @@ Do **not** import e-Sword `.bblx`/`.cmtx` blobs (encrypted). Prefer verse-aligne
 
 ## Bibles (66 Protestant books, 31,102 verses each)
 
-All from [eBible.org](https://ebible.org/Scriptures/) (public domain). **Use `_vpl.txt` for import** — one line per verse, `BOOK CHAPTER:VERSE text`, no Strong’s markup. USFM is kept as the tagged original (KJV USFM has `\w word|strong="H1234"\w*`; VPL already flattened that without deleting words).
+All from [eBible.org](https://ebible.org/Scriptures/) (public domain). **Use `_vpl.txt` for import** — one line per verse, `BOOK CHAPTER:VERSE text`, no Strong’s markup. USFM is the tagged original used only to rebuild `kjv_strongs.tsv`; import does not read USFM.
 
 KJV supplied words appear as `[was]`, `[it was]`, etc. Keep the words; strip the brackets only. Do not strip the brackets with a greedy regex (that deleted “was” from Genesis 1:2 and “it was” from 1:4).
 
@@ -46,7 +46,8 @@ Two copies; prefer the plaintext table for import:
 
 1. **JustVerses / ariseshinestudio dump** (best for us): `raw/commentaries/tsk/tskxref.txt`  
    Tab-delimited: `book_key`, `chapter`, `verse`, `sort_order`, **phrase**, **reference_list**. ~63k phrase rows. Public domain.  
-   https://github.com/ariseshinestudio/TSK
+   https://github.com/ariseshinestudio/TSK  
+   The **phrase** column is a short keyword (usually one or two words), not the print TSK clause heading. CrossReferences.org’s KJV TSV uses the same anchors. CrossWire `tsk.zip` is a compressed zCom module, not a plaintext clause dump. Import recovers headings from King James verse text: this keyword through the next; the first heading starts at the verse.
 
 2. **CrossWire SWORD module** (backup, compressed zCom): `raw/sword/tsk.zip`  
    Same work, ThML inside ZIP blocks — needs a SWORD reader. Also `mhc.zip` / `jfb.zip` as backups for Henry/JFB.
@@ -69,7 +70,7 @@ TSK `reference_list` abbreviations (`ge`, `joh`, `jude` vs `jud`, …) are a ded
 
 ### King James original-language tokens
 
-eBible KJV USFM tags `\w word|strong="H1234"\w*`. The VPL import has no numbers. A derived table `raw/alignments/kjv_strongs.tsv` (`book`, `chapter`, `verse`, `position`, `strongs`, `english`) is rebuilt from the USFM zip by the download script. Consecutive spans that share a Strong’s id collapse; `\add` / notes are dropped; comma-split `strong=` values become two tokens.
+eBible KJV USFM tags `\w word|strong="H1234"\w*`. The VPL import has no numbers. A derived table `raw/alignments/kjv_strongs.tsv` (`book`, `chapter`, `verse`, `position`, `strongs`, `english`) is rebuilt from the USFM zip by the download script and is required at import. Consecutive spans that share a Strong’s id collapse; `\add` / notes are dropped; comma-split `strong=` values become two tokens.
 
 ## What we are not using
 

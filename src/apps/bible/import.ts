@@ -21,9 +21,9 @@ import {
   type CommentaryRecord,
   type VersionRecord,
 } from "./catalog.ts";
-import { parseTskCitationRanges } from "./tskCitations.ts";
+import { expandTskHeadings, parseTskCitationRanges } from "./tskCitations.ts";
 import { parseHebrewStrongXml, parseStrongsGreekXml } from "./strongsXml.ts";
-import { parseStrongsTsv } from "./usfmTokens.ts";
+import { parseStrongsTsv, type UsfmToken } from "./usfmTokens.ts";
 import type {
   BibleSeed,
   BibleSeedDictionaryEntry,
@@ -118,6 +118,7 @@ function seedFixture(db: Db, seed: BibleSeed): void {
     for (const token of seed.tokens ?? []) {
       insertSeedToken(db, token);
     }
+    expandXrefHeadings(db);
   });
 }
 
@@ -130,10 +131,10 @@ function importRaw(db: Db, rawDir: string): void {
       continue;
     }
     const path = join(biblesDir, version.vplPath);
-    if (!existsSync(path)) {
-      continue;
+    const verses = parseVpl(requireUtf8(path, `version ${version.id}`));
+    if (verses.length === 0) {
+      throw new Error(`Bible import: empty version ${version.id} (${path})`);
     }
-    const verses = parseVpl(readFileSync(path, "utf8"));
     db.transaction(() => insertVerses(db, verses.map(toSeedVerse(version))));
   }
   for (const commentary of COMMENTARY_RECORDS) {
@@ -143,17 +144,23 @@ function importRaw(db: Db, rawDir: string): void {
     }
     const source = join(commentariesDir, commentary.sourcePath);
     if (!existsSync(source)) {
-      continue;
+      throw new Error(`Bible import: missing commentary ${commentary.id} (${source})`);
     }
     db.transaction(() => importCommentary(db, commentary, source));
+    if (!hasSections(db, commentaryId)) {
+      throw new Error(`Bible import: empty commentary ${commentary.id} (${source})`);
+    }
   }
   importXrefWorks(db, commentariesDir);
-  const dictionariesDir = join(rawDir);
-  importDictionaryWorks(db, dictionariesDir);
-  const tokenPath = join(rawDir, "alignments", "kjv_strongs.tsv");
-  if (existsSync(tokenPath) && !hasTokens(db)) {
-    db.transaction(() => importTokens(db, readFileSync(tokenPath, "utf8")));
+  importDictionaryWorks(db, rawDir);
+  importVerseTokens(db, rawDir);
+}
+
+function requireUtf8(path: string, what: string): string {
+  if (!existsSync(path)) {
+    throw new Error(`Bible import: missing ${what} (${path})`);
   }
+  return readFileSync(path, "utf8");
 }
 
 function toSeedVerse(version: VersionRecord) {
@@ -461,11 +468,13 @@ function importXrefWorks(db: Db, commentariesDir: string): void {
       continue;
     }
     const source = join(commentariesDir, record.sourcePath);
-    if (!existsSync(source)) {
-      continue;
+    const text = requireUtf8(source, `xref ${record.id}`);
+    db.transaction(() => importTskXref(db, workId, text));
+    if (!hasXrefPhrases(db, workId)) {
+      throw new Error(`Bible import: empty xref ${record.id} (${source})`);
     }
-    db.transaction(() => importTskXref(db, workId, readFileSync(source, "utf8")));
   }
+  db.transaction(() => expandXrefHeadings(db));
 }
 
 function importTskXref(db: Db, workId: number, text: string): void {
@@ -535,13 +544,15 @@ function importDictionaryWorks(db: Db, rawDir: string): void {
     }
     const greekPath = join(rawDir, record.greekPath);
     const hebrewPath = join(rawDir, record.hebrewPath);
-    const entries = [
-      ...(existsSync(greekPath) ? parseStrongsGreekXml(readFileSync(greekPath, "utf8")) : []),
-      ...(existsSync(hebrewPath) ? parseHebrewStrongXml(readFileSync(hebrewPath, "utf8")) : []),
-    ];
-    if (entries.length === 0) {
-      continue;
+    const greek = parseStrongsGreekXml(requireUtf8(greekPath, `dictionary ${record.id} Greek`));
+    const hebrew = parseHebrewStrongXml(requireUtf8(hebrewPath, `dictionary ${record.id} Hebrew`));
+    if (greek.length === 0) {
+      throw new Error(`Bible import: empty dictionary ${record.id} Greek (${greekPath})`);
     }
+    if (hebrew.length === 0) {
+      throw new Error(`Bible import: empty dictionary ${record.id} Hebrew (${hebrewPath})`);
+    }
+    const entries = [...greek, ...hebrew];
     const insert = db.prepare(
       "INSERT OR IGNORE INTO dictionary_entry (dictionary_work_id, strongs, lemma, translit, body) VALUES (?, ?, ?, ?, ?)",
     );
@@ -553,7 +564,64 @@ function importDictionaryWorks(db: Db, rawDir: string): void {
   }
 }
 
-function importTokens(db: Db, text: string): void {
+function expandXrefHeadings(db: Db): void {
+  const kjv = VERSION_RECORDS.find((row) => row.id === "kjv");
+  if (!kjv) {
+    return;
+  }
+  const kjvId = catalogVersionId(kjv);
+  const groups = db.all<{ workId: number; verseId: number }>(
+    "SELECT DISTINCT xref_work_id AS workId, verse_id AS verseId FROM xref_phrase",
+  );
+  if (groups.length === 0) {
+    return;
+  }
+  const update = db.prepare("UPDATE xref_phrase SET phrase = ? WHERE id = ?");
+  for (const group of groups) {
+    const text = db.get<{ text: string }>(
+      "SELECT text FROM verse_text WHERE version_id = ? AND verse_id = ?",
+      kjvId,
+      group.verseId,
+    )?.text;
+    if (!text) {
+      continue;
+    }
+    const rows = db.all<{ id: number; phrase: string }>(
+      `SELECT id, phrase FROM xref_phrase
+       WHERE xref_work_id = ? AND verse_id = ?
+       ORDER BY sort_order ASC, id ASC`,
+      group.workId,
+      group.verseId,
+    );
+    const expanded = expandTskHeadings(
+      text,
+      rows.map((row) => row.phrase),
+    );
+    for (const [index, row] of rows.entries()) {
+      const next = expanded[index];
+      if (next && next !== row.phrase) {
+        update.run(next, row.id);
+      }
+    }
+  }
+}
+
+function importVerseTokens(db: Db, rawDir: string): void {
+  if (hasTokens(db)) {
+    return;
+  }
+  const tokenPath = join(rawDir, "alignments", "kjv_strongs.tsv");
+  const tokens = parseStrongsTsv(requireUtf8(tokenPath, "KJV Strong's tokens"));
+  if (tokens.length === 0) {
+    throw new Error(`Bible import: empty KJV Strong's tokens (${tokenPath})`);
+  }
+  db.transaction(() => importTokens(db, tokens));
+  if (!hasTokens(db)) {
+    throw new Error(`Bible import: no verse tokens loaded from ${tokenPath}`);
+  }
+}
+
+function importTokens(db: Db, tokens: readonly UsfmToken[]): void {
   const slots = new SlotWriter(db);
   const known = new Set(
     db.all<{ strongs: string }>("SELECT strongs FROM dictionary_entry").map((row) => row.strongs),
@@ -561,7 +629,7 @@ function importTokens(db: Db, text: string): void {
   const insert = db.prepare(
     "INSERT OR IGNORE INTO verse_token (verse_id, position, strongs, english) VALUES (?, ?, ?, ?)",
   );
-  for (const token of parseStrongsTsv(text)) {
+  for (const token of tokens) {
     if (known.size > 0 && !known.has(token.strongs)) {
       continue;
     }

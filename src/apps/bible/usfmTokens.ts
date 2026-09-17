@@ -41,7 +41,7 @@ export function parseUsfmVerseSpans(body: string): UsfmSpan[] {
     .replace(/\\add\s[\s\S]*?\\add\*/g, " ")
     .replace(/\\[fx]\s[\s\S]*?\\[fx]\*/g, " ");
   const spans: UsfmSpan[] = [];
-  const word = /\\w\s+([^\\|]*?)(?:\|([^\\]*))?\\w\*/g;
+  const word = /\\w\s*([^\\|]*?)(?:\|([^\\]*))?\\w\*/g;
   let match: RegExpExecArray | null;
   while ((match = word.exec(cleaned))) {
     const english = (match[1] ?? "").replace(/\s+/g, " ").trim();

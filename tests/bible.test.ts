@@ -44,7 +44,7 @@ import {
   xrefPhraseId,
   xrefRefId,
 } from "../src/apps/bible/ids.ts";
-import { parseTskCitationRanges } from "../src/apps/bible/tskCitations.ts";
+import { expandTskHeadings, parseTskCitationRanges } from "../src/apps/bible/tskCitations.ts";
 import { parseHebrewStrongXml, parseStrongsGreekXml } from "../src/apps/bible/strongsXml.ts";
 import {
   collapseSpans,
@@ -866,6 +866,14 @@ describe("Bible app", () => {
 });
 
 describe("Bible store", () => {
+  it("import fails when a committed source file is missing", () => {
+    const db = openBibleDatabase(":memory:");
+    expect(() => ensureCatalog(db, { rawDir: "missing-bible-raw" })).toThrow(
+      /Bible import: missing version kjv/,
+    );
+    db.close();
+  });
+
   it("keys verse text by version so translations share canon verse ids", () => {
     const db = openBibleDatabase(":memory:");
     ensureCatalog(db, { seed: fixtureBible });
@@ -1038,8 +1046,19 @@ describe("Bible importers", () => {
       stackBehavior: "push",
       action: true,
     });
-    const phrases = await refresh(instance, [{ nodeId: firstPhrase, label: "poor", location: null }]);
-    expect(phrases.node.label).toBe("poor");
+    const phrases = await refresh(instance, [{ nodeId: firstPhrase, label: "x", location: null }]);
+    expect(phrases.node.label).toBe("Blessed are the poor in spirit:");
+    const secondPhrase = xrefPhraseId(verseRef, TSK, 2);
+    expect(phrases.navigationMap[firstPhrase]?.next).toEqual({
+      kind: "node",
+      toNodeId: secondPhrase,
+      stackBehavior: "replace",
+    });
+    expect(phrases.navigationMap[firstPhrase]?.prev).toBeUndefined();
+    expect(phrases.navigationMap[secondPhrase]?.next).toBeUndefined();
+    expect(phrases.warm.find((node) => node.id === secondPhrase)?.label).toBe(
+      "for theirs is the kingdom of heaven.",
+    );
     const firstRef = xrefRefId(verseRef, TSK, 1, 0);
     expect(phrases.navigationMap[firstPhrase]?.enter).toEqual({
       kind: "node",
@@ -1077,7 +1096,7 @@ describe("Bible importers", () => {
     });
     const nestedOption = optionId(canon(MAT, 5, 5), "cross-references", contextSeq(MAT, 5));
     const nestedMenu = await refresh(instance, [{ nodeId: nestedOption, label: "Cross-references", location: null }]);
-    const meek = xrefPhraseId(canon(MAT, 5, 5), TSK, 2);
+    const meek = xrefPhraseId(canon(MAT, 5, 5), TSK, 3);
     expect(nestedMenu.navigationMap[nestedOption]?.enter?.toNodeId).toBe(meek);
   });
 
@@ -1144,6 +1163,22 @@ describe("Bible study parsers", () => {
     expect(parseTskCitationRanges("xx 1:1; ge 1:1")).toEqual([
       { bookId: "GEN", startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 1 },
     ]);
+    expect(
+      expandTskHeadings("Blessed are the poor in spirit: for theirs is the kingdom of heaven.", [
+        "poor",
+        "for",
+      ]),
+    ).toEqual(["Blessed are the poor in spirit:", "for theirs is the kingdom of heaven."]);
+    expect(
+      expandTskHeadings(
+        "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+        ["God", "gave", "that whosoever"],
+      ),
+    ).toEqual([
+      "For God so loved the world, that he",
+      "gave his only begotten Son,",
+      "that whosoever believeth in him should not perish, but have everlasting life.",
+    ]);
   });
 
   it("maps every TSK readme abbreviation onto a canon book", () => {
@@ -1178,15 +1213,27 @@ describe("Bible study parsers", () => {
     expect(john).toEqual([
       { bookId: "JHN", chapter: 3, verse: 16, position: 0, strongs: "G25", english: "loved" },
     ]);
+    expect(
+      collapseSpans(parseUsfmVerseSpans(`\\w beginning|strong="H7225"\\w* \\w God|strong="H0430"\\w*`)),
+    ).toEqual([
+      { strongs: "H7225", english: "beginning" },
+      { strongs: "H430", english: "God" },
+    ]);
   });
 
   it("parses Strong's XML fixtures and rejects entries without a body", () => {
     const greek = parseStrongsGreekXml(`<entry strongs="00025">
- <strongs>25</strongs>   <greek unicode="ἀγαπάω" translit="agapáō"/>
+ <strongs>25</strongs>   <greek BETA="A)GAPA/W" unicode="ἀγαπάω" translit="agapáō"/>
+ <strongs_derivation>perhaps from <greek BETA="A)/GAN" unicode="ἄγαν" translit="ágan"/> (much)</strongs_derivation>
  <strongs_def> to love</strongs_def><kjv_def>:--love.</kjv_def>
 </entry><entry strongs="00000"><greek unicode="x" translit="x"/></entry>`);
     expect(greek).toEqual([
-      { strongs: "G25", lemma: "ἀγαπάω", translit: "agapáō", body: "to love love." },
+      {
+        strongs: "G25",
+        lemma: "ἀγαπάω",
+        translit: "agapáō",
+        body: "perhaps from ἄγαν (much) to love love.",
+      },
     ]);
     const hebrew = parseHebrewStrongXml(`<entry id="H7225">
 		<w pron="ray-sheeth'" xlit="rêʼshîyth">רֵאשִׁית</w>

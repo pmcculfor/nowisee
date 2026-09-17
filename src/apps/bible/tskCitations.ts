@@ -75,3 +75,44 @@ function parseVersePart(bookId: string, chapter: number, part: string): TskCitat
 function positive(value: number): boolean {
   return Number.isInteger(value) && value >= 1;
 }
+
+/**
+ * TSK dumps store a short keyword. Print TSK's heading is the KJV clause
+ * from that keyword through the next TSK keyword. No PD dump has those
+ * clauses as a column; recover them from verse text.
+ */
+export function expandTskHeadings(verseText: string, headings: readonly string[]): string[] {
+  const lower = verseText.toLowerCase();
+  const starts: number[] = [];
+  let cursor = 0;
+  for (const heading of headings) {
+    const needle = heading.trim().toLowerCase();
+    if (!needle) {
+      starts.push(-1);
+      continue;
+    }
+    const at = lower.indexOf(needle, cursor);
+    if (at < 0) {
+      starts.push(-1);
+      continue;
+    }
+    starts.push(at);
+    cursor = at + needle.length;
+  }
+  return headings.map((heading, index) => {
+    const start = starts[index]!;
+    if (start < 0) {
+      return heading;
+    }
+    const from = index === 0 ? 0 : start;
+    let end = verseText.length;
+    for (let next = index + 1; next < starts.length; next++) {
+      if (starts[next]! >= 0) {
+        end = starts[next]!;
+        break;
+      }
+    }
+    const expanded = verseText.slice(from, end).replace(/\s+/g, " ").trim();
+    return expanded || heading;
+  });
+}

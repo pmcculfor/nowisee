@@ -82,7 +82,7 @@ export function addXrefPhrases(
       ? xrefPhraseId(ref, workId, focusPhraseId)
       : ids[0]!;
   const around = siblingWindow(ids, focusId, XREF_POLICY.siblingRadius);
-  fragments.push(siblingListEdges(ids, { wrap: true, around }));
+  fragments.push(siblingListEdges(ids, { wrap: false, around }));
   addWindowedNodes(payloads, ids, around, (id, index) => ({
     id,
     label: phrases[index]!.phrase,
