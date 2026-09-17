@@ -15,6 +15,7 @@ Nowisee is an accessibility-first website for blind and keyboard/screen-reader-p
 - **DRY.** Each concern has one owner. Never two ways to compute the same thing.
 - **Long-term product.** Assume years of maintenance, many apps, and other authors. That is architecture, not a promise to keep old clients or old rows working.
 - **In development, no compatibility tax.** Nowisee is in development. Do not add code whose only job is keeping old clients, old `open` / `refresh` shapes, old URLs, or existing stored data working. Users, notes, settings, bookmarks, and sessions need not be preserved across schema or product changes. Export, dual-write, and client version negotiation wait until the product is no longer in development.
+- **Fail loudly.** Missing or invalid required values must surface, not be replaced with a default so the path still runs. We want the failure now.
 
 ## Long-horizon design (binding)
 
