@@ -78,7 +78,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.codePrompt,
-        extras: { action: { triggerId: NODE.codePrompt }, inputText: "user@example.com" },
+        extras: { action: { triggerId: NODE.email }, inputText: "user@example.com" },
       },
     });
     const signedIn = await handleSessionHttp(h, {
@@ -87,7 +87,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.auth,
-        extras: { action: { triggerId: NODE.auth }, inputText: made.mailer.lastCode() },
+        extras: { action: { triggerId: NODE.code }, inputText: made.mailer.lastCode() },
       },
     });
     const signedBody = signedIn.body as RefreshResult;
@@ -127,7 +127,7 @@ describe("Account app", () => {
       headers: headers(anon),
       body: {
         nodeId: NODE.codePrompt,
-        extras: { action: { triggerId: NODE.codePrompt }, inputText: "pat@example.com" },
+        extras: { action: { triggerId: NODE.email }, inputText: "pat@example.com" },
       },
     });
     const action = await handleSessionHttp(h, {
@@ -136,7 +136,7 @@ describe("Account app", () => {
       headers: headers(anon),
       body: {
         nodeId: NODE.auth,
-        extras: { action: { triggerId: NODE.auth }, inputText: made.mailer.lastCode() },
+        extras: { action: { triggerId: NODE.code }, inputText: made.mailer.lastCode() },
       },
     });
     expect(action.status).toBe(200);
@@ -164,7 +164,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.codePrompt,
-        extras: { action: { triggerId: NODE.codePrompt }, inputText: "short@example.com" },
+        extras: { action: { triggerId: NODE.email }, inputText: "short@example.com" },
       },
     });
     const failed = await handleSessionHttp(h, {
@@ -173,7 +173,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.auth,
-        extras: { action: { triggerId: NODE.auth }, inputText: "zzz000" },
+        extras: { action: { triggerId: NODE.code }, inputText: "zzz000" },
       },
     });
     const body = failed.body as RefreshResult;
@@ -199,7 +199,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.codePrompt,
-        extras: { action: { triggerId: NODE.codePrompt }, inputText: "wait@example.com" },
+        extras: { action: { triggerId: NODE.email }, inputText: "wait@example.com" },
       },
     });
     const throttled = await handleSessionHttp(h, {
@@ -208,7 +208,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.codePrompt,
-        extras: { action: { triggerId: NODE.codePrompt }, inputText: "wait@example.com" },
+        extras: { action: { triggerId: NODE.email }, inputText: "wait@example.com" },
       },
     });
     const body = throttled.body as RefreshResult;

@@ -10,6 +10,7 @@ import {
   siblingListEdges,
 } from "../../app-kit/index.ts";
 import type {
+  ActionExtras,
   AppDescriptor,
   AppLocation,
   AppServerContext,
@@ -131,7 +132,7 @@ async function applyAction(
   deps: HomeViewDeps,
   session: HomeSession,
   tipId: string,
-  extras: RefreshExtras,
+  extras: RefreshExtras & { action: ActionExtras },
 ): Promise<RefreshResult> {
   const store = deps.store;
   const ownerId = session.ownerId;
@@ -139,10 +140,9 @@ async function applyAction(
     return render(session, tipId);
   }
 
-  const writeId = extras.action?.triggerId ?? tipId;
+  const writeId = extras.action.triggerId;
 
-  const addedId =
-    parseAddAddedNodeId(writeId) ?? parseAddAddedNodeId(tipId) ?? parseAddAppNodeId(writeId);
+  const addedId = parseAddAppNodeId(writeId);
   if (addedId) {
     const next = await mutate(store, ownerId, session, (ids) => {
       if (!ids.includes(addedId) && canAddId(session, addedId)) {
@@ -152,10 +152,7 @@ async function applyAction(
     return addStatusView(next, addedId);
   }
 
-  const removedId =
-    parseRemoveRemovedNodeId(writeId) ??
-    parseRemoveRemovedNodeId(tipId) ??
-    parseRemoveAppNodeId(writeId);
+  const removedId = parseRemoveAppNodeId(writeId);
   if (removedId) {
     const next = await mutate(store, ownerId, session, (ids) => {
       const app = session.peers.find((a) => a.id === removedId);
@@ -169,10 +166,7 @@ async function applyAction(
     return removeStatusView(next, removedId);
   }
 
-  const moving =
-    parseReorderMoveId(writeId) ??
-    parseReorderMovingId(writeId) ??
-    parseReorderMovingId(tipId);
+  const moving = parseReorderMoveId(writeId);
   if (moving) {
     const next = await mutate(store, ownerId, session, (ids) => {
       const i = ids.indexOf(moving.appId);

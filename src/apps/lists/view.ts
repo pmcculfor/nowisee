@@ -13,6 +13,7 @@ import {
   type MapFragment,
 } from "../../app-kit/index.ts";
 import type {
+  ActionExtras,
   AppLocation,
   AppServerContext,
   NavigationMap,
@@ -296,9 +297,9 @@ async function applyAction(
   deps: ListsViewDeps,
   ownerId: string,
   tipId: string,
-  extras: RefreshExtras,
+  extras: RefreshExtras & { action: ActionExtras },
 ): Promise<void> {
-  const triggerId = extras.action?.triggerId ?? tipId;
+  const triggerId = extras.action.triggerId;
   const trigger = parseListsNode(triggerId);
 
   if (trigger?.kind === "createEdit") {
@@ -321,7 +322,7 @@ async function applyAction(
     return;
   }
 
-  if (trigger?.kind === "itemDone") {
+  if (trigger?.kind === "activeItem") {
     await deps.store.completeItem(ownerId, trigger.itemId);
     return;
   }
@@ -334,7 +335,7 @@ async function applyAction(
     return;
   }
 
-  if (trigger?.kind === "deleted") {
+  if (trigger?.kind === "deleteConfirm") {
     await deps.store.deleteList(ownerId, trigger.listId);
   }
 }

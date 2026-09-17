@@ -307,13 +307,9 @@ describe("Lists app", () => {
       action: true,
     });
 
-    const done = await refreshApp(app,
-      [
-        { nodeId: catalogListNodeId("shop"), label: "Shopping", location: null },
-        { nodeId: activeItemNodeId("milk"), label: "Milk", location: null },
-        { nodeId: itemDoneNodeId("milk"), label: "Completed.", location: null },
-      ],
-      { action: true },
+    const done = await app.refresh(
+      itemDoneNodeId("milk"),
+      { action: { triggerId: activeItemNodeId("milk") } },
       signedIn(),
     );
     expect(done.node.id).toBe(itemDoneNodeId("milk"));
@@ -336,7 +332,38 @@ describe("Lists app", () => {
       action: true,
       stackBehavior: "stay",
     });
+    expect(done.navigationMap[itemUndoNodeId("milk")]?.back).toEqual({
+      kind: "node",
+      stackBehavior: "pop",
+    });
+    expect(done.navigationMap[itemUndoNodeId("milk")]?.back).not.toMatchObject({
+      action: true,
+    });
     expect((await store.getItem(OWNER, "milk"))?.completedAt).not.toBeNull();
+
+    const backToList = await app.refresh(activeItemNodeId("milk"), {}, signedIn());
+    expect(backToList.node.id).toBe(addNodeId("shop"));
+    expect((await store.getItem(OWNER, "milk"))?.completedAt).not.toBeNull();
+  });
+
+  it("refresh after complete repairs an active-item tip onto remaining items", async () => {
+    const { app, store } = listsHarness({
+      lists: [listRow({ id: "shop", title: "Shopping" })],
+      items: [
+        itemRow({ id: "milk", listId: "shop", body: "Milk" }),
+        itemRow({ id: "eggs", listId: "shop", body: "Eggs" }),
+      ],
+    });
+    await app.refresh(
+      itemDoneNodeId("milk"),
+      { action: { triggerId: activeItemNodeId("milk") } },
+      signedIn(),
+    );
+    const backToList = await app.refresh(activeItemNodeId("milk"), {}, signedIn());
+    expect(backToList.node.id).toBe(activeItemNodeId("eggs"));
+    expect(backToList.node.label).toBe("Eggs");
+    expect((await store.getItem(OWNER, "milk"))?.completedAt).not.toBeNull();
+    expect((await store.getItem(OWNER, "eggs"))?.completedAt).toBeNull();
   });
 
   it("refresh after complete repairs an active-item tip onto Add when the list is empty", async () => {
@@ -383,6 +410,33 @@ describe("Lists app", () => {
       enter: { kind: "node", stackBehavior: "pop" },
     });
     expect((await store.getItem(OWNER, "milk"))?.completedAt).toBeNull();
+  });
+
+  it("back from Undo complete pops without restoring", async () => {
+    const { app, store } = listsHarness({
+      lists: [listRow({ id: "shop", title: "Shopping" })],
+      items: [
+        itemRow({
+          id: "milk",
+          listId: "shop",
+          body: "Milk",
+          completedAt: "2026-05-01T00:00:00.000Z",
+        }),
+      ],
+    });
+    const interior = await app.open("/list/shop", {}, signedIn());
+    expect(interior.navigationMap[itemUndoNodeId("milk")]?.back).toEqual({
+      kind: "node",
+      stackBehavior: "pop",
+    });
+    expect(interior.navigationMap[itemUndoNodeId("milk")]?.enter).toMatchObject({
+      action: true,
+    });
+
+    const left = await app.refresh(itemUndoNodeId("milk"), {}, signedIn());
+    expect(left.node.id).toBe(itemUndoNodeId("milk"));
+    expect(left.node.label).toBe("Undo complete");
+    expect((await store.getItem(OWNER, "milk"))?.completedAt).toBe("2026-05-01T00:00:00.000Z");
   });
 
   it("completed list is newest completed first; restore is an action", async () => {
@@ -455,9 +509,9 @@ describe("Lists app", () => {
       toNodeId: deletedNodeId("shop"),
     });
 
-    const gone = await refreshApp(app,
-      [{ nodeId: deletedNodeId("shop"), label: "List deleted.", location: null }],
-      { action: true },
+    const gone = await app.refresh(
+      deletedNodeId("shop"),
+      { action: { triggerId: deleteConfirmNodeId("shop") } },
       signedIn(),
     );
     expect(gone.node.label).toBe("List deleted.");
@@ -539,9 +593,9 @@ describe("Lists app", () => {
     );
     expect(forgedItem.node.label).not.toContain("Secret");
 
-    await refreshApp(app,
-      [{ nodeId: itemDoneNodeId("their-item"), label: "Completed.", location: null }],
-      { action: true },
+    await app.refresh(
+      itemDoneNodeId("their-item"),
+      { action: { triggerId: activeItemNodeId("their-item") } },
       signedIn(OWNER),
     );
     expect((await store.getItem(OTHER, "their-item"))?.completedAt).toBeNull();

@@ -10,6 +10,7 @@ import {
   siblingListEdges,
 } from "../../app-kit/index.ts";
 import type {
+  ActionExtras,
   AppLocation,
   AppServerContext,
   NavigationMap,
@@ -17,6 +18,7 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
+import { isActionExtras } from "../../core/types.ts";
 import { ACCOUNT_APP_ID, NODE } from "./ids.ts";
 
 export type AccountViewDeps = {
@@ -75,8 +77,8 @@ export async function refreshAccount(
   const tipId = nodeId;
   const userId = ctx?.userId ?? null;
 
-  if (extras.action) {
-    return applyAction(deps, tipId, extras, ctx);
+  if (isActionExtras(extras)) {
+    return applyAction(deps, extras, ctx);
   }
 
   if (userId) {
@@ -106,14 +108,14 @@ export async function refreshAccount(
 
 async function applyAction(
   deps: AccountViewDeps,
-  tipId: string,
-  extras: RefreshExtras,
+  extras: RefreshExtras & { action: ActionExtras },
   ctx: AppServerContext | undefined,
 ): Promise<RefreshResult> {
   const sessionId = ctx?.sessionId;
   const identity = ctx?.identity;
+  const triggerId = extras.action.triggerId;
 
-  if (tipId === NODE.codePrompt && sessionId) {
+  if (triggerId === NODE.email && sessionId) {
     if (!identity) {
       return codePromptStatusView(AUTH_FAILED_LABEL);
     }
@@ -129,7 +131,7 @@ async function applyAction(
     return signedOutView(deps, NODE.codePrompt, ctx);
   }
 
-  if (tipId === NODE.auth) {
+  if (triggerId === NODE.code) {
     if (!identity || !sessionId) {
       return authStatusView(deps, "Sign-in is not available.", false);
     }
@@ -142,7 +144,7 @@ async function applyAction(
     return authStatusView(deps, AUTH_FAILED_LABEL, false);
   }
 
-  if (tipId === NODE.signOutStatus) {
+  if (triggerId === NODE.signOut) {
     if (identity && sessionId) {
       await identity.signOut();
       deps.flow.clear(sessionId);

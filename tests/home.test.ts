@@ -13,7 +13,6 @@ import {
   reorderAppNodeId,
   reorderMoveDownId,
   reorderMoveUpId,
-  reorderMovingId,
 } from "../src/apps/home/ids.ts";
 import { createHomeApp, type HomeApp } from "../src/apps/home/index.ts";
 import {
@@ -312,7 +311,7 @@ describe("Home app", () => {
 
     const added = (await refreshApp(app,
       [{ nodeId: addAddedNodeId("gmail"), label: "App added to home screen", location: null }],
-      { action: true },
+      { action: { triggerId: addAppNodeId("gmail") } },
       ctx,
     )) as RefreshResult;
     expect(added.node.label).toBe("App added to home screen");
@@ -338,7 +337,7 @@ describe("Home app", () => {
 
     const removed = (await refreshApp(app,
       [{ nodeId: removeRemovedNodeId("tutorial"), label: "App removed from home screen", location: null }],
-      { action: true },
+      { action: { triggerId: removeAppNodeId("tutorial") } },
       ctx,
     )) as RefreshResult;
     expect(removed.node.label).toBe("App removed from home screen");
@@ -407,8 +406,8 @@ describe("Home app", () => {
     );
 
     const moved = (await refreshApp(app,
-      [{ nodeId: reorderMovingId("bible", "up"), label: "Bible", location: null }],
-      { action: true },
+      [{ nodeId: reorderAppNodeId("bible"), label: "Bible", location: null }],
+      { action: { triggerId: reorderMoveUpId("bible") } },
       ctx,
     )) as RefreshResult;
     expect(moved.node.id).toBe(reorderAppNodeId("bible"));
@@ -447,7 +446,7 @@ describe("Home app", () => {
     const app = homeApp();
     await refreshApp(app,
       [{ nodeId: addAddedNodeId("gmail"), label: ADDED, location: null }],
-      { action: true },
+      { action: { triggerId: addAppNodeId("gmail") } },
       signedInCtx(),
     );
     const ownerHome = (await app.open("/", {}, signedInCtx(packList(), OWNER))) as RefreshResult;

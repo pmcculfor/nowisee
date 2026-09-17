@@ -243,17 +243,17 @@ describe("Gmail app graph", () => {
 
     await refreshApp(gmail,
       [{ nodeId: NODE.composeSubjectPrompt, label: "", location: null }],
-      { action: true, inputText: "ada@example.com" },
+      { action: { triggerId: NODE.composeTo }, inputText: "ada@example.com" },
       ctx,
     );
     await refreshApp(gmail,
       [{ nodeId: NODE.composeBodyPrompt, label: "", location: null }],
-      { action: true, inputText: "Hi" },
+      { action: { triggerId: NODE.composeSubject }, inputText: "Hi" },
       ctx,
     );
     const result = await refreshApp(gmail,
       [{ nodeId: NODE.composeSent, label: "Sending…", location: null }],
-      { action: true, inputText: "Hello Ada" },
+      { action: { triggerId: NODE.composeBody }, inputText: "Hello Ada" },
       ctx,
     );
     expect(sent).toEqual([{ to: "ada@example.com", subject: "Hi", body: "Hello Ada", from: "me@gmail.com" }]);
@@ -271,7 +271,7 @@ describe("Gmail app graph", () => {
     const gmail = app(fakeClient({ send: () => { called += 1; } }));
     const result = await refreshApp(gmail,
       [{ nodeId: NODE.composeSent, label: "Sending…", location: null }],
-      { action: true, inputText: "body" },
+      { action: { triggerId: NODE.composeBody }, inputText: "body" },
       signedIn(oauth),
     );
     expect(called).toBe(0);

@@ -64,7 +64,7 @@ export function refreshBibleView(
 
 function applySearchAction(session: ViewSession, triggerId: string): RefreshResult | null {
   const parsed = parseNodeId(triggerId);
-  if (parsed?.kind === "search-working" || parsed?.kind === "search-input") {
+  if (parsed?.kind === "search-input") {
     return applySearch(session);
   }
   return null;
@@ -81,7 +81,7 @@ function applyAction(session: ViewSession, triggerId: string): ActionContributio
   if (parsed.kind === "option" && parsed.option === "bookmark") {
     return applyBookmarkToggle(session, parsed.ref);
   }
-  if (parsed.kind === "commentary-chunk") {
+  if (parsed.kind === "commentary-work") {
     touchCommentaryRecency(session, parsed.commentaryId);
     return null;
   }

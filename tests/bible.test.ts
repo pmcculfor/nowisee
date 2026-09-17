@@ -362,7 +362,7 @@ describe("Bible app", () => {
     const hits = await refresh(
       instance,
       [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
-      { action: true, inputText: "poor spirit" },
+      { action: { triggerId: searchInputId() }, inputText: "poor spirit" },
       ctx,
     );
     expect(hits.node.label).toBe(
@@ -412,7 +412,7 @@ describe("Bible app", () => {
     const none = await refresh(
       instance,
       [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
-      { action: true, inputText: "xyzabc" },
+      { action: { triggerId: searchInputId() }, inputText: "xyzabc" },
       ctx,
     );
     expect(none.node.label).toBe("No verses matched.");
@@ -420,7 +420,7 @@ describe("Bible app", () => {
     const blank = await refresh(
       instance,
       [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
-      { action: true, inputText: "" },
+      { action: { triggerId: searchInputId() }, inputText: "" },
       ctx,
     );
     expect(blank.node.label).toBe("Enter a search.");
@@ -439,7 +439,7 @@ describe("Bible app", () => {
     const hits = await refresh(
       instance,
       [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
-      { action: true, inputText: "needleword" },
+      { action: { triggerId: searchInputId() }, inputText: "needleword" },
       ctx,
     );
     const queryId = searchQueryId(hits.node.id);
@@ -472,7 +472,7 @@ describe("Bible app", () => {
     const first = await refresh(
       instance,
       [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
-      { action: true, inputText: "needleword" },
+      { action: { triggerId: searchInputId() }, inputText: "needleword" },
       ctx,
     );
     const queryId = searchQueryId(first.node.id);
@@ -802,8 +802,8 @@ describe("Bible app", () => {
     const verseRef = canon(MAT, 5, 3);
     await refresh(
       instance,
-      [{ nodeId: commentaryChunkId(verseRef, JFB, 0), label: "x", location: null }],
-      { action: true },
+      commentaryChunkId(verseRef, JFB, 0),
+      { action: { triggerId: commentaryWorkId(verseRef, JFB) } },
       ctx,
     );
     const option = optionId(verseRef, "commentary");
@@ -862,7 +862,7 @@ describe("Bible app", () => {
     const hits = await refresh(
       instance,
       [{ nodeId: searchWorkingId(), label: "Searching…", location: null }],
-      { action: true, inputText: "heaven" },
+      { action: { triggerId: searchInputId() }, inputText: "heaven" },
       ctx,
     );
     expect(hits.node.label).toContain("heaven and the earth");

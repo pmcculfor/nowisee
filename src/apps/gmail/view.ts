@@ -14,6 +14,7 @@ import {
   splitText,
 } from "../../app-kit/index.ts";
 import type {
+  ActionExtras,
   AppLocation,
   AppServerContext,
   NavigationMap,
@@ -104,29 +105,29 @@ async function applyAction(
   deps: GmailViewDeps,
   ownerId: string,
   tipId: string,
-  extras: RefreshExtras,
+  extras: RefreshExtras & { action: ActionExtras },
   ctx: AppServerContext,
   oauth: OAuthCapability,
 ): Promise<RefreshResult> {
-  const writeId = extras.action?.triggerId ?? tipId;
-  if (writeId === NODE.disconnect || writeId === NODE.disconnectStatus || tipId === NODE.disconnectStatus) {
+  const writeId = extras.action.triggerId;
+  if (writeId === NODE.disconnect) {
     await oauth.disconnect(GMAIL_OAUTH_SLOT);
     await deps.store.replaceInbox(ownerId, []);
     await deps.store.clearDraft(ownerId);
     return disconnectedView(deps);
   }
 
-  if (writeId === NODE.composeTo || tipId === NODE.composeSubjectPrompt) {
+  if (writeId === NODE.composeTo) {
     await deps.store.saveDraft(ownerId, { to: extras.inputText ?? "", sendResult: null });
     return connectedView(deps, ownerId, NODE.composeSubjectPrompt, {}, ctx, oauth);
   }
 
-  if (writeId === NODE.composeSubject || tipId === NODE.composeBodyPrompt) {
+  if (writeId === NODE.composeSubject) {
     await deps.store.saveDraft(ownerId, { subject: extras.inputText ?? "", sendResult: null });
     return connectedView(deps, ownerId, NODE.composeBodyPrompt, {}, ctx, oauth);
   }
 
-  if (writeId === NODE.composeBody || writeId === NODE.composeSent || tipId === NODE.composeSent) {
+  if (writeId === NODE.composeBody) {
     return sendMail(deps, ownerId, extras.inputText ?? "", extras, ctx, oauth);
   }
 

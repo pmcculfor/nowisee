@@ -139,7 +139,7 @@ describe("Weather app graph", () => {
 
     await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
-      { action: true, inputText: "10001" },
+      { action: { triggerId: NODE.setupEdit }, inputText: "10001" },
       signedOutCtx(),
     );
     expect(await store.getZip(USER)).toBe(ZIP);
@@ -181,7 +181,7 @@ describe("Weather app graph", () => {
     const { app, store, client } = harness();
     const result = await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
-      { action: true, inputText: ZIP },
+      { action: { triggerId: NODE.setupEdit }, inputText: ZIP },
       signedIn(),
     );
     expect(await store.getZip(USER)).toBe(ZIP);
@@ -195,7 +195,7 @@ describe("Weather app graph", () => {
     const { app, store, client } = harness();
     await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
-      { action: true, inputText: "90210-1234" },
+      { action: { triggerId: NODE.setupEdit }, inputText: "90210-1234" },
       signedIn(),
     );
     expect(await store.getZip(USER)).toBe(ZIP);
@@ -256,7 +256,7 @@ describe("Weather app graph", () => {
     const { app, store, client } = harness();
     const result = await refreshApp(app,
       [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
-      { action: true, inputText: "abc" },
+      { action: { triggerId: NODE.setupEdit }, inputText: "abc" },
       signedIn(),
     );
     expect(result.node.id).toBe(NODE.notFound);
@@ -278,8 +278,8 @@ describe("Weather app graph", () => {
     });
     const { app, store } = harness({ zipByUser: { [USER]: ZIP }, client });
     const result = await refreshApp(app,
-      [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
-      { action: true, inputText: "00000" },
+      [{ nodeId: NODE.place, label: placeLabel(ZIP), location: null }],
+      { action: { triggerId: NODE.placeEdit }, inputText: "00000" },
       signedIn(),
     );
     expect(result.node.id).toBe(NODE.notFound);
@@ -349,8 +349,8 @@ describe("Weather app graph", () => {
   it("does not save when action is set but typed text is missing", async () => {
     const { app, store } = harness({ zipByUser: { [USER]: ZIP } });
     const result = await refreshApp(app,
-      [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
-      { action: true },
+      [{ nodeId: NODE.place, label: placeLabel(ZIP), location: null }],
+      { action: { triggerId: NODE.placeEdit } },
       signedIn(),
     );
     expect(await store.getZip(USER)).toBe(ZIP);

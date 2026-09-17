@@ -7,6 +7,7 @@ import {
   signedOut,
 } from "../../app-kit/index.ts";
 import type {
+  ActionExtras,
   AppLocation,
   AppServerContext,
   NavigationMap,
@@ -124,13 +125,13 @@ async function applyAction(
   deps: NotesViewDeps,
   ownerId: string,
   tipId: string,
-  extras: RefreshExtras,
+  extras: RefreshExtras & { action: ActionExtras },
 ): Promise<void> {
   if (extras.inputText === undefined) {
     return;
   }
   const text = extras.inputText;
-  const triggerId = extras.action?.triggerId ?? tipId;
+  const triggerId = extras.action.triggerId;
 
   if (triggerId === CREATE_EDIT_NODE_ID) {
     const mintedId = parseNoteNodeId(tipId);

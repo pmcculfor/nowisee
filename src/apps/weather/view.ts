@@ -8,6 +8,7 @@ import {
   signedOut,
 } from "../../app-kit/index.ts";
 import type {
+  ActionExtras,
   AppLocation,
   AppServerContext,
   NavigationMap,
@@ -84,10 +85,10 @@ async function applyAction(
   deps: WeatherViewDeps,
   userId: string,
   tipId: string,
-  extras: RefreshExtras,
+  extras: RefreshExtras & { action: ActionExtras },
 ): Promise<RefreshResult> {
-  const writeId = extras.action?.triggerId ?? tipId;
-  if (writeId !== NODE.zipSave && writeId !== NODE.placeEdit && writeId !== NODE.setupEdit) {
+  const writeId = extras.action.triggerId;
+  if (writeId !== NODE.placeEdit && writeId !== NODE.setupEdit) {
     const zip = await deps.store.getZip(userId);
     if (!zip) {
       return setupView(deps, tipId);
