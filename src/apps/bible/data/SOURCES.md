@@ -1,12 +1,12 @@
 # Bible corpus sources
 
-Downloaded 2026-08-24 into [`raw/`](raw/). **Import sources are committed** (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`) so a production clone can seed `data/apps/bible.db`. Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups with `node scripts/download-bible-sources.mjs`.
+Downloaded 2026-08-24 into [`raw/`](raw/). **Import sources are committed** (VPL `*_vpl.txt`, HelloAO chapter JSON, `tsk/tskxref.txt`, Strong’s XML, `alignments/kjv_strongs.tsv`) so a production clone can seed `data/apps/bible.db`. Zips, USFM, and SWORD backups stay gitignored. Re-fetch backups with `node scripts/download-bible-sources.mjs`.
 
 Do **not** import e-Sword `.bblx`/`.cmtx` blobs (encrypted). Prefer verse-aligned files below.
 
 ## Bibles (66 Protestant books, 31,102 verses each)
 
-All from [eBible.org](https://ebible.org/Scriptures/) (public domain). **Use `_vpl.txt` for import** — one line per verse, `BOOK CHAPTER:VERSE text`, no Strong’s markup. USFM is kept as the tagged original (KJV USFM has `\w word|strong="H1234"\w*`; VPL already flattened that without deleting words).
+All from [eBible.org](https://ebible.org/Scriptures/) (public domain). **Use `_vpl.txt` for import** — one line per verse, `BOOK CHAPTER:VERSE text`, no Strong’s markup. USFM is the tagged original used only to rebuild `kjv_strongs.tsv`; import does not read USFM.
 
 KJV supplied words appear as `[was]`, `[it was]`, etc. Keep the words; strip the brackets only. Do not strip the brackets with a greedy regex (that deleted “was” from Genesis 1:2 and “it was” from 1:4).
 
@@ -46,12 +46,35 @@ Two copies; prefer the plaintext table for import:
 
 1. **JustVerses / ariseshinestudio dump** (best for us): `raw/commentaries/tsk/tskxref.txt`  
    Tab-delimited: `book_key`, `chapter`, `verse`, `sort_order`, **phrase**, **reference_list**. ~63k phrase rows. Public domain.  
-   https://github.com/ariseshinestudio/TSK
+   https://github.com/ariseshinestudio/TSK  
+   The **phrase** column is a short keyword (usually one or two words), not the print TSK clause heading. CrossReferences.org’s KJV TSV uses the same anchors. CrossWire `tsk.zip` is a compressed zCom module, not a plaintext clause dump. Import recovers headings from King James verse text: this keyword through the next; the first heading starts at the verse.
 
 2. **CrossWire SWORD module** (backup, compressed zCom): `raw/sword/tsk.zip`  
    Same work, ThML inside ZIP blocks — needs a SWORD reader. Also `mhc.zip` / `jfb.zip` as backups for Henry/JFB.
+
+TSK `reference_list` abbreviations (`ge`, `joh`, `jude` vs `jud`, …) are a dedicated map in [`catalog.ts`](../catalog.ts). They are **not** URL aliases.
+
+## Dictionaries
+
+### Strong’s Greek (1890)
+
+- **Source:** [morphgnt/strongs-dictionary-xml](https://github.com/morphgnt/strongs-dictionary-xml) v1.9
+- **License:** [CC0](https://creativecommons.org/publicdomain/zero/1.0/)
+- **File:** `raw/dictionaries/strongs-greek.xml`
+
+### Strong’s Hebrew
+
+- **Source:** [openscriptures/HebrewLexicon](https://github.com/openscriptures/HebrewLexicon) `HebrewStrong.xml`
+- **License:** dictionary text is public domain; XML markup is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Credit: Open Scriptures Hebrew Bible Project.
+- **File:** `raw/dictionaries/hebrewstrong.xml`
+
+### King James original-language tokens
+
+eBible KJV USFM tags `\w word|strong="H1234"\w*`. The VPL import has no numbers. A derived table `raw/alignments/kjv_strongs.tsv` (`book`, `chapter`, `verse`, `position`, `strongs`, `english`) is rebuilt from the USFM zip by the download script and is required at import. Consecutive spans that share a Strong’s id collapse; `\add` / notes are dropped; comma-split `strong=` values become two tokens.
 
 ## What we are not using
 
 - e-Sword `.bblx` / `.cmtx` modules (deleted; encrypted).
 - Extra translations or commentaries not listed above.
+- Vine’s Expository Dictionary (US copyright restored under URAA/GATT 1996; CrossWire withdrew the module).
+- The withdrawn CrossWire “Thayer” module.

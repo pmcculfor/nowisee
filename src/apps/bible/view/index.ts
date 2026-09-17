@@ -15,7 +15,9 @@ import {
   addNode,
   slotVerseId,
   touchCommentaryRecency,
+  touchDictionaryRecency,
   touchVersionRecency,
+  touchXrefRecency,
   viewSession,
   withTipLabel,
   activeVersion,
@@ -89,6 +91,14 @@ function applyAction(session: ViewSession, triggerId: string): ActionContributio
   }
   if (parsed.kind === "verse-version-pick") {
     touchVersionRecency(session, parsed.targetVersionId);
+    return null;
+  }
+  if (parsed.kind === "xref-work") {
+    touchXrefRecency(session, parsed.workId);
+    return null;
+  }
+  if (parsed.kind === "dictionary-work") {
+    touchDictionaryRecency(session, parsed.workId);
     return null;
   }
   return null;

@@ -24,7 +24,7 @@ export type VersionRecord = {
   readonly vplPath: string;
 };
 
-export type CommentaryFormat = "helloao-chapter-json" | "tsk-xref-table";
+export type CommentaryFormat = "helloao-chapter-json";
 
 export type CommentaryRecord = {
   readonly id: string;
@@ -45,9 +45,30 @@ export type VerseOption =
   | { readonly type: "copy" }
   | { readonly type: "bookmark" }
   | { readonly type: "versions" }
-  | { readonly type: "commentary" };
+  | { readonly type: "commentary" }
+  | { readonly type: "cross-references" }
+  | { readonly type: "dictionaries" };
 
-export type RecencyWorkKind = "version" | "commentary";
+export type VerseOptionType = VerseOption["type"];
+
+export type RecencyWorkKind = "version" | "commentary" | "xref" | "dictionary";
+
+export type XrefRecord = {
+  readonly id: string;
+  readonly label: string;
+  readonly sortOrder: number;
+  readonly format: "tsk-xref-table";
+  readonly sourcePath: string;
+};
+
+export type DictionaryRecord = {
+  readonly id: string;
+  readonly label: string;
+  readonly sortOrder: number;
+  readonly format: "strongs-xml";
+  readonly greekPath: string;
+  readonly hebrewPath: string;
+};
 
 export type SearchPolicy = {
   readonly maxHits: number;
@@ -55,11 +76,17 @@ export type SearchPolicy = {
   readonly siblingRadius: number;
 };
 
+export type SiblingWindowPolicy = {
+  /** Prev/next window returned in warm + map. Not a core prefetch radius. */
+  readonly siblingRadius: number;
+};
+
 export type VerseSequence =
   | { readonly type: "chapter"; readonly bookId: number; readonly chapter: number }
   | { readonly type: "context"; readonly bookId: number; readonly chapter: number }
   | { readonly type: "bookmarks" }
-  | { readonly type: "search"; readonly queryId: number };
+  | { readonly type: "search"; readonly queryId: number }
+  | { readonly type: "xref"; readonly phraseId: number };
 
 export function chapterSeq(bookId: number, chapter: number): VerseSequence {
   return { type: "chapter", bookId, chapter };
@@ -69,7 +96,15 @@ export function contextSeq(bookId: number, chapter: number): VerseSequence {
   return { type: "context", bookId, chapter };
 }
 
+export function xrefSeq(phraseId: number): VerseSequence {
+  return { type: "xref", phraseId };
+}
+
 export const SEARCH_POLICY: SearchPolicy = { maxHits: 1000, siblingRadius: 24 };
+
+export const XREF_POLICY: SiblingWindowPolicy = { siblingRadius: 24 };
+
+export const DICTIONARY_POLICY: SiblingWindowPolicy = { siblingRadius: 24 };
 
 export const TESTAMENT_LABELS: Readonly<Record<string, string>> = {
   OT: "Old Testament",
@@ -87,6 +122,8 @@ export const ROOT_ITEMS: readonly RootItem[] = [
 export const VERSE_OPTIONS: readonly VerseOption[] = [
   { type: "versions" },
   { type: "commentary" },
+  { type: "cross-references" },
+  { type: "dictionaries" },
   { type: "bookmark" },
   { type: "copy" },
 ];
@@ -128,27 +165,111 @@ export const VERSION_RECORDS: readonly VersionRecord[] = [
 
 export const COMMENTARY_RECORDS: readonly CommentaryRecord[] = [
   {
-    id: "tsk",
-    label: "Treasury of Scripture Knowledge",
-    sortOrder: 0,
-    format: "tsk-xref-table",
-    sourcePath: "tsk/tskxref.txt",
-  },
-  {
     id: "henry",
     label: "Matthew Henry",
-    sortOrder: 1,
+    sortOrder: 0,
     format: "helloao-chapter-json",
     sourcePath: "matthew-henry",
   },
   {
     id: "jfb",
     label: "Jamieson, Fausset and Brown",
-    sortOrder: 2,
+    sortOrder: 1,
     format: "helloao-chapter-json",
     sourcePath: "jamieson-fausset-brown",
   },
 ];
+
+export const XREF_RECORDS: readonly XrefRecord[] = [
+  {
+    id: "tsk",
+    label: "Treasury of Scripture Knowledge",
+    sortOrder: 0,
+    format: "tsk-xref-table",
+    sourcePath: "tsk/tskxref.txt",
+  },
+];
+
+export const DICTIONARY_RECORDS: readonly DictionaryRecord[] = [
+  {
+    id: "strongs",
+    label: "Strong's Concordance (King James wording)",
+    sortOrder: 0,
+    format: "strongs-xml",
+    greekPath: "dictionaries/strongs-greek.xml",
+    hebrewPath: "dictionaries/hebrewstrong.xml",
+  },
+];
+
+/** TSK `reference_list` book codes. Not URL aliases — `/ge` must not become Genesis. */
+export const TSK_ABBREVS: Readonly<Record<string, string>> = {
+  ge: "GEN",
+  ex: "EXO",
+  le: "LEV",
+  nu: "NUM",
+  de: "DEU",
+  jos: "JOS",
+  jud: "JDG",
+  ru: "RUT",
+  "1sa": "1SA",
+  "2sa": "2SA",
+  "1ki": "1KI",
+  "2ki": "2KI",
+  "1ch": "1CH",
+  "2ch": "2CH",
+  ezr: "EZR",
+  ne: "NEH",
+  es: "EST",
+  job: "JOB",
+  ps: "PSA",
+  pr: "PRO",
+  ec: "ECC",
+  so: "SNG",
+  isa: "ISA",
+  jer: "JER",
+  la: "LAM",
+  eze: "EZK",
+  da: "DAN",
+  ho: "HOS",
+  joe: "JOL",
+  am: "AMO",
+  ob: "OBA",
+  jon: "JON",
+  mic: "MIC",
+  na: "NAM",
+  hab: "HAB",
+  zep: "ZEP",
+  hag: "HAG",
+  zec: "ZEC",
+  mal: "MAL",
+  mt: "MAT",
+  mr: "MRK",
+  lu: "LUK",
+  joh: "JHN",
+  ac: "ACT",
+  ro: "ROM",
+  "1co": "1CO",
+  "2co": "2CO",
+  ga: "GAL",
+  eph: "EPH",
+  php: "PHP",
+  col: "COL",
+  "1th": "1TH",
+  "2th": "2TH",
+  "1ti": "1TI",
+  "2ti": "2TI",
+  tit: "TIT",
+  phm: "PHM",
+  heb: "HEB",
+  jas: "JAS",
+  "1pe": "1PE",
+  "2pe": "2PE",
+  "1jo": "1JN",
+  "2jo": "2JN",
+  "3jo": "3JN",
+  jude: "JUD",
+  re: "REV",
+};
 
 /** Protestant 66. `sort` matches TSK `book_key` (1-based). */
 export const CANON_BOOKS: readonly CanonBook[] = [
@@ -282,6 +403,19 @@ export function catalogCommentaryId(record: CommentaryRecord): number {
   return record.sortOrder + 1;
 }
 
+export function catalogXrefWorkId(record: XrefRecord): number {
+  return record.sortOrder + 1;
+}
+
+export function catalogDictionaryWorkId(record: DictionaryRecord): number {
+  return record.sortOrder + 1;
+}
+
+export function tskBookByAbbrev(abbrev: string): CanonBook | undefined {
+  const id = TSK_ABBREVS[abbrev.trim().toLowerCase()];
+  return id ? getCanonBook(id) : undefined;
+}
+
 export function testamentLabel(id: string): string {
   return TESTAMENT_LABELS[id] ?? id;
 }
@@ -296,5 +430,9 @@ export function optionLabel(option: VerseOption["type"]): string {
       return "Versions";
     case "commentary":
       return "Commentary";
+    case "cross-references":
+      return "Cross-references";
+    case "dictionaries":
+      return "Dictionaries";
   }
 }

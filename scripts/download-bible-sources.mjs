@@ -1,6 +1,7 @@
 /**
- * Download public-domain verse-aligned Bibles (eBible USFM + VPL) and
- * commentaries (HelloAO JSON + TSK plaintext xref + CrossWire SWORD zips).
+ * Download public-domain verse-aligned Bibles (eBible USFM + VPL),
+ * commentaries (HelloAO JSON + TSK plaintext xref + CrossWire SWORD zips),
+ * and Strong's XML. Rebuilds kjv_strongs.tsv from KJV USFM.
  * Matthew Henry Song of Solomon is filled from LyteWord markdown (HelloAO omits it).
  * Import texts the importer reads live under src/apps/bible/data/raw/ (committed).
  * Zips, USFM, and SWORD backups stay gitignored; this script re-fetches those.
@@ -33,6 +34,10 @@ const SWORD = [
 
 const TSK_XREF = "https://raw.githubusercontent.com/ariseshinestudio/TSK/main/tskxref.txt";
 const TSK_README = "https://raw.githubusercontent.com/ariseshinestudio/TSK/main/readme.txt";
+const STRONGS_GREEK =
+  "https://raw.githubusercontent.com/morphgnt/strongs-dictionary-xml/master/strongsgreek.xml";
+const STRONGS_HEBREW =
+  "https://raw.githubusercontent.com/openscriptures/HebrewLexicon/master/HebrewStrong.xml";
 const HENRY_SNG_BASE =
   "https://raw.githubusercontent.com/lyteword/mhenry-complete/main/volume-3/song-of-solomon";
 const SUPER = Object.fromEntries([..."⁰¹²³⁴⁵⁶⁷⁸⁹"].map((ch, i) => [ch, String(i)]));
@@ -277,4 +282,23 @@ if (what === "all" || what === "commentaries") {
   await fillHenrySongOfSolomon();
 }
 if (what === "sng") await fillHenrySongOfSolomon();
+if (what === "all" || what === "dictionaries") await downloadDictionaries();
+if (what === "all" || what === "bibles" || what === "alignments") {
+  await buildKjvStrongsTsv();
+}
 console.log("done");
+
+async function downloadDictionaries() {
+  const dir = join(RAW, "dictionaries");
+  await mkdir(dir, { recursive: true });
+  await download(STRONGS_GREEK, join(dir, "strongs-greek.xml"));
+  await download(STRONGS_HEBREW, join(dir, "hebrewstrong.xml"));
+}
+
+async function buildKjvStrongsTsv() {
+  const script = join(ROOT, "scripts/build-kjv-strongs.ts");
+  console.log("build", "kjv_strongs.tsv");
+  execFileSync(process.execPath, ["--experimental-strip-types", script], {
+    stdio: "inherit",
+  });
+}

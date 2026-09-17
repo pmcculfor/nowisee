@@ -10,10 +10,17 @@ import {
 import { ensureCatalog, parseHelloAoChapter, parseTsk, parseVpl, stripSuppliedWordBrackets } from "../src/apps/bible/import.ts";
 import {
   COMMENTARY_RECORDS,
+  DICTIONARY_RECORDS,
   SEARCH_POLICY,
+  TSK_ABBREVS,
   VERSION_RECORDS,
+  XREF_RECORDS,
   catalogCommentaryId,
+  catalogDictionaryWorkId,
   catalogVersionId,
+  catalogXrefWorkId,
+  contextSeq,
+  xrefSeq,
   getCanonBook,
 } from "../src/apps/bible/catalog.ts";
 import {
@@ -23,6 +30,8 @@ import {
   chapterId,
   commentaryChunkId,
   commentaryWorkId,
+  dictionaryWordId,
+  dictionaryWorkId,
   optionId,
   searchId,
   searchInputId,
@@ -34,7 +43,16 @@ import {
   verseVersionPickId,
   versionPickId,
   versionsHeadingId,
+  xrefPhraseId,
+  xrefWorkId,
 } from "../src/apps/bible/ids.ts";
+import { expandTskHeadings, parseTskCitationRanges } from "../src/apps/bible/tskCitations.ts";
+import { parseHebrewStrongXml, parseStrongsGreekXml } from "../src/apps/bible/strongsXml.ts";
+import {
+  collapseSpans,
+  parseUsfmBook,
+  parseUsfmVerseSpans,
+} from "../src/apps/bible/usfmTokens.ts";
 import type { BibleRef, BibleSeed, CanonRef } from "../src/apps/bible/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { nodeIdOf, wireAction } from "./helpers/refreshCall.ts";
@@ -49,6 +67,8 @@ const MRK = getCanonBook("MRK")!.sort;
 const PSA = getCanonBook("PSA")!.sort;
 const HENRY = catalogCommentaryId(COMMENTARY_RECORDS.find((row) => row.id === "henry")!);
 const JFB = catalogCommentaryId(COMMENTARY_RECORDS.find((row) => row.id === "jfb")!);
+const TSK = catalogXrefWorkId(XREF_RECORDS[0]!);
+const STRONGS = catalogDictionaryWorkId(DICTIONARY_RECORDS[0]!);
 
 function ref(bookId: number, chapter: number, verse: number, versionId = KJV): BibleRef {
   return { versionId, bookId, chapter, verse };
@@ -279,6 +299,31 @@ describe("Bible app", () => {
       "Matthew 5:3. Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
     );
     expect(first.navigationMap[first.node.id]?.next).toBeUndefined();
+    const contextId = verseNodeId(contextSeq(MAT, 5), verseRef);
+    expect(first.navigationMap[first.node.id]?.enter).toEqual({
+      kind: "node",
+      toNodeId: contextId,
+      stackBehavior: "push",
+    });
+    const context = await refresh(
+      instance,
+      [
+        { nodeId: first.node.id, label: first.node.label, location: null },
+        { nodeId: contextId, label: "x", location: null },
+      ],
+      {},
+      ctx,
+    );
+    expect(context.node.label).toBe(
+      "3 (context). Blessed are the poor in spirit: for theirs is the kingdom of heaven.",
+    );
+    expect(context.navigationMap[contextId]?.back).toEqual({ kind: "node", stackBehavior: "pop" });
+    expect(context.navigationMap[contextId]?.enter).toEqual({
+      kind: "node",
+      toNodeId: optionId(verseRef, "versions", contextSeq(MAT, 5)),
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
+    });
 
     const removed = await refresh(
       instance,
@@ -770,7 +815,7 @@ describe("Bible app", () => {
     });
   });
 
-  it("bookmark verse version switch stays on the bookmark verse", async () => {
+  it("bookmark list enter is a context verse; version switch stays on that context", async () => {
     const instance = bible();
     const ctx = signedIn();
     const verseRef = canon(GEN, 1, 1);
@@ -780,29 +825,35 @@ describe("Bible app", () => {
       { action: true },
       ctx,
     );
-    const pick = verseVersionPickId(verseRef, ASV, { type: "bookmarks" });
-    const verseId = verseNodeId({ type: "bookmarks" }, verseRef);
+    const hitId = verseNodeId({ type: "bookmarks" }, verseRef);
+    const contextId = verseNodeId(contextSeq(GEN, 1), verseRef);
+    const hit = await refresh(instance, [{ nodeId: hitId, label: "x", location: null }], {}, ctx);
+    expect(hit.node.id).toBe(hitId);
+    expect(hit.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
+    expect(hit.navigationMap[hitId]?.enter).toEqual({
+      kind: "node",
+      toNodeId: contextId,
+      stackBehavior: "push",
+    });
+    const pick = verseVersionPickId(verseRef, ASV, contextSeq(GEN, 1));
     const landed = await refresh(
       instance,
-      verseId,
+      contextId,
       { action: { triggerId: pick } },
       ctx,
     );
-    expect(landed.node.id).toBe(verseId);
+    expect(landed.node.id).toBe(contextId);
     expect(landed.node.label).toContain("heavens and the earth");
-    expect(landed.location).toEqual({ appId: "bible", path: "/bookmarks/Genesis/1/1" });
-    expect(landed.navigationMap[landed.node.id]?.back).toEqual({
-      kind: "node",
-      stackBehavior: "pop",
-    });
+    expect(landed.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
     expect(landed.navigationMap[landed.node.id]?.enter).toEqual({
       kind: "node",
-      toNodeId: optionId(verseRef, "versions", { type: "bookmarks" }),
+      toNodeId: optionId(verseRef, "versions", contextSeq(GEN, 1)),
       stackBehavior: "pushTransient",
       frame: "verse-menu",
     });
     const deep = await instance.open("/bookmarks/Genesis/1/1", {}, ctx);
-    expect(deep.node.id).toBe(landed.node.id);
+    expect(deep.node.id).toBe(hitId);
+    expect(deep.node.label).toContain("heavens and the earth");
   });
 
   it("search hits stay on the searched version after an active-version change", async () => {
@@ -848,6 +899,14 @@ describe("Bible app", () => {
 });
 
 describe("Bible store", () => {
+  it("import fails when a committed source file is missing", () => {
+    const db = openBibleDatabase(":memory:");
+    expect(() => ensureCatalog(db, { rawDir: "missing-bible-raw" })).toThrow(
+      /Bible import: missing version kjv/,
+    );
+    db.close();
+  });
+
   it("keys verse text by version so translations share canon verse ids", () => {
     const db = openBibleDatabase(":memory:");
     ensureCatalog(db, { seed: fixtureBible });
@@ -986,5 +1045,278 @@ describe("Bible importers", () => {
   it("maps TSK numeric book_key through canon sort", () => {
     const rows = parseTsk("40\t5\t3\t1\tpoor\tisa 66:2; mt 11:5\n");
     expect(rows[0]).toMatchObject({ bookId: "MAT", chapter: 5, verse: 3, phrase: "poor" });
+  });
+
+  it("keeps TSK out of commentary and walks expanded xref verses", async () => {
+    const instance = bible();
+    const verseRef = canon(MAT, 5, 3);
+    const commentary = optionId(verseRef, "commentary");
+    const menu = await refresh(instance, [{ nodeId: commentary, label: "Commentary", location: null }]);
+    expect(menu.navigationMap[commentary]?.enter).toEqual({
+      kind: "node",
+      toNodeId: commentaryWorkId(verseRef, HENRY),
+      stackBehavior: "push",
+    });
+    expect(menu.navigationMap[commentary]?.next).toEqual({
+      kind: "node",
+      toNodeId: optionId(verseRef, "cross-references"),
+      stackBehavior: "replace",
+    });
+    const work = await refresh(instance, [
+      { nodeId: commentaryWorkId(verseRef, HENRY), label: "Matthew Henry", location: null },
+    ]);
+    expect(work.warm.some((node) => node.label.includes("Treasury"))).toBe(false);
+
+    const xrefOption = optionId(verseRef, "cross-references");
+    const xrefMenu = await refresh(
+      instance,
+      [{ nodeId: xrefOption, label: "Cross-references", location: null }],
+    );
+    const xrefWork = xrefWorkId(verseRef, TSK);
+    expect(xrefMenu.navigationMap[xrefOption]?.enter).toEqual({
+      kind: "node",
+      toNodeId: xrefWork,
+      stackBehavior: "push",
+    });
+    const xrefWorks = await refresh(instance, [{ nodeId: xrefWork, label: "x", location: null }]);
+    expect(xrefWorks.node.label).toBe("Treasury of Scripture Knowledge");
+    expect(xrefWorks.navigationMap[xrefWork]?.next).toBeUndefined();
+    const firstPhrase = xrefPhraseId(verseRef, TSK, 1);
+    expect(xrefWorks.navigationMap[xrefWork]?.enter).toEqual({
+      kind: "node",
+      toNodeId: firstPhrase,
+      stackBehavior: "push",
+      action: true,
+    });
+    const phrases = await refresh(instance, [
+      { nodeId: xrefWork, label: "x", location: null },
+      { nodeId: firstPhrase, label: "x", location: null },
+    ]);
+    expect(phrases.node.label).toBe("Blessed are the poor in spirit:");
+    const secondPhrase = xrefPhraseId(verseRef, TSK, 2);
+    expect(phrases.navigationMap[firstPhrase]?.next).toEqual({
+      kind: "node",
+      toNodeId: secondPhrase,
+      stackBehavior: "replace",
+    });
+    expect(phrases.navigationMap[firstPhrase]?.prev).toBeUndefined();
+    expect(phrases.navigationMap[secondPhrase]?.next).toBeUndefined();
+    expect(phrases.warm.find((node) => node.id === secondPhrase)?.label).toBe(
+      "for theirs is the kingdom of heaven.",
+    );
+    const firstRef = verseNodeId(xrefSeq(1), canon(MAT, 5, 5));
+    const secondRef = verseNodeId(xrefSeq(1), canon(MAT, 5, 6));
+    const thirdRef = verseNodeId(xrefSeq(1), canon(MAT, 5, 7));
+    expect(phrases.navigationMap[firstPhrase]?.enter).toEqual({
+      kind: "node",
+      toNodeId: firstRef,
+      stackBehavior: "push",
+    });
+    const refs = await refresh(instance, [{ nodeId: firstRef, label: "x", location: null }]);
+    expect(refs.node.label).toMatch(/^Matthew 5:5\./);
+    expect(refs.location).toEqual({ appId: "bible", path: "/Matthew/5/3" });
+    expect(refs.navigationMap[firstRef]?.next).toEqual({
+      kind: "node",
+      toNodeId: secondRef,
+      stackBehavior: "replace",
+    });
+    expect(refs.navigationMap[secondRef]?.next).toEqual({
+      kind: "node",
+      toNodeId: thirdRef,
+      stackBehavior: "replace",
+    });
+    const related = verseNodeId(contextSeq(MAT, 5), canon(MAT, 5, 5));
+    expect(refs.navigationMap[firstRef]?.enter).toEqual({
+      kind: "node",
+      toNodeId: related,
+      stackBehavior: "push",
+    });
+    const context = await refresh(instance, [
+      { nodeId: firstRef, label: "x", location: null },
+      { nodeId: related, label: "x", location: null },
+    ]);
+    expect(context.node.label).toMatch(/^5 \(context\)\./);
+    expect(context.navigationMap[related]?.enter).toEqual({
+      kind: "node",
+      toNodeId: optionId(canon(MAT, 5, 5), "versions", contextSeq(MAT, 5)),
+      stackBehavior: "pushTransient",
+      frame: "verse-menu",
+    });
+    const nestedOption = optionId(canon(MAT, 5, 5), "cross-references", contextSeq(MAT, 5));
+    const nestedMenu = await refresh(instance, [{ nodeId: nestedOption, label: "Cross-references", location: null }]);
+    const nestedWork = xrefWorkId(canon(MAT, 5, 5), TSK);
+    expect(nestedMenu.navigationMap[nestedOption]?.enter?.toNodeId).toBe(nestedWork);
+    const nestedWorks = await refresh(instance, [{ nodeId: nestedWork, label: "x", location: null }]);
+    const meek = xrefPhraseId(canon(MAT, 5, 5), TSK, 3);
+    expect(nestedWorks.navigationMap[nestedWork]?.enter?.toNodeId).toBe(meek);
+  });
+
+  it("dictionary walk is one original-language word with the full definition", async () => {
+    const instance = bible();
+    const verseRef = canon(GEN, 1, 1);
+    const option = optionId(verseRef, "dictionaries");
+    const menu = await refresh(instance, [{ nodeId: option, label: "Dictionaries", location: null }]);
+    const work = dictionaryWorkId(verseRef, STRONGS);
+    expect(menu.navigationMap[option]?.enter).toEqual({
+      kind: "node",
+      toNodeId: work,
+      stackBehavior: "push",
+    });
+    const works = await refresh(instance, [{ nodeId: work, label: "x", location: null }]);
+    expect(works.node.label).toBe("Strong's Concordance (King James wording)");
+    expect(works.navigationMap[work]?.next).toBeUndefined();
+    const first = dictionaryWordId(verseRef, STRONGS, 0);
+    const second = dictionaryWordId(verseRef, STRONGS, 1);
+    expect(works.navigationMap[work]?.enter).toEqual({
+      kind: "node",
+      toNodeId: first,
+      stackBehavior: "push",
+      action: true,
+    });
+    const word = await refresh(instance, [
+      { nodeId: work, label: "x", location: null },
+      { nodeId: first, label: "x", location: null },
+    ]);
+    expect(word.node.label).toBe(
+      "In the beginning. reshith. H7225. the first, in place, time, order or rank",
+    );
+    expect(word.navigationMap[first]?.enter).toBeUndefined();
+    expect(word.navigationMap[first]?.prev).toBeUndefined();
+    expect(word.navigationMap[first]?.next).toEqual({
+      kind: "node",
+      toNodeId: second,
+      stackBehavior: "replace",
+    });
+    expect(word.navigationMap[second]?.next).toBeUndefined();
+    const emptyVerse = optionId(canon(MAT, 5, 3), "dictionaries");
+    const emptyMenu = await refresh(
+      instance,
+      [{ nodeId: emptyVerse, label: "Dictionaries", location: null }],
+    );
+    const emptyWork = dictionaryWorkId(canon(MAT, 5, 3), STRONGS);
+    expect(emptyMenu.navigationMap[emptyVerse]?.enter?.toNodeId).toBe(emptyWork);
+    const emptyWorks = await refresh(instance, [{ nodeId: emptyWork, label: "x", location: null }]);
+    expect(emptyWorks.navigationMap[emptyWork]?.enter?.toNodeId).toMatch(/^bible:de:/);
+  });
+});
+
+describe("Bible study parsers", () => {
+  it("expands TSK citation strings into inclusive verse ranges", () => {
+    expect(parseTskCitationRanges("isa 66:2; mt 11:5")).toEqual([
+      { bookId: "ISA", startChapter: 66, startVerse: 2, endChapter: 66, endVerse: 2 },
+      { bookId: "MAT", startChapter: 11, startVerse: 5, endChapter: 11, endVerse: 5 },
+    ]);
+    expect(parseTskCitationRanges("joh 1:1-3")).toEqual([
+      { bookId: "JHN", startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 3 },
+    ]);
+    expect(parseTskCitationRanges("ps 33:6,9")).toEqual([
+      { bookId: "PSA", startChapter: 33, startVerse: 6, endChapter: 33, endVerse: 6 },
+      { bookId: "PSA", startChapter: 33, startVerse: 9, endChapter: 33, endVerse: 9 },
+    ]);
+    expect(parseTskCitationRanges("ps 104:3,5-9")).toEqual([
+      { bookId: "PSA", startChapter: 104, startVerse: 3, endChapter: 104, endVerse: 3 },
+      { bookId: "PSA", startChapter: 104, startVerse: 5, endChapter: 104, endVerse: 9 },
+    ]);
+    expect(parseTskCitationRanges("mt 5:1-7:29")).toEqual([
+      { bookId: "MAT", startChapter: 5, startVerse: 1, endChapter: 7, endVerse: 29 },
+    ]);
+    expect(parseTskCitationRanges("le 12,1-13:59")).toEqual([
+      { bookId: "LEV", startChapter: 12, startVerse: 1, endChapter: 13, endVerse: 59 },
+    ]);
+    expect(parseTskCitationRanges("jude 1:4")).toEqual([
+      { bookId: "JUD", startChapter: 1, startVerse: 4, endChapter: 1, endVerse: 4 },
+    ]);
+    expect(parseTskCitationRanges("jud 1:4")).toEqual([
+      { bookId: "JDG", startChapter: 1, startVerse: 4, endChapter: 1, endVerse: 4 },
+    ]);
+    expect(parseTskCitationRanges("xx 1:1; ge 1:1")).toEqual([
+      { bookId: "GEN", startChapter: 1, startVerse: 1, endChapter: 1, endVerse: 1 },
+    ]);
+    expect(
+      expandTskHeadings("Blessed are the poor in spirit: for theirs is the kingdom of heaven.", [
+        "poor",
+        "for",
+      ]),
+    ).toEqual(["Blessed are the poor in spirit:", "for theirs is the kingdom of heaven."]);
+    expect(
+      expandTskHeadings(
+        "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+        ["God", "gave", "that whosoever"],
+      ),
+    ).toEqual([
+      "For God so loved the world, that he",
+      "gave his only begotten Son,",
+      "that whosoever believeth in him should not perish, but have everlasting life.",
+    ]);
+  });
+
+  it("maps every TSK readme abbreviation onto a canon book", () => {
+    expect(Object.keys(TSK_ABBREVS)).toHaveLength(66);
+    for (const [abbrev, id] of Object.entries(TSK_ABBREVS)) {
+      expect(getCanonBook(id)?.id, abbrev).toBe(id);
+    }
+    expect(TSK_ABBREVS.ge).toBe("GEN");
+    expect(TSK_ABBREVS.jud).toBe("JDG");
+    expect(TSK_ABBREVS.jude).toBe("JUD");
+  });
+
+  it("collapses consecutive USFM spans that share a Strong's number", () => {
+    const genesis = parseUsfmVerseSpans(
+      `\\w In|strong="H7225"\\w* \\w the|strong="H7225"\\w* \\w beginning|strong="H7225"\\w*`,
+    );
+    expect(collapseSpans(genesis)).toEqual([
+      { strongs: "H7225", english: "In the beginning" },
+    ]);
+    const supplied = parseUsfmVerseSpans(
+      `\\w And|strong="H430"\\w* the earth \\add was\\add* without form`,
+    );
+    expect(collapseSpans(supplied)).toEqual([{ strongs: "H430", english: "And" }]);
+    const doubled = parseUsfmVerseSpans(`\\w holy|strong="H6944,H6944"\\w*`);
+    expect(collapseSpans(doubled)).toEqual([
+      { strongs: "H6944", english: "holy" },
+      { strongs: "H6944", english: "" },
+    ]);
+    const john = parseUsfmBook(
+      `\\id JHN\n\\c 3\n\\v 16 \\w loved|strong="G25"\\w* the world\n`,
+    );
+    expect(john).toEqual([
+      { bookId: "JHN", chapter: 3, verse: 16, position: 0, strongs: "G25", english: "loved" },
+    ]);
+    expect(
+      collapseSpans(parseUsfmVerseSpans(`\\w beginning|strong="H7225"\\w* \\w God|strong="H0430"\\w*`)),
+    ).toEqual([
+      { strongs: "H7225", english: "beginning" },
+      { strongs: "H430", english: "God" },
+    ]);
+  });
+
+  it("parses Strong's XML fixtures and rejects entries without a body", () => {
+    const greek = parseStrongsGreekXml(`<entry strongs="00025">
+ <strongs>25</strongs>   <greek BETA="A)GAPA/W" unicode="ἀγαπάω" translit="agapáō"/>
+ <strongs_derivation>perhaps from <greek BETA="A)/GAN" unicode="ἄγαν" translit="ágan"/> (much)</strongs_derivation>
+ <strongs_def> to love</strongs_def><kjv_def>:--love.</kjv_def>
+</entry><entry strongs="00000"><greek unicode="x" translit="x"/></entry>`);
+    expect(greek).toEqual([
+      {
+        strongs: "G25",
+        lemma: "ἀγαπάω",
+        translit: "agapáō",
+        body: "perhaps from ἄγαν (much) to love love.",
+      },
+    ]);
+    const hebrew = parseHebrewStrongXml(`<entry id="H7225">
+		<w pron="ray-sheeth'" xlit="rêʼshîyth">רֵאשִׁית</w>
+		<source>from 7218;</source>
+		<meaning>the first</meaning>
+		<usage>beginning.</usage>
+	</entry><entry id="H0000"><w>x</w></entry>`);
+    expect(hebrew).toEqual([
+      {
+        strongs: "H7225",
+        lemma: "רֵאשִׁית",
+        translit: "ray-sheeth'",
+        body: "from 7218; the first beginning.",
+      },
+    ]);
   });
 });

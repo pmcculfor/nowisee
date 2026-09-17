@@ -52,7 +52,7 @@ These items come from original §4. They are safe to delete only with the listed
 
 ### Seams (do not delete as dead)
 
-These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST /oauth/:appId/events`; the Version `license` field; `commentary_xrefs` loaded and not shown in `commentaryLabel`; Keyboard constructor bindings (user remapping later reconstructs Keyboard or adds a setter); lockbox `missing-key` (thrown when a blob’s `keyId` is not in the env ring — multi-key rotation still deferred).
+These exist on purpose: `announce` / `requestRefresh` (see PREPAREDNESS); `POST /oauth/:appId/events`; the Version `license` field; Keyboard constructor bindings (user remapping later reconstructs Keyboard or adds a setter); lockbox `missing-key` (thrown when a blob’s `keyId` is not in the env ring — multi-key rotation still deferred).
 
 ### Orphan / duplicate
 
@@ -87,7 +87,6 @@ These are still open. They come from original §6.
 | Pri | Issue | Where | Fix direction |
 |-----|--------|--------|----------------|
 | Low | API catch-all body `"Invalid JSON"` for any non-size error | `server/index.ts` / Vite `handleApi` | Distinct unexpected-failure label |
-| Low | Commentary xrefs loaded, not shown in the label | Bible `commentaryLabel` | Append or stop loading |
 | Low | NavPads hidden only by CSS (`data-input-open`) | Display / pads | Pads should ignore input tips in code too |
 
 A few silences are specified, not regressions: failed open and warm-hit revalidation stay last-good with `console.warn`; a missing map edge is a silent no-op; Gmail new mail waits for the next intent because `requestRefresh` is not provided. Warm-miss failure speaks recovery copy.

@@ -75,6 +75,14 @@ export function verseLocation(appId: string, store: BibleStore, seq: VerseSequen
   if (seq.type === "search") {
     return { appId, path: "/search" };
   }
+  if (seq.type === "xref") {
+    const phrase = store.getXrefPhrase(seq.phraseId);
+    const source = phrase ? store.getCanonRef(phrase.verseId) : undefined;
+    if (!source) {
+      throw new Error(`Bible view: missing xref phrase ${seq.phraseId}`);
+    }
+    return { appId, path: canonPath(store, source) };
+  }
   return { appId, path: canonPath(store, ref) };
 }
 
@@ -86,12 +94,53 @@ export function listedCommentaries(session: ViewSession) {
   return session.deps.store.listCommentaries(session.userId, session.sessionId);
 }
 
+export function listedXrefWorks(session: ViewSession) {
+  return session.deps.store.listXrefWorks(session.userId, session.sessionId);
+}
+
+export function listedDictionaryWorks(session: ViewSession) {
+  return session.deps.store.listDictionaryWorks(session.userId, session.sessionId);
+}
+
 export function touchVersionRecency(session: ViewSession, versionId: number): void {
   session.deps.store.touchVersionRecency(session.userId, session.sessionId, versionId);
 }
 
 export function touchCommentaryRecency(session: ViewSession, commentaryId: number): void {
   session.deps.store.touchCommentaryRecency(session.userId, session.sessionId, commentaryId);
+}
+
+export function touchXrefRecency(session: ViewSession, xrefWorkId: number): void {
+  session.deps.store.touchXrefRecency(session.userId, session.sessionId, xrefWorkId);
+}
+
+export function touchDictionaryRecency(session: ViewSession, dictionaryWorkId: number): void {
+  session.deps.store.touchDictionaryRecency(session.userId, session.sessionId, dictionaryWorkId);
+}
+
+export function siblingWindow(
+  ids: readonly string[],
+  focusId: string,
+  radius: number,
+): { readonly index: number; readonly radius: number } | undefined {
+  const index = ids.indexOf(focusId);
+  if (index < 0) {
+    return undefined;
+  }
+  return { index, radius };
+}
+
+export function addWindowedNodes(
+  payloads: Map<string, NodePayload>,
+  ids: readonly string[],
+  around: { readonly index: number; readonly radius: number } | undefined,
+  payloadFor: (id: string, index: number) => NodePayload,
+): void {
+  const start = around ? Math.max(0, around.index - around.radius) : 0;
+  const end = around ? Math.min(ids.length, around.index + around.radius + 1) : ids.length;
+  for (let i = start; i < end; i++) {
+    addNode(payloads, payloadFor(ids[i]!, i));
+  }
 }
 
 export function slotVerseId(store: BibleStore, ref: CanonRef): number | null {
