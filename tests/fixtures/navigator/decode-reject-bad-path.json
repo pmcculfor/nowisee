@@ -1,0 +1,12 @@
+{
+  "id": "decode-reject-bad-path",
+  "decode": {
+    "accept": false,
+    "payload": {
+      "navigationMap": {},
+      "warm": [{ "id": "root", "label": "OK" }],
+      "node": { "id": "root", "label": "OK" },
+      "location": { "appId": "demo", "path": "no-slash" }
+    }
+  }
+}

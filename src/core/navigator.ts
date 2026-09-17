@@ -137,6 +137,11 @@ export class Navigator {
     return this.blocked;
   }
 
+  /** Test hook: an open/refresh call is running (including a held fake RPC). */
+  hasInFlight(): boolean {
+    return this.inFlight !== null;
+  }
+
   getTipKind(): NodeKind {
     return this.tipKind;
   }

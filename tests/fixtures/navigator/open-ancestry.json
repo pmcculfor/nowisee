@@ -1,0 +1,59 @@
+{
+  "id": "open-ancestry",
+  "apps": {
+    "home": {
+      "graph": {
+        "appId": "home",
+        "nodes": [{ "id": "home-root", "label": "Home" }],
+        "openTips": { "/": "home-root" },
+        "map": {}
+      }
+    },
+    "bible": {
+      "open": {
+        "/John/3/16": {
+          "result": {
+            "navigationMap": {
+              "book": {
+                "enter": { "kind": "node", "toNodeId": "verse", "stackBehavior": "push" },
+                "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+              },
+              "verse": {
+                "back": { "kind": "node", "stackBehavior": "pop" }
+              }
+            },
+            "warm": [
+              { "id": "book", "label": "John" },
+              { "id": "verse", "label": "3:16" }
+            ],
+            "node": { "id": "verse", "label": "3:16" },
+            "location": { "appId": "bible", "path": "/John/3/16" },
+            "stack": [
+              {
+                "nodeId": "book",
+                "label": "John",
+                "location": { "appId": "bible", "path": "/John" }
+              },
+              {
+                "nodeId": "verse",
+                "label": "3:16",
+                "location": { "appId": "bible", "path": "/John/3/16" }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "bible", "path": "/John/3/16" } },
+    {
+      "expect": {
+        "label": "3:16",
+        "tipId": "verse",
+        "stack": ["book", "verse"],
+        "address": { "appId": "bible", "path": "/John/3/16" }
+      }
+    }
+  ]
+}

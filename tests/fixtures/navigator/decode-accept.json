@@ -1,0 +1,17 @@
+{
+  "id": "decode-accept",
+  "decode": {
+    "accept": true,
+    "payload": {
+      "navigationMap": {
+        "root": {
+          "next": { "kind": "node", "toNodeId": "a", "stackBehavior": "replace" }
+        }
+      },
+      "warm": [{ "id": "root", "label": "OK" }],
+      "node": { "id": "root", "label": "OK" },
+      "location": { "appId": "demo", "path": "/" },
+      "clipboardText": "copy"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "warm-miss-load-failure",
+  "apps": {
+    "home": {
+      "graph": {
+        "appId": "home",
+        "nodes": [{ "id": "home-root", "label": "Home" }],
+        "openTips": { "/": "home-root" },
+        "map": {}
+      }
+    },
+    "probe": {
+      "open": {
+        "/": {
+          "result": {
+            "navigationMap": {
+              "root": {
+                "enter": { "kind": "node", "toNodeId": "missing", "stackBehavior": "push" },
+                "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+              }
+            },
+            "warm": [{ "id": "root", "label": "Root" }],
+            "node": { "id": "root", "label": "Root" },
+            "location": { "appId": "probe", "path": "/" }
+          }
+        }
+      },
+      "refresh": {
+        "missing": { "error": "transport" }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "probe", "path": "/" } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Something went wrong. Please check your network connection. Navigate right to try again. Navigate left to go back.",
+        "tipId": "missing",
+        "blocked": false
+      }
+    },
+    { "intent": "back" },
+    { "expect": { "label": "Root", "tipId": "root", "stack": ["root"] } }
+  ]
+}

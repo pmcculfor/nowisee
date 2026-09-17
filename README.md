@@ -29,7 +29,7 @@ src/apps/       Home, Tutorial, Bible, Notes, Lists, Gmail, Account (server AppM
 src/shell/      browser bootstrap — remote stubs only
 ios/            Swift client (Navigator + URLSession; build on a Mac; see ios/README.md)
 server/         HTTP, CSRF, identity, lockbox, OAuth; packs first-party apps
-tests/          Vitest, node environment
+tests/          Vitest, node environment; `fixtures/navigator/` is shared with `swift test`
 ```
 
 Each app’s graph, data, and corpus notes live next to that app (`src/apps/<id>/README.md`).

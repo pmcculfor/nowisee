@@ -1,0 +1,35 @@
+{
+  "id": "recents-parked-ids",
+  "appsFrom": "standard",
+  "config": { "recentsAppId": "recents" },
+  "apps": {
+    "recents": {
+      "graph": {
+        "appId": "recents",
+        "nodes": [{ "id": "recents:empty", "label": "empty" }],
+        "openTips": { "/": "recents:empty" },
+        "nullLocationIds": ["recents:empty"],
+        "map": {
+          "recents:empty": {
+            "back": { "kind": "resume", "appId": "fake" }
+          }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "recents" },
+    {
+      "expect": {
+        "label": "empty",
+        "tipId": "recents:empty",
+        "lastCall": {
+          "method": "open",
+          "appId": "recents",
+          "extras": { "parkedAppIds": ["fake"] }
+        }
+      }
+    }
+  ]
+}

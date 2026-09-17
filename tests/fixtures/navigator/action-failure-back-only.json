@@ -1,0 +1,64 @@
+{
+  "id": "action-failure-back-only",
+  "apps": {
+    "home": {
+      "graph": {
+        "appId": "home",
+        "nodes": [{ "id": "home-root", "label": "Home" }],
+        "openTips": { "/": "home-root" },
+        "map": {}
+      }
+    },
+    "probe": {
+      "graph": {
+        "appId": "probe",
+        "nodes": [
+          { "id": "root", "label": "Root" },
+          { "id": "go", "label": "Go" }
+        ],
+        "openTips": { "/": "root" },
+        "map": {
+          "root": {
+            "enter": {
+              "kind": "node",
+              "toNodeId": "go",
+              "stackBehavior": "push",
+              "action": true
+            },
+            "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+          },
+          "go": {
+            "back": { "kind": "node", "stackBehavior": "pop" }
+          }
+        }
+      },
+      "refresh": {
+        "go": { "error": "transport" }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "probe", "path": "/" } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Something went wrong. Please check your network connection. Navigate left to go back.",
+        "tipId": "go",
+        "blocked": false
+      }
+    },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Something went wrong. Please check your network connection. Navigate left to go back.",
+        "lastCall": {
+          "method": "refresh",
+          "nodeId": "go",
+          "extras": { "action": { "triggerId": "root" } }
+        }
+      }
+    },
+    { "intent": "back" },
+    { "expect": { "label": "Root", "tipId": "root" } }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "id": "action-trigger-id",
+  "appsFrom": "standard",
+  "apps": {
+    "fake": {
+      "refresh": {
+        "copy-status": {
+          "patch": { "clipboardText": "copied-text" }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "next" },
+    { "intent": "enter" },
+    { "expect": { "label": "Copy", "tipId": "copy" } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Copied",
+        "tipId": "copy-status",
+        "stack": ["a", "copy", "copy-status"],
+        "clipboard": "copied-text",
+        "lastCall": {
+          "method": "refresh",
+          "appId": "fake",
+          "nodeId": "copy-status",
+          "extras": { "action": { "triggerId": "copy" } }
+        }
+      }
+    }
+  ]
+}

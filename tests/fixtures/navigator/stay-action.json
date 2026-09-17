@@ -1,0 +1,33 @@
+{
+  "id": "stay-action",
+  "appsFrom": "standard",
+  "apps": {
+    "fake": {
+      "refresh": {
+        "ping": [
+          {},
+          { "patch": { "node": { "id": "ping", "label": "Pong" } } }
+        ]
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "enter" },
+    { "intent": "next" },
+    { "expect": { "label": "Ping", "tipId": "ping" } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Pong",
+        "tipId": "ping",
+        "stack": ["root", "child", "ping"],
+        "lastCall": {
+          "method": "refresh",
+          "nodeId": "ping",
+          "extras": { "action": { "triggerId": "ping" } }
+        }
+      }
+    }
+  ]
+}

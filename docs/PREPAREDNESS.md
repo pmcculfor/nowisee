@@ -52,14 +52,14 @@ Busy and dead-end are still identical silence for this audience. They cannot tel
 
 ### Deep-link ancestry — landed
 
-`open` may return committed ancestry (`OpenResult.stack`). Core installs it when the last entry is the tip and every non-null ancestor location is canonical. Invalid ancestry is discarded and warned. `refresh` has no stack field. Overlay frames are client-only and never appear on open ancestry. Shared JSON fixtures for dual Navigator behavior live in `tests/fixtures/navigation-geometry.json`.
+`open` may return committed ancestry (`OpenResult.stack`). Core installs it when the last entry is the tip and every non-null ancestor location is canonical. Invalid ancestry is discarded and warned. `refresh` has no stack field. Overlay frames are client-only and never appear on open ancestry. Dual-Navigator JSON scenarios live in [`tests/fixtures/navigator/`](../tests/fixtures/navigator/); the geometry catalog remains [`tests/fixtures/navigation-geometry.json`](../tests/fixtures/navigation-geometry.json).
 
 ### Other reserved work
 
 | Item | Notes |
 |------|--------|
 | `requestRefresh` | Typed, not provided. Implement it before a tip must update without a user intent (for example, new mail on the current subject). |
-| Dual Navigator | Website TypeScript Navigator and iOS Swift Navigator must stay aligned. Prefer shared JSON fixtures when adding concurrency or park behavior. |
+| Dual Navigator | Website TypeScript and iOS Swift Navigators stay aligned via JSON in `tests/fixtures/navigator/` (Vitest + `swift test` in `ios/`). Add a scenario when changing concurrency, park, stack, or decode. Geometry catalog: `tests/fixtures/navigation-geometry.json`. |
 | Response validation / `apiVersion` / unknown values | Typed, not provided. The single choke point is Navigator `apply()`. Wait until apps you did not write exist. Intended later: unknown edge kind → missing edge; unknown node kind → render as text; unknown intent → never matched. |
 | Browser Back/Forward vs session stack | `popstate` → `openLocation` is enough for now. |
 | Identity rate limits, password reset, email verify, export/deletion | See [`IDENTITY.md`](IDENTITY.md) §13. |

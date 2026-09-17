@@ -1,28 +1,4 @@
-import Foundation
 import UIKit
-
-enum NowiseeOrigin {
-  /// Production origin. Change this to a Mac LAN HTTPS URL only for local spikes.
-  static let url = URL(string: "https://nowisee.app")!
-  static var host: String { url.host ?? "nowisee.app" }
-  static var originHeader: String {
-    let root = url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    return root
-  }
-}
-
-enum ShellIds {
-  static let rootAppId = "home"
-  static let recentsAppId = "recents"
-}
-
-enum NavIntent: String {
-  case prev
-  case next
-  case enter
-  case back
-  case recents
-}
 
 enum RecentsHold {
   /// One second so a pause while choosing a swipe direction does not open Recents.
@@ -51,16 +27,6 @@ enum NavHaptics {
     generator.impactOccurred()
     generator.prepare()
   }
-}
-
-enum LoadFailure {
-  static let label =
-    "Something went wrong. Please check your network connection. Navigate right to try again. Navigate left to go back."
-}
-
-enum ActionFailure {
-  static let label =
-    "Something went wrong. Please check your network connection. Navigate left to go back."
 }
 
 enum ExternalHandoffFailure {

@@ -1,0 +1,36 @@
+{
+  "id": "push-transient",
+  "appsFrom": "overlay",
+  "steps": [
+    { "open": { "appId": "overlay", "path": "/" } },
+    { "intent": "enter" },
+    { "expect": { "tipId": "child", "stack": ["root", "child"], "frames": [null, null] } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "A",
+        "tipId": "a",
+        "stack": ["root", "child", "a"],
+        "frames": [null, null, "menu"]
+      }
+    },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "B",
+        "tipId": "b",
+        "stack": ["root", "child", "a", "b"],
+        "frames": [null, null, "menu", "menu"]
+      }
+    },
+    { "intent": "back" },
+    {
+      "expect": {
+        "label": "Child",
+        "tipId": "child",
+        "stack": ["root", "child"],
+        "frames": [null, null]
+      }
+    }
+  ]
+}

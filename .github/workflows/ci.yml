@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -27,3 +31,24 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build iPhone simulator
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project Nowisee.xcodeproj \
+            -scheme Nowisee \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Swift Navigator fixtures
+        working-directory: ios
+        run: swift test

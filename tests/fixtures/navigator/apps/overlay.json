@@ -1,0 +1,53 @@
+{
+  "home": {
+    "graph": {
+      "appId": "home",
+      "nodes": [{ "id": "home-root", "label": "Home" }],
+      "openTips": { "/": "home-root" },
+      "map": {
+        "home-root": {
+          "enter": { "kind": "app", "to": { "appId": "overlay", "path": "/" } }
+        }
+      }
+    }
+  },
+  "overlay": {
+    "graph": {
+      "appId": "overlay",
+      "nodes": [
+        { "id": "root", "label": "Root" },
+        { "id": "child", "label": "Child" },
+        { "id": "a", "label": "A" },
+        { "id": "b", "label": "B" }
+      ],
+      "openTips": { "/": "root" },
+      "map": {
+        "root": {
+          "enter": { "kind": "node", "toNodeId": "child", "stackBehavior": "push" },
+          "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+        },
+        "child": {
+          "enter": {
+            "kind": "node",
+            "toNodeId": "a",
+            "stackBehavior": "pushTransient",
+            "frame": "menu"
+          },
+          "back": { "kind": "node", "stackBehavior": "pop" }
+        },
+        "a": {
+          "enter": {
+            "kind": "node",
+            "toNodeId": "b",
+            "stackBehavior": "pushTransient",
+            "frame": "menu"
+          },
+          "back": { "kind": "node", "stackBehavior": "popTransient" }
+        },
+        "b": {
+          "back": { "kind": "node", "stackBehavior": "popTransient" }
+        }
+      }
+    }
+  }
+}
