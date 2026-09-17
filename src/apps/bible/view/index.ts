@@ -21,7 +21,6 @@ import {
   viewSession,
   withTipLabel,
   activeVersion,
-  listedXrefWorks,
   type BibleViewDeps,
   type ViewSession,
 } from "./helpers.ts";
@@ -92,13 +91,6 @@ function applyAction(session: ViewSession, triggerId: string): ActionContributio
   }
   if (parsed.kind === "verse-version-pick") {
     touchVersionRecency(session, parsed.targetVersionId);
-    return null;
-  }
-  if (parsed.kind === "option" && parsed.option === "cross-references") {
-    const first = listedXrefWorks(session)[0];
-    if (first) {
-      touchXrefRecency(session, first.id);
-    }
     return null;
   }
   if (parsed.kind === "xref-work") {

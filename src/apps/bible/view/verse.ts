@@ -39,7 +39,6 @@ import {
   verseVersionPickId,
   versionPickId,
   xrefEmptyId,
-  xrefPhraseId,
   xrefWorkId,
 } from "../ids.ts";
 import { searchLimitedLabel } from "./search.ts";
@@ -334,19 +333,9 @@ export function optionEnter(
 }
 
 function xrefOptionEnter(session: ViewSession, ref: CanonRef) {
-  const works = listedXrefWorks(session);
-  const first = works[0];
+  const first = listedXrefWorks(session)[0];
   if (!first) {
     return edgeNode(xrefEmptyId(ref), "push");
-  }
-  const verseId = slotVerseId(session.deps.store, ref);
-  const phrases =
-    verseId === null ? [] : session.deps.store.listXrefPhrases(first.id, verseId);
-  if (phrases.length === 0) {
-    return edgeNode(xrefEmptyId(ref), "push");
-  }
-  if (works.length === 1) {
-    return edgeAction(xrefPhraseId(ref, first.id, phrases[0]!.id));
   }
   return edgeNode(xrefWorkId(ref, first.id), "push");
 }

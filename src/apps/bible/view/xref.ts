@@ -47,7 +47,9 @@ export function addXrefWorks(
     const first = phrases[0];
     fragments.push({
       [id]: {
-        ...(first ? { enter: edgeAction(xrefPhraseId(ref, work.id, first.id)) } : {}),
+        enter: first
+          ? edgeAction(xrefPhraseId(ref, work.id, first.id))
+          : edgeNode(xrefEmptyId(ref), "push"),
         back: edgePop(),
       },
     });

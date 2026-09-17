@@ -44,6 +44,7 @@ import {
   versionPickId,
   versionsHeadingId,
   xrefPhraseId,
+  xrefWorkId,
 } from "../src/apps/bible/ids.ts";
 import { expandTskHeadings, parseTskCitationRanges } from "../src/apps/bible/tskCitations.ts";
 import { parseHebrewStrongXml, parseStrongsGreekXml } from "../src/apps/bible/strongsXml.ts";
@@ -1071,14 +1072,26 @@ describe("Bible importers", () => {
       instance,
       [{ nodeId: xrefOption, label: "Cross-references", location: null }],
     );
-    const firstPhrase = xrefPhraseId(verseRef, TSK, 1);
+    const xrefWork = xrefWorkId(verseRef, TSK);
     expect(xrefMenu.navigationMap[xrefOption]?.enter).toEqual({
+      kind: "node",
+      toNodeId: xrefWork,
+      stackBehavior: "push",
+    });
+    const xrefWorks = await refresh(instance, [{ nodeId: xrefWork, label: "x", location: null }]);
+    expect(xrefWorks.node.label).toBe("Treasury of Scripture Knowledge");
+    expect(xrefWorks.navigationMap[xrefWork]?.next).toBeUndefined();
+    const firstPhrase = xrefPhraseId(verseRef, TSK, 1);
+    expect(xrefWorks.navigationMap[xrefWork]?.enter).toEqual({
       kind: "node",
       toNodeId: firstPhrase,
       stackBehavior: "push",
       action: true,
     });
-    const phrases = await refresh(instance, [{ nodeId: firstPhrase, label: "x", location: null }]);
+    const phrases = await refresh(instance, [
+      { nodeId: xrefWork, label: "x", location: null },
+      { nodeId: firstPhrase, label: "x", location: null },
+    ]);
     expect(phrases.node.label).toBe("Blessed are the poor in spirit:");
     const secondPhrase = xrefPhraseId(verseRef, TSK, 2);
     expect(phrases.navigationMap[firstPhrase]?.next).toEqual({
@@ -1131,8 +1144,11 @@ describe("Bible importers", () => {
     });
     const nestedOption = optionId(canon(MAT, 5, 5), "cross-references", contextSeq(MAT, 5));
     const nestedMenu = await refresh(instance, [{ nodeId: nestedOption, label: "Cross-references", location: null }]);
+    const nestedWork = xrefWorkId(canon(MAT, 5, 5), TSK);
+    expect(nestedMenu.navigationMap[nestedOption]?.enter?.toNodeId).toBe(nestedWork);
+    const nestedWorks = await refresh(instance, [{ nodeId: nestedWork, label: "x", location: null }]);
     const meek = xrefPhraseId(canon(MAT, 5, 5), TSK, 3);
-    expect(nestedMenu.navigationMap[nestedOption]?.enter?.toNodeId).toBe(meek);
+    expect(nestedWorks.navigationMap[nestedWork]?.enter?.toNodeId).toBe(meek);
   });
 
   it("dictionary walk is one original-language word with the full definition", async () => {
