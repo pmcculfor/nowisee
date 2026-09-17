@@ -1,0 +1,17 @@
+{
+  "id": "open-bootstrap",
+  "appsFrom": "standard",
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    {
+      "expect": {
+        "label": "Root",
+        "kind": "text",
+        "tipId": "root",
+        "stack": ["root"],
+        "blocked": false,
+        "address": { "appId": "fake", "path": "/" }
+      }
+    }
+  ]
+}

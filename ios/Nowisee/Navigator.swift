@@ -66,6 +66,10 @@ final class Navigator {
   var isBlocked: Bool { blocked }
   var currentTipKind: NodeKind { tipKind }
   var transitionTokenValue: Int { transitionToken }
+  /// Test hook: an open/refresh Task is running (including a held fake RPC).
+  var hasInFlight: Bool { inFlight != nil }
+  /// Test hook: current stack ids, tip last.
+  var stackSnapshot: [StackEntry] { stack.snapshot() }
 
   init(
     rpc: AppRpcing,

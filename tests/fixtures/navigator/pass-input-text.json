@@ -1,0 +1,27 @@
+{
+  "id": "pass-input-text",
+  "appsFrom": "standard",
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "enter" },
+    { "intent": "enter" },
+    { "expect": { "kind": "input", "tipId": "input" } },
+    { "setInput": "hello" },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Sent",
+        "tipId": "sent",
+        "kind": "text",
+        "lastCall": {
+          "method": "refresh",
+          "nodeId": "sent",
+          "extras": {
+            "action": { "triggerId": "input" },
+            "inputText": "hello"
+          }
+        }
+      }
+    }
+  ]
+}

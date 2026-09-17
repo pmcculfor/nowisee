@@ -15,6 +15,17 @@ Safari still uses the TypeScript website. There is no WKWebView in this app.
 
 The app icon asset is a placeholder. Xcode may warn until you add a 1024×1024 PNG.
 
+## Navigator parity tests
+
+Shared JSON in [`../tests/fixtures/navigator/`](../tests/fixtures/navigator/) is run by Vitest on Windows/Linux and by `swift test` here (Foundation Navigator only — no overlay, no Xcode GUI).
+
+```text
+cd ios
+swift test
+```
+
+That package (`ios/Package.swift`) compiles the UIKit-free shell files and does not replace `Nowisee.xcodeproj`. GitHub Actions `ios` job also `xcodebuild`s the iPhone simulator target (`CODE_SIGNING_ALLOWED=NO`).
+
 ## Gestures (text nodes)
 
 | Gesture | Intent |
@@ -31,7 +42,7 @@ On **input** nodes the overlay hides. VoiceOver uses the native field plus Cance
 
 ## Local site instead of production
 
-Edit `NowiseeOrigin.url` in [`Nowisee/Config.swift`](Nowisee/Config.swift). Session cookies need HTTPS (`__Host-` + CSRF). A LAN `http://` Vite server will not keep production-style cookies. The `Origin` header must match `NOWISEE_ORIGIN` on the server.
+Edit `NowiseeOrigin.url` in [`Nowisee/Types.swift`](Nowisee/Types.swift). Session cookies need HTTPS (`__Host-` + CSRF). A LAN `http://` Vite server will not keep production-style cookies. The `Origin` header must match `NOWISEE_ORIGIN` on the server.
 
 ## Website
 

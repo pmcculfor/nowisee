@@ -1,0 +1,16 @@
+{
+  "id": "app-root-back",
+  "appsFrom": "standard",
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "back" },
+    {
+      "expect": {
+        "label": "Home",
+        "tipId": "home-root",
+        "stack": ["home-root"],
+        "address": { "appId": "home", "path": "/" }
+      }
+    }
+  ]
+}

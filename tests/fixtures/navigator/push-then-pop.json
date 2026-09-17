@@ -1,0 +1,11 @@
+{
+  "id": "push-then-pop",
+  "appsFrom": "standard",
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "enter" },
+    { "expect": { "label": "Child", "tipId": "child", "stack": ["root", "child"] } },
+    { "intent": "back" },
+    { "expect": { "label": "Root", "tipId": "root", "stack": ["root"] } }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "malformed-replace-to-self",
+  "apps": {
+    "home": {
+      "graph": {
+        "appId": "home",
+        "nodes": [{ "id": "home-root", "label": "Home" }],
+        "openTips": { "/": "home-root" },
+        "map": {}
+      }
+    },
+    "probe": {
+      "graph": {
+        "appId": "probe",
+        "nodes": [{ "id": "root", "label": "Root" }],
+        "openTips": { "/": "root" },
+        "map": {
+          "root": {
+            "enter": { "kind": "node", "toNodeId": "root", "stackBehavior": "replace" },
+            "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+          }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "probe", "path": "/" } },
+    { "expect": { "tipId": "root", "label": "Root" } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "tipId": "root",
+        "label": "Root",
+        "lastCall": { "method": "open", "appId": "probe" }
+      }
+    }
+  ]
+}

@@ -472,7 +472,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 
 **Path:** `ios/` (Swift)
 
-The iPhone app is a Swift client, not a WebView of the website. It POSTs the same `/api/apps/:id/open` and `/refresh` JSON as the browser, with the `__Host-nowisee_session` cookie and `Origin: https://nowisee.app`. It reimplements Navigator, stack, map, cache, and recents park. Apps, identity, and OAuth token exchange stay on the server. Safari still uses the TypeScript shell in [`src/core/`](../src/core/).
+The iPhone app is a Swift client, not a WebView of the website. It POSTs the same `/api/apps/:id/open` and `/refresh` JSON as the browser, with the `__Host-nowisee_session` cookie and `Origin: https://nowisee.app`. It reimplements Navigator, stack, map, cache, and recents park. Apps, identity, and OAuth token exchange stay on the server. Safari still uses the TypeScript shell in [`src/core/`](../src/core/). Dual-Navigator behavior is locked by the JSON scenarios in [`tests/fixtures/navigator/`](../tests/fixtures/navigator/).
 
 VoiceOver never enters a WebView. Text nodes are one Direct Touch overlay (visible label is not its own accessibility element). Leaving input posts `.screenChanged` onto the overlay; later labels wait for `accessibilityElementDidBecomeFocused` before `setLabel` and `.announcement`, so a result node can interrupt the warm node but cannot speak first. Once the overlay owns VoiceOver, a changed label posts `.announcement` so it interrupts the previous utterance. Input nodes are a native field plus Cancel / Done / Recent apps. `kind: "external"` opens `ASWebAuthenticationSession`; the callback GET runs in the same cookie jar.
 

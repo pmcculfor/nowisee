@@ -1,0 +1,13 @@
+{
+  "id": "replace-siblings",
+  "appsFrom": "standard",
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "next" },
+    { "expect": { "label": "A", "tipId": "a", "stack": ["a"] } },
+    { "intent": "next" },
+    { "expect": { "label": "B", "tipId": "b", "stack": ["b"] } },
+    { "intent": "prev" },
+    { "expect": { "label": "A", "tipId": "a", "stack": ["a"] } }
+  ]
+}

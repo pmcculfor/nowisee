@@ -1,0 +1,31 @@
+{
+  "id": "external-handoff",
+  "apps": {
+    "home": {
+      "graph": {
+        "appId": "home",
+        "nodes": [{ "id": "home-root", "label": "Home" }],
+        "openTips": { "/": "home-root" },
+        "map": {}
+      }
+    },
+    "probe": {
+      "graph": {
+        "appId": "probe",
+        "nodes": [{ "id": "root", "label": "Root" }],
+        "openTips": { "/": "root" },
+        "map": {
+          "root": {
+            "enter": { "kind": "external", "href": "https://example.com/connect" },
+            "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+          }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "probe", "path": "/" } },
+    { "intent": "enter" },
+    { "expect": { "label": "Root", "external": "https://example.com/connect" } }
+  ]
+}

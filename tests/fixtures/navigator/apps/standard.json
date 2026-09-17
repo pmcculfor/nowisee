@@ -1,0 +1,86 @@
+{
+  "home": {
+    "graph": {
+      "appId": "home",
+      "nodes": [{ "id": "home-root", "label": "Home" }],
+      "openTips": { "/": "home-root" },
+      "map": {
+        "home-root": {
+          "enter": { "kind": "app", "to": { "appId": "fake", "path": "/" } }
+        }
+      }
+    }
+  },
+  "fake": {
+    "graph": {
+      "appId": "fake",
+      "nodes": [
+        { "id": "root", "label": "Root" },
+        { "id": "a", "label": "A" },
+        { "id": "b", "label": "B" },
+        { "id": "child", "label": "Child" },
+        { "id": "copy", "label": "Copy" },
+        { "id": "copy-status", "label": "Copied" },
+        { "id": "input", "label": "", "kind": "input" },
+        { "id": "sent", "label": "Sent" },
+        { "id": "ping", "label": "Ping" }
+      ],
+      "openTips": { "/": "root" },
+      "nullLocationIds": ["copy-status", "sent"],
+      "map": {
+        "root": {
+          "next": { "kind": "node", "toNodeId": "a", "stackBehavior": "replace" },
+          "enter": { "kind": "node", "toNodeId": "child", "stackBehavior": "push" },
+          "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+        },
+        "a": {
+          "prev": { "kind": "node", "toNodeId": "root", "stackBehavior": "replace" },
+          "next": { "kind": "node", "toNodeId": "b", "stackBehavior": "replace" },
+          "enter": { "kind": "node", "toNodeId": "copy", "stackBehavior": "push" },
+          "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+        },
+        "b": {
+          "prev": { "kind": "node", "toNodeId": "a", "stackBehavior": "replace" },
+          "next": { "kind": "node", "toNodeId": "copy", "stackBehavior": "replace" },
+          "back": { "kind": "app", "to": { "appId": "home", "path": "/" } }
+        },
+        "copy": {
+          "prev": { "kind": "node", "toNodeId": "b", "stackBehavior": "replace" },
+          "next": { "kind": "node", "toNodeId": "a", "stackBehavior": "replace" },
+          "enter": {
+            "kind": "node",
+            "toNodeId": "copy-status",
+            "stackBehavior": "push",
+            "action": true
+          },
+          "back": { "kind": "node", "stackBehavior": "pop" }
+        },
+        "copy-status": {
+          "back": { "kind": "node", "stackBehavior": "pop" }
+        },
+        "child": {
+          "back": { "kind": "node", "stackBehavior": "pop" },
+          "enter": { "kind": "node", "toNodeId": "input", "stackBehavior": "push" },
+          "next": { "kind": "node", "toNodeId": "ping", "stackBehavior": "push" }
+        },
+        "ping": {
+          "back": { "kind": "node", "stackBehavior": "pop" },
+          "enter": { "kind": "node", "stackBehavior": "stay", "action": true }
+        },
+        "input": {
+          "enter": {
+            "kind": "node",
+            "toNodeId": "sent",
+            "stackBehavior": "push",
+            "passInputText": true,
+            "action": true
+          },
+          "back": { "kind": "node", "stackBehavior": "pop" }
+        },
+        "sent": {
+          "back": { "kind": "node", "stackBehavior": "pop" }
+        }
+      }
+    }
+  }
+}

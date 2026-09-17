@@ -1,0 +1,26 @@
+{
+  "id": "clipboard-unavailable",
+  "appsFrom": "standard",
+  "config": { "clipboard": "unavailable" },
+  "apps": {
+    "fake": {
+      "refresh": {
+        "copy-status": {
+          "patch": { "clipboardText": "copied-text" }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "next" },
+    { "intent": "enter" },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "label": "Copy failed: clipboard unavailable.",
+        "tipId": "copy-status"
+      }
+    }
+  ]
+}

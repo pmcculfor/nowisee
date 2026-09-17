@@ -1,0 +1,25 @@
+{
+  "id": "token-a-b-a",
+  "appsFrom": "standard",
+  "apps": {
+    "fake": {
+      "refresh": {
+        "a": [
+          {
+            "hold": "first-a",
+            "patch": { "node": { "id": "a", "label": "A-stale" } }
+          },
+          { "patch": { "node": { "id": "a", "label": "A-fresh" } } }
+        ]
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "next" },
+    { "intent": "next" },
+    { "intent": "prev" },
+    { "release": "first-a" },
+    { "expect": { "label": "A-fresh", "tipId": "a" } }
+  ]
+}

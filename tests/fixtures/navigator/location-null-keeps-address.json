@@ -1,0 +1,26 @@
+{
+  "id": "location-null-keeps-address",
+  "appsFrom": "standard",
+  "apps": {
+    "fake": {
+      "refresh": {
+        "copy-status": {
+          "patch": { "clipboardText": "copied-text" }
+        }
+      }
+    }
+  },
+  "steps": [
+    { "open": { "appId": "fake", "path": "/" } },
+    { "intent": "next" },
+    { "intent": "enter" },
+    { "expect": { "address": { "appId": "fake", "path": "/copy" } } },
+    { "intent": "enter" },
+    {
+      "expect": {
+        "tipId": "copy-status",
+        "address": { "appId": "fake", "path": "/copy" }
+      }
+    }
+  ]
+}

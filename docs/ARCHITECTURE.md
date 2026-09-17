@@ -28,6 +28,7 @@ src/apps/         AppModules (imported by the server host)
 src/apps/remote.ts  client RPC stub
 src/shell/        lazy generic stub by app id, mounts display, wires keyboard
 ios/              Swift iPhone client (same open/refresh HTTP; not a WebView)
+                  Package.swift runs Foundation Navigator fixtures (`swift test`)
 server/           HTTP, host identity SQLite, identity service, first-party pack list
 server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
 server/index.ts   production entry (SPA + /api)
