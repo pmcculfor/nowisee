@@ -493,6 +493,7 @@ func runNavigatorFixture(_ fixture: NavigatorFixtureFile) async throws {
   }
 }
 
+@MainActor
 private func checkExpect(
   _ exp: [String: Any],
   nav: Navigator,
