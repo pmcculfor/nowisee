@@ -153,7 +153,8 @@ export function groupForecastDays(
   const byDate = new Map<string, { daytime?: ForecastPeriod; night?: ForecastPeriod }>();
   for (const period of periods) {
     const date = localDateFromIso(period.startTime);
-    if (!date || (today && date <= today)) {
+    // Include today and later; skip leftover periods from a previous calendar day.
+    if (!date || (today && date < today)) {
       continue;
     }
     const slot = byDate.get(date) ?? {};

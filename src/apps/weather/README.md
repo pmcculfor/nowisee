@@ -18,7 +18,7 @@ Open `/` lands on **current** (not the ZIP-change node). The sibling list (no wr
 
 1. **Change zip code. Current zip is {zip}.** — `enter` is a `weather-zip` overlay onto the ZIP input, prefilled with the stored ZIP. Successful save `popTransient`s back. First-run setup is a committed place, not an overlay.
 2. Current conditions (first hourly period).
-3. One node per later calendar day from the 12-hour forecast (`name` + `detailedForecast`, daytime then night when both exist).
+3. One node per calendar day from the 12-hour forecast, **including today**, then later days (`name` + `detailedForecast`, daytime then night when both exist).
 
 `back` on every list row is an `app` edge to Home. **Cancel** on the ZIP input returns to the change-zip node without writing. **Done** saves only after a successful lookup.
 

@@ -37,6 +37,10 @@ const SAMPLE: WeatherSnapshot = {
     "Currently 72 degrees, partly cloudy. Wind from the west at 8 miles per hour. Humidity 45 percent.",
   days: [
     {
+      date: "2026-09-11",
+      label: "This Afternoon. Sunny, with a high near 70. Tonight. Clear, with a low around 50.",
+    },
+    {
       date: "2026-09-12",
       label: "Saturday. Sunny, with a high near 78. West wind 5 to 10 mph.",
     },
@@ -229,14 +233,16 @@ describe("Weather app graph", () => {
   it("sibling list is header, current, days; no wrap; every row backs to Home", async () => {
     const { app } = harness({ zipByUser: { [USER]: ZIP } });
     const result = await app.open("/", {}, signedIn());
+    const today = dayNodeId("2026-09-11");
     const saturday = dayNodeId("2026-09-12");
     const sunday = dayNodeId("2026-09-13");
     expect(result.navigationMap[NODE.place]?.prev).toBeUndefined();
     expect(result.navigationMap[NODE.place]?.next).toMatchObject({ toNodeId: NODE.current });
-    expect(result.navigationMap[NODE.current]?.next).toMatchObject({ toNodeId: saturday });
+    expect(result.navigationMap[NODE.current]?.next).toMatchObject({ toNodeId: today });
+    expect(result.navigationMap[today]?.next).toMatchObject({ toNodeId: saturday });
     expect(result.navigationMap[saturday]?.next).toMatchObject({ toNodeId: sunday });
     expect(result.navigationMap[sunday]?.next).toBeUndefined();
-    for (const id of [NODE.place, NODE.current, saturday, sunday]) {
+    for (const id of [NODE.place, NODE.current, today, saturday, sunday]) {
       expect(result.navigationMap[id]?.back).toEqual(
         edgeApp({ appId: "home", path: "/app/weather" }),
       );
@@ -404,7 +410,7 @@ describe("NWS spoken labels", () => {
     );
   });
 
-  it("groups later calendar days and concatenates day and night", () => {
+  it("groups today and later calendar days and concatenates day and night", () => {
     const days = groupForecastDays(
       [
         {
@@ -435,6 +441,10 @@ describe("NWS spoken labels", () => {
       "2026-09-11",
     );
     expect(days).toEqual([
+      {
+        date: "2026-09-11",
+        label: "This Afternoon. Sunny, with a high near 70. Tonight. Clear, with a low around 50.",
+      },
       {
         date: "2026-09-12",
         label:
@@ -481,6 +491,12 @@ describe("NWS weather client", () => {
           properties: {
             periods: [
               {
+                name: "This Afternoon",
+                startTime: "2026-09-11T13:00:00-07:00",
+                isDaytime: true,
+                detailedForecast: "Sunny, with a high near 70.",
+              },
+              {
                 name: "Saturday",
                 startTime: "2026-09-12T06:00:00-07:00",
                 isDaytime: true,
@@ -494,7 +510,8 @@ describe("NWS weather client", () => {
     };
     const snapshot = await createNwsWeatherClient({ fetch: fetchFn }).lookup("90210");
     expect(snapshot.currentLabel).toContain("Currently 72 degrees");
-    expect(snapshot.days[0]?.date).toBe("2026-09-12");
+    expect(snapshot.days.map((d) => d.date)).toEqual(["2026-09-11", "2026-09-12"]);
+    expect(snapshot.days[0]?.label).toContain("This Afternoon");
   });
 
   it("does not substitute 12-hour current when hourly fails", async () => {
