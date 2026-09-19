@@ -23,6 +23,17 @@ export type ViewSession = {
   readonly accountAppId: string;
 };
 
+/**
+ * What one action leaves behind. The side effect has already run; this is only
+ * what the rebuilt view should say. `tipId` rebuilds somewhere other than the
+ * node the user is standing on (search lands on its first hit).
+ */
+export type ActionContribution = {
+  readonly statusLabel?: string;
+  readonly clipboardText?: string;
+  readonly tipId?: string;
+};
+
 export function viewSession(
   deps: BibleViewDeps,
   extras: RefreshExtras = {},

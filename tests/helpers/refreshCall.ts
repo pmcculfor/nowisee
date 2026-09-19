@@ -5,30 +5,24 @@ import type {
   RefreshResult,
 } from "../../src/core/types.ts";
 
-type Stackish = string | readonly { readonly nodeId: string }[];
-
-export function nodeIdOf(stack: Stackish): string {
-  return typeof stack === "string" ? stack : (stack[stack.length - 1]?.nodeId ?? "");
-}
+/** `action: true` is test shorthand; only apps see the real `{ triggerId }`. */
+export type TestExtras = Omit<RefreshExtras, "action"> & {
+  action?: RefreshExtras["action"] | true;
+};
 
 /** Test convenience: `action: true` becomes `{ triggerId }` for the tip. */
-export function wireAction(
-  extras: RefreshExtras & { action?: unknown },
-  nodeId: string,
-): RefreshExtras {
+export function wireAction(extras: TestExtras, nodeId: string): RefreshExtras {
   if (extras.action === true) {
-    const { action: _ignored, ...rest } = extras;
-    return { ...rest, action: { triggerId: nodeId } };
+    return { ...extras, action: { triggerId: nodeId } };
   }
-  return extras;
+  return extras as RefreshExtras;
 }
 
 export function refreshApp(
   app: Pick<AppModule, "refresh">,
-  stack: Stackish,
-  extras: RefreshExtras & { action?: unknown } = {},
+  nodeId: string,
+  extras: TestExtras = {},
   ctx?: AppServerContext,
 ): RefreshResult | Promise<RefreshResult> {
-  const nodeId = nodeIdOf(stack);
   return app.refresh(nodeId, wireAction(extras, nodeId), ctx);
 }

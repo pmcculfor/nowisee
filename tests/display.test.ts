@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import { describe, expect, it } from "vitest";
-import { Display, type DisplayHost } from "../src/core/display.ts";
+import { Display, type DisplayHost, type DisplayMode } from "../src/core/display.ts";
 import type { NavIntent } from "../src/core/types.ts";
 
 function hostMock(): DisplayHost & { intents: NavIntent[]; blocked: boolean } {
@@ -73,7 +73,27 @@ describe("Display", () => {
     expect(cancel!.compareDocumentPosition(done!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(done!.compareDocumentPosition(recents!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(root.dataset.mode).toBe("input");
-    expect(document.body.hasAttribute("data-input-open")).toBe(true);
+  });
+
+  it("reports every mode switch to the host instead of touching anything outside its root", () => {
+    const root = document.createElement("div");
+    const parent = document.createElement("div");
+    parent.appendChild(root);
+    document.body.appendChild(parent);
+    const modes: DisplayMode[] = [];
+    const display = new Display(root, {
+      isBlocked: () => false,
+      onIntent: () => {},
+      onModeChange: (mode) => {
+        modes.push(mode);
+      },
+    });
+
+    display.showInput("x");
+    display.showText("back to text");
+
+    expect(modes).toEqual(["input", "text"]);
+    expect(parent.attributes).toHaveLength(0);
   });
 
   it("round-trips newlines through getInputText after the user edits the field", () => {
@@ -151,13 +171,12 @@ describe("Display", () => {
     expect(display.getInputText()).toBe("ab");
   });
 
-  it("switching input → text replaces the surface and clears input-open", () => {
+  it("switching input → text replaces the surface", () => {
     const root = document.createElement("div");
     document.body.appendChild(root);
     const display = new Display(root);
 
     display.showInput("x");
-    expect(document.body.hasAttribute("data-input-open")).toBe(true);
     display.showText("back to text");
 
     expect(root.querySelector("textarea[data-surface='input']")).toBeNull();
@@ -170,7 +189,6 @@ describe("Display", () => {
       "back to text",
     );
     expect(display.getInputText()).toBe("");
-    expect(document.body.hasAttribute("data-input-open")).toBe(false);
   });
 
   it("does not truncate long labels", () => {

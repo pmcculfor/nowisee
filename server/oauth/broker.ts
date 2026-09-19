@@ -56,11 +56,6 @@ export type OAuthBroker = {
     readonly code: string | null;
     readonly error: string | null;
   }): Promise<{ location: string }>;
-  handleProviderEvent(args: {
-    readonly appId: string;
-    readonly headers: Readonly<Record<string, string>>;
-    readonly body: string;
-  }): Promise<{ status: number; body: string }>;
 };
 
 export function createOAuthBroker(args: {
@@ -379,15 +374,6 @@ export function createOAuthBroker(args: {
       } catch {
         return { location: spaLocation(`/${row.appId}`) };
       }
-    },
-
-    async handleProviderEvent(input) {
-      const config = providers.get(input.appId);
-      if (!config?.onProviderEvent) {
-        return { status: 404, body: "" };
-      }
-      const result = await config.onProviderEvent({ headers: input.headers, body: input.body });
-      return { status: result.status, body: result.body ?? "" };
     },
   };
 }

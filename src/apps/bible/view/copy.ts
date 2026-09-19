@@ -1,11 +1,12 @@
 import { formatRef } from "../canon.ts";
 import type { CanonRef } from "../types.ts";
-import { activeVersion, bookLabel, slotVerseId, type ViewSession } from "./helpers.ts";
-
-export type ActionContribution = {
-  readonly statusLabel?: string;
-  readonly clipboardText?: string;
-};
+import {
+  activeVersion,
+  bookLabel,
+  slotVerseId,
+  type ActionContribution,
+  type ViewSession,
+} from "./helpers.ts";
 
 export function resolveCopy(session: ViewSession, ref: CanonRef): ActionContribution {
   const version = activeVersion(session);

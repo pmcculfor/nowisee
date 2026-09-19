@@ -1,13 +1,13 @@
-import type { AppHttpResponse, HeadersLike } from "../http.ts";
+import type { AppHttpResponse } from "../http.ts";
 import { readSessionToken } from "../cookie.ts";
+import { header, type HeadersLike } from "../headers.ts";
 import type { NowiseeHost } from "../host.ts";
 
 const CALLBACK_PATH = "/oauth/callback";
-const EVENTS_RE = /^\/oauth\/([^/]+)\/events\/?$/;
 
 export function isOAuthUrl(url: string): boolean {
   const path = (url.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
-  return path === CALLBACK_PATH || EVENTS_RE.test(path);
+  return path === CALLBACK_PATH;
 }
 
 export async function handleOAuthHttp(
@@ -16,31 +16,9 @@ export async function handleOAuthHttp(
     readonly method: string;
     readonly url: string;
     readonly headers: HeadersLike;
-    readonly body?: string;
   },
 ): Promise<AppHttpResponse> {
   const path = (req.url.split("?")[0] ?? "").replace(/\/+$/, "") || "/";
-  const events = EVENTS_RE.exec(path);
-  if (events) {
-    if (req.method !== "POST") {
-      return { status: 405, body: "", headers: { "Cache-Control": "no-store" } };
-    }
-    if (!host.oauth) {
-      return { status: 404, body: "", headers: { "Cache-Control": "no-store" } };
-    }
-    const appId = decodeURIComponent(events[1]!);
-    const result = await host.oauth.handleProviderEvent({
-      appId,
-      headers: flattenHeaders(req.headers),
-      body: req.body ?? "",
-    });
-    return {
-      status: result.status,
-      body: result.body,
-      headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
-    };
-  }
-
   if (path !== CALLBACK_PATH) {
     return { status: 404, body: "", headers: { "Cache-Control": "no-store" } };
   }
@@ -83,24 +61,4 @@ function redirectHome(host: NowiseeHost): AppHttpResponse {
       "X-Frame-Options": "DENY",
     },
   };
-}
-
-function header(headers: HeadersLike, name: string): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
-}
-
-function flattenHeaders(headers: HeadersLike): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string") {
-      out[key.toLowerCase()] = value;
-    } else if (Array.isArray(value) && value[0]) {
-      out[key.toLowerCase()] = value[0];
-    }
-  }
-  return out;
 }

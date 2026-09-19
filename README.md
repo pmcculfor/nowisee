@@ -1,6 +1,6 @@
 # Nowisee
 
-Nowisee is an accessibility-first website for people who use a keyboard or a screen reader as their primary way to browse. The page shows **one unformatted text surface** at a time. Navigation uses four intents — `prev`, `next`, `enter`, and `back` — which core binds to keys and to VoiceOver edge pads. Content comes from portable **apps** (Home, Tutorial, Bible, Notes, Lists, Gmail, and Account). Core is a generic shell and never special-cases those products.
+Nowisee is an accessibility-first website for people who use a keyboard or a screen reader as their primary way to browse. The page shows **one unformatted text surface** at a time. Navigation uses four intents — `prev`, `next`, `enter`, and `back` — which core binds to keys and to VoiceOver edge pads. Content comes from portable **apps** (Home, Tutorial, Bible, Notes, Lists, Weather, Gmail, and Account, plus a Recents switcher that Home does not list). Core is a generic shell and never special-cases those products.
 
 ## Run
 
@@ -9,12 +9,15 @@ You need Node 22. There are no runtime npm dependencies.
 ```bash
 npm ci
 npm test
-npm run dev          # http://localhost:5173/  (Vite + same-origin /api)
+npm run build
+npm start            # serves dist/ and /api on one origin
 ```
 
-For production, `npm run build && npm start` serves `dist/` and `/api` together. The public origin is **https://nowisee.app**. Staging on the same droplet is **https://dev.nowisee.app**. Droplet pull/restart: [`deploy/README.md`](deploy/README.md).
+Nowisee runs only on a server. There is no local-machine mode: `npm start` reads everything from the environment and refuses to boot if a required value is missing. Develop against the staging host, **https://dev.nowisee.app**.
 
-Copy [`.env.example`](.env.example) to `.env` for local Vite (`npm run dev` loads it). Tests use in-memory SQLite and need no secrets. The running host grants Gmail lockbox and OAuth, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Sign-in codes on a non-localhost origin also need Resend vars.
+The public origin is **https://nowisee.app**. Staging on the same droplet is **https://dev.nowisee.app**. Droplet pull/restart: [`deploy/README.md`](deploy/README.md).
+
+Tests use in-memory SQLite and need no secrets. The running host grants Gmail lockbox and OAuth, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Sign-in codes need `NOWISEE_MAIL_FROM`, `NOWISEE_RESEND_API_KEY`, and `NOWISEE_OTP_PEPPER`.
 
 **Production env:** Node does not read `.env` files. Put secrets in `/etc/nowisee/nowisee.env` (mode `640`, `root:nowisee`) from [`.env.production.example`](.env.production.example). Staging uses `/etc/nowisee/nowisee-dev.env` from [`.env.staging.example`](.env.staging.example) and [`deploy/nowisee-dev.service`](deploy/nowisee-dev.service). The unit [`deploy/nowisee.service`](deploy/nowisee.service) loads that file with `EnvironmentFile=` — do not paste keys into the unit. OAuth redirect: `{NOWISEE_ORIGIN}/oauth/callback`. If a reverse proxy terminates TLS, leave `NOWISEE_TLS_*` unset. Production listens on `PORT=3000`; staging on `3001`.
 
@@ -25,7 +28,7 @@ On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an 
 ```text
 src/core/       client shell (navigator, display, keyboard, …)
 src/app-kit/    optional helpers apps import
-src/apps/       Home, Tutorial, Bible, Notes, Lists, Gmail, Account (server AppModules)
+src/apps/       Home, Recents, Tutorial, Bible, Notes, Lists, Weather, Gmail, Account (server AppModules)
 src/shell/      browser bootstrap — remote stubs only
 ios/            Swift client (Navigator + URLSession; build on a Mac; see ios/README.md)
 server/         HTTP, CSRF, identity, lockbox, OAuth; packs first-party apps
@@ -45,8 +48,5 @@ Each app’s graph, data, and corpus notes live next to that app (`src/apps/<id>
 | [`docs/STORAGE.md`](docs/STORAGE.md) | Who opens which database |
 | [`docs/IDENTITY.md`](docs/IDENTITY.md) | Sessions, CSRF, lockbox, and OAuth |
 | [`docs/PREPAREDNESS.md`](docs/PREPAREDNESS.md) | Why this architecture, how it scales, and what is still deferred |
-| [`docs/FACEBOOK.md`](docs/FACEBOOK.md) | Research: Meta has no friends News Feed API |
-| [`docs/current_audit.md`](docs/current_audit.md) | Remaining non-doc work (unused code, bugs, security) |
-| [`docs/original_audit.md`](docs/original_audit.md) | Snapshot of the 24 Aug 2026 review |
 | [`deploy/README.md`](deploy/README.md) | DigitalOcean droplet: prod + staging pull, build, restart |
 | [`spikes/`](spikes/) | Historical accessibility probes (not application code) |

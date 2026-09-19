@@ -55,9 +55,10 @@ export function headerValue(value: string): string {
 }
 
 export function decodeBase64Url(data: string): string {
-  const padded = data.replace(/-/g, "+").replace(/_/g, "/");
-  const buf = Buffer.from(padded, "base64");
-  return buf.toString("utf8");
+  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const remainder = base64.length % 4;
+  const padded = remainder === 0 ? base64 : base64 + "=".repeat(4 - remainder);
+  return Buffer.from(padded, "base64").toString("utf8");
 }
 
 function encodeSubject(subject: string): string {

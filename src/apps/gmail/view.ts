@@ -317,10 +317,6 @@ function viewFromState(
 ): RefreshResult {
   const payloads = new Map<string, NodePayload>();
   payloads.set(NODE.disconnect, { id: NODE.disconnect, label: DISCONNECT_LABEL });
-  payloads.set(NODE.disconnectStatus, {
-    id: NODE.disconnectStatus,
-    label: "Disconnecting…",
-  });
   payloads.set(NODE.compose, { id: NODE.compose, label: COMPOSE_LABEL });
   payloads.set(NODE.composeToPrompt, {
     id: NODE.composeToPrompt,
@@ -512,7 +508,7 @@ function locationFor(tipId: string): AppLocation | null {
   if (tipId === NODE.connect) {
     return { appId: GMAIL_APP_ID, path: "/connect" };
   }
-  if (tipId === NODE.disconnect || tipId === NODE.disconnectStatus) {
+  if (tipId === NODE.disconnect) {
     return { appId: GMAIL_APP_ID, path: "/disconnect" };
   }
   if (tipId === NODE.compose) {

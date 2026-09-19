@@ -64,7 +64,7 @@ Core talks to apps only through `open` / `refresh`. Apps never import Navigator,
 7. Return plain data only. No browser URLs, no browser APIs, no live objects.
 8. Scope user data by `ctx.userId` from the cookie, not by an id the client sent on the stack.
 
-Optional helpers live in [`src/app-kit/`](../src/app-kit/) (edge builders, list edges, input edges, a signed-out node, split text, neighborhood walk). Navigator never calls these automatically.
+Optional helpers live in [`src/app-kit/`](../src/app-kit/) (edge builders, list edges, input edges, a signed-out node, split text). Navigator never calls these automatically.
 
 The full MUST/SHOULD list is in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -366,7 +366,7 @@ onIntent(intent):
 - `showInput(initialText, options?)` for `kind: "input"` — a native `<textarea>` (Enter = newline) plus **Cancel** (`back`), **Done** (`enter`), and **Recent apps** (`recents`) buttons after the field; expose `getInputText()`. When `options.secret` (or `NodePayload.secret`) is set, render `<input type="password">` and set `autocomplete` from the payload (`username` / `current-password` / `new-password` / `off`). Buttons activate on click only, never on focus.
 - Focus management on load and when switching text ↔ input.
 - **Announce via focus only** — the text surface is a focusable `tabindex="-1"` node with **no** `aria-live`. Combining a live region with `focus()` double-speaks on VoiceOver iOS (live insertion + focus announcement).
-- Mark the shell `data-input-open` while an input tip is showing so NavPads can be hidden (they would cover Cancel / Done / Recent apps).
+- Report each text ↔ input switch through `host.onModeChange`. Display never touches anything outside its own root; the shell wires that to `NavPads.setHidden` (pads would cover Cancel / Done / Recent apps).
 
 ### Edge cases
 
@@ -451,7 +451,7 @@ VoiceOver on iPhone owns gestures, so arrow keys are not available. NavPads are 
 - Listen for `focusin` and `click` on those buttons only; call `navigator.onIntent(intent)`.
 - If blocked: ignore.
 - Overlay the reading surface (pads may cover text); do not reserve a layout gutter that squishes the label.
-- Hidden while Display is in input mode (`data-input-open` on the mount) so they cannot cover Cancel / Done / Recent apps or fire on explore-by-touch.
+- `setHidden(true)` while Display is in input mode (the shell calls it from `Display.onModeChange`) so the pads cannot cover Cancel / Done / Recent apps or fire on explore-by-touch. It sets the `hidden` attribute, which removes them from the accessibility tree; CSS alone would leave them focusable.
 
 | Edge | Intent |
 |------|--------|
@@ -545,7 +545,6 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 | `inputEdges(inputId, { commitTo, backTo })` | `enter` (+ `passInputText`) commits; `back` abandons (`backTo` is a node id or `"pop"`) |
 | `rootBackToHome(rootId, rootAppId, fromAppId)` | `back` app edge to that app's Home catalog row (`/app/:fromAppId`) |
 | `edgeToHome(rootAppId, fromAppId)` / `homeCatalogPath(appId)` | Same Home row address |
-| `collectNeighborhood({ tipId, neighbors, payload, depth, maxNodes })` | Callback-driven walk → warm payloads + map fragment |
 | `buildMap(fragments)` | Assemble the nested `fromNodeId → intent → edge` structure |
 | `signedOut({ accountAppId, rootAppId, appId, text })` | Complete `RefreshResult` for a signed-out user-scoped app |
 | `splitText` | Chunk a long body into sibling labels (pack until a minimum length; then a hard cap) |
@@ -589,7 +588,6 @@ What is still deferred lives in [`PREPAREDNESS.md`](PREPAREDNESS.md):
 | Browser Back/Forward vs session stack | Hashchange → `openLocation` is enough; deeper sync later |
 | Warm etags | Deferred |
 | Status channel (busy / dead-end / failure) | Display + Navigator; additive |
-| Deep-link ancestry | Optional `stack` on `open`; additive |
 | Contract versioning + unknown-value fallbacks | Until third-party apps |
 | Validating / bounding app responses | Until third-party apps |
 | Sandboxing (worker / iframe / server apps) | The boundary stays message-shaped so this stays possible |

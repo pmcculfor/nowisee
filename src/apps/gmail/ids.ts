@@ -5,7 +5,6 @@ export const GMAIL_OAUTH_SLOT = "personal";
 export const NODE = {
   connect: "gmail:connect",
   disconnect: "gmail:disconnect",
-  disconnectStatus: "gmail:disconnect:status",
   compose: "gmail:compose",
   composeToPrompt: "gmail:compose:to-prompt",
   composeTo: "gmail:compose:to",

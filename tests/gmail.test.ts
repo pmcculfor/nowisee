@@ -241,18 +241,21 @@ describe("Gmail app graph", () => {
     const gmail = app(fakeClient({ inbox: [], send: (m) => sent.push(m) }));
     const ctx = signedIn(oauth);
 
-    await refreshApp(gmail,
-      [{ nodeId: NODE.composeSubjectPrompt, label: "", location: null }],
+    await refreshApp(
+      gmail,
+      NODE.composeSubjectPrompt,
       { action: { triggerId: NODE.composeTo }, inputText: "ada@example.com" },
       ctx,
     );
-    await refreshApp(gmail,
-      [{ nodeId: NODE.composeBodyPrompt, label: "", location: null }],
+    await refreshApp(
+      gmail,
+      NODE.composeBodyPrompt,
       { action: { triggerId: NODE.composeSubject }, inputText: "Hi" },
       ctx,
     );
-    const result = await refreshApp(gmail,
-      [{ nodeId: NODE.composeSent, label: "Sending…", location: null }],
+    const result = await refreshApp(
+      gmail,
+      NODE.composeSent,
       { action: { triggerId: NODE.composeBody }, inputText: "Hello Ada" },
       ctx,
     );
@@ -269,8 +272,9 @@ describe("Gmail app graph", () => {
     let called = 0;
     const oauth = mockOauth();
     const gmail = app(fakeClient({ send: () => { called += 1; } }));
-    const result = await refreshApp(gmail,
-      [{ nodeId: NODE.composeSent, label: "Sending…", location: null }],
+    const result = await refreshApp(
+      gmail,
+      NODE.composeSent,
       { action: { triggerId: NODE.composeBody }, inputText: "body" },
       signedIn(oauth),
     );
@@ -293,11 +297,7 @@ describe("Gmail app graph", () => {
       fakeClient({ inbox: [{ id: "m1", from: "Ada", subject: "Hello" }] }),
     );
     const ctx = signedIn(oauth);
-    const done = await refreshApp(gmail,
-      [{ nodeId: NODE.disconnect, label: "Disconnect Gmail", location: null }],
-      { action: true },
-      ctx,
-    );
+    const done = await refreshApp(gmail, NODE.disconnect, { action: true }, ctx);
     expect(oauth.disconnects).toBe(1);
     expect(done.node.id).toBe(NODE.disconnect);
     expect(done.node.label).toBe("Gmail disconnected.");

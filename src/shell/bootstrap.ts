@@ -63,10 +63,14 @@ export function startShell(
   mount.appendChild(surface);
 
   let navigator!: Navigator;
+  let navPads!: NavPads;
   const display = new Display(surface, {
     isBlocked: () => navigator.isBlocked(),
     onIntent: (intent: NavIntent) => {
       void navigator.onIntent(intent);
+    },
+    onModeChange: (mode) => {
+      navPads.setHidden(mode === "input");
     },
   });
   const map = new NavigationMapStore();
@@ -115,11 +119,12 @@ export function startShell(
   keyboard.attach();
   router.attach();
 
-  const navPads = new NavPads({
+  navPads = new NavPads({
     parent: mount,
     host: intentHost,
   });
   navPads.attach();
+  navPads.setHidden(display.getMode() === "input");
 
   const initial = router.parse(window.location.pathname || "/");
   void navigator.openLocation(initial);

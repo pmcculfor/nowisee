@@ -240,7 +240,7 @@ export function isActionExtras(
  */
 export type RequestSignInOutcome =
   | { ok: true }
-  | { ok: false; reason: "invalid-credentials" | "throttled" };
+  | { ok: false; reason: "invalid-credentials" | "throttled" | "send-failed" };
 
 export type AuthOutcome =
   | { ok: true; userId: string }

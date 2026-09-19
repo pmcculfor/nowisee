@@ -152,7 +152,6 @@ CREATE INDEX dictionary_recency_user_list ON dictionary_recency (user_id, used_a
 CREATE INDEX dictionary_recency_session_list ON dictionary_recency (session_id, used_at DESC);
 
 CREATE TABLE dictionary_entry (
-  id INTEGER PRIMARY KEY,
   dictionary_work_id INTEGER NOT NULL REFERENCES dictionary_work (id),
   strongs TEXT NOT NULL,
   lemma TEXT NOT NULL,

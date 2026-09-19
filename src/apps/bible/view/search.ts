@@ -1,10 +1,37 @@
 import { inputEdges, type MapFragment } from "../../../app-kit/index.ts";
 import type { NodePayload } from "../../../core/types.ts";
 import { SEARCH_POLICY } from "../catalog.ts";
-import { searchId, searchInputId, searchWorkingId } from "../ids.ts";
+import { searchEmptyId, searchId, searchInputId, searchWorkingId, verseNodeId } from "../ids.ts";
 import { tokenize } from "../search.ts";
 import type { SearchHit } from "../types.ts";
-import { addNode, type ViewSession } from "./helpers.ts";
+import {
+  activeVersion,
+  addNode,
+  type ActionContribution,
+  type ViewSession,
+} from "./helpers.ts";
+
+/**
+ * Done on the search input. Records the query, then names where to land: the
+ * first hit, or the empty-result node. Signed out, nothing is recorded, so the
+ * empty node carries query id 0.
+ */
+export function applySearchAction(session: ViewSession): ActionContribution | null {
+  const version = activeVersion(session);
+  if (!version) {
+    return null;
+  }
+  if (!session.sessionId) {
+    return { tipId: searchEmptyId(0) };
+  }
+  const query = session.extras.inputText ?? "";
+  const hits = searchHits(session, version.id, query);
+  const queryId = session.deps.store.createSearchQuery(session.sessionId, query, version.id, hits);
+  const first = hits[0];
+  return {
+    tipId: first ? verseNodeId({ type: "search", queryId }, first) : searchEmptyId(queryId),
+  };
+}
 
 export function addSearchInput(
   payloads: Map<string, NodePayload>,

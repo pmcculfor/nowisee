@@ -228,7 +228,7 @@ Identity and per-app SQLite have landed. Clipboard is still the only platform ca
 6. **Addressing.** Return a stable canonical location when the tip is bookmarkable. Use `location: null` for status tips that should not change the bar (this also stops a reload from re-entering an action node).
 7. **Prefetch.** Publish likely edges plus warm payloads.
 8. **Home.** Labels and `app` edges only.
-9. **App kit.** Prefer shared helpers for edge, list, input, and neighborhood boilerplate.
+9. **App kit.** Prefer shared helpers for edge, list, and input boilerplate.
 10. **Intents only.** Never assume a keystroke, a direction, or a particular screen.
 11. **Plain data only.** Return nothing that would not survive being sent as a message.
 12. **Copy.** Return `clipboardText` on the action refresh result; never touch `navigator.clipboard`.
@@ -237,9 +237,9 @@ Identity and per-app SQLite have landed. Clipboard is still the only platform ca
 
 ## 6. Roadmap
 
-Landed so far: core and the app kit, first-party apps on a Node host, identity, lockbox, OAuth, the Bible corpus and reader features, Notes, and Gmail v1.
+Landed so far: core and the app kit, first-party apps on a Node host, identity, lockbox, OAuth, deep-link ancestry, the admin console, the Bible corpus and reader features, Notes, Lists, Weather, Tutorial, Recents, and Gmail v1.
 
-Later work can happen without changing the contracts above: a status channel; optional deep-link ancestry; `requestRefresh`; third-party sandbox and contract versioning; browser Back/Forward versus the session stack.
+Later work can happen without changing the contracts above: a status channel; `requestRefresh`; third-party sandbox and contract versioning; browser Back/Forward versus the session stack.
 
 ---
 
@@ -259,6 +259,5 @@ A few deferrals have a known cost. See [`PREPAREDNESS.md`](PREPAREDNESS.md):
 | Deferred | Cost of deferring | Additive later? |
 |----------|-------------------|-----------------|
 | Status channel distinguishing busy / dead-end / failure | Those three states are identical to a user who cannot see a spinner | Yes — Display + Navigator addition |
-| Deep-link ancestry | `back` behaves differently depending on how the user arrived | Yes — optional `stack` on `open` |
 | Contract versioning + unknown-value fallbacks | Core and app must ship together | Yes |
 | Validating / bounding app responses | A buggy app degrades the shell, and the shell gets blamed | Yes, until third-party apps exist |

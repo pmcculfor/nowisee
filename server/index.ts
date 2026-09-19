@@ -3,16 +3,22 @@
  *
  *   npm run build && npm start
  *
- * Environment:
- *   PORT                         listen port (default 3000)
- *   NOWISEE_DB                   host identity SQLite file (default data/nowisee.db)
+ * Nowisee runs only on a server. There are no local-machine defaults: every
+ * value below is read from the environment, and a missing one fails the boot.
+ *
+ * Environment (required):
+ *   PORT                         listen port
+ *   NOWISEE_DB                   host identity SQLite file
  *   NOWISEE_ORIGIN               public origin for CSRF, e.g. https://nowisee.app
- *   NOWISEE_LOCKBOX_KEY          32-byte AES key, base64 (required if lockbox/OAuth apps are granted)
- *   NOWISEE_LOCKBOX_KEY_ID       optional key id (default v1)
- *   NOWISEE_MAIL_DRIVER          console (localhost) or resend
  *   NOWISEE_MAIL_FROM            From: header for Resend
  *   NOWISEE_RESEND_API_KEY       Resend API key
- *   NOWISEE_OTP_PEPPER           32-byte HMAC key, base64 (required for resend)
+ *   NOWISEE_OTP_PEPPER           32-byte HMAC key, base64
+ *
+ * Environment (required when lockbox / OAuth apps are granted):
+ *   NOWISEE_LOCKBOX_KEY          32-byte AES key, base64
+ *   NOWISEE_LOCKBOX_KEY_ID       key id for the key above
+ *
+ * Environment (optional):
  *   NOWISEE_OAUTH_<APP>_CLIENT_ID / _CLIENT_SECRET  OAuth app credentials (not lockbox)
  *   NOWISEE_ADMIN_EMAILS         comma-separated emails allowed to open /admin
  *   NOWISEE_TLS_CERT             optional PEM path; with NOWISEE_TLS_KEY enables HTTPS
@@ -30,17 +36,29 @@ import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { handleAdminHttp, isAdminUrl } from "./admin/http.ts";
 import { adminEmailsFromEnv } from "./admin/emails.ts";
-import { BodyTooLargeError, readLimitedBody } from "./readBody.ts";
+import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "./readBody.ts";
 import { appleAppSiteAssociation, appleTeamId, pageFile, siteTarget } from "./site.ts";
 
 const DIST = resolve(process.cwd(), "dist");
-const PORT = Number(process.env.PORT ?? "3000");
-const DB_PATH = process.env.NOWISEE_DB ?? "data/nowisee.db";
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+const PORT = Number(required("PORT"));
+if (!Number.isInteger(PORT) || PORT <= 0) {
+  throw new Error("PORT must be a positive integer");
+}
+const DB_PATH = required("NOWISEE_DB");
 
 const host = createNowiseeHost({
   db: DB_PATH,
   ephemeral: false,
-  configuredOrigin: process.env.NOWISEE_ORIGIN,
+  configuredOrigin: required("NOWISEE_ORIGIN"),
   adminEmails: adminEmailsFromEnv(),
 });
 
@@ -63,35 +81,24 @@ async function handler(req: IncomingMessage, res: ServerResponse): Promise<void>
 
 async function handleAdmin(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
-    const raw = req.method === "POST" ? await readLimitedBody(req) : "";
-    let body: unknown;
-    if (raw.length > 0) {
-      body = JSON.parse(raw) as unknown;
-    }
     const out = await handleAdminHttp(host, {
       method: req.method ?? "GET",
       url: req.url ?? "/",
       headers: req.headers,
-      body,
+      body: await readJsonBody(req),
       remoteAddress: req.socket.remoteAddress,
     });
     writeHttp(res, out);
   } catch (err) {
-    if (err instanceof BodyTooLargeError) {
-      writeError(res, 413, "Request body too large");
-      return;
-    }
-    writeError(res, 400, "Invalid JSON");
+    writeRequestFailure(res, err, "admin");
   }
 }
 async function handleOAuth(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
-    const raw = req.method === "POST" ? await readLimitedBody(req) : "";
     const out = await handleOAuthHttp(host, {
       method: req.method ?? "GET",
       url: req.url ?? "/",
       headers: req.headers,
-      body: raw,
     });
     const body = typeof out.body === "string" ? out.body : "";
     res.statusCode = out.status;
@@ -100,29 +107,20 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse): Promise<v
     }
     res.setHeader("Content-Length", Buffer.byteLength(body));
     res.end(body);
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) {
-      writeRaw(res, 413, "");
-      return;
-    }
+  } catch {
     writeRaw(res, 500, "");
   }
 }
 
 async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
-    const raw = req.method === "POST" ? await readLimitedBody(req) : "";
-    let body: unknown;
-    if (raw.length > 0) {
-      body = JSON.parse(raw) as unknown;
-    }
-      const out = await handleSessionHttp(host, {
-        method: req.method ?? "GET",
-        url: req.url ?? "/",
-        headers: req.headers,
-        body,
-        remoteAddress: req.socket.remoteAddress,
-      });
+    const out = await handleSessionHttp(host, {
+      method: req.method ?? "GET",
+      url: req.url ?? "/",
+      headers: req.headers,
+      body: await readJsonBody(req),
+      remoteAddress: req.socket.remoteAddress,
+    });
     const json = JSON.stringify(out.body);
     res.statusCode = out.status;
     for (const [key, value] of Object.entries(out.headers ?? {})) {
@@ -134,12 +132,25 @@ async function handleApi(req: IncomingMessage, res: ServerResponse): Promise<voi
     res.setHeader("Content-Length", Buffer.byteLength(json));
     res.end(json);
   } catch (err) {
-    if (err instanceof BodyTooLargeError) {
-      writeError(res, 413, "Request body too large");
-      return;
-    }
-    writeError(res, 400, "Invalid JSON");
+    writeRequestFailure(res, err, "api");
   }
+}
+
+/**
+ * A bad request is the client's fault and says so; anything else is ours and is
+ * a 500 with a log line. Never report our own crash as `400 Invalid JSON`.
+ */
+function writeRequestFailure(res: ServerResponse, err: unknown, surface: string): void {
+  if (err instanceof BodyTooLargeError) {
+    writeError(res, 413, "Request body too large");
+    return;
+  }
+  if (err instanceof MalformedJsonError) {
+    writeError(res, 400, "Invalid JSON");
+    return;
+  }
+  console.error(`${surface} request failed`, err);
+  writeError(res, 500, "Internal error");
 }
 
 async function serveSite(method: string, url: string, res: ServerResponse): Promise<void> {

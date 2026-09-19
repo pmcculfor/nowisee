@@ -1,4 +1,4 @@
-import { buildMap, edgePop, rootBackToHome, type MapFragment } from "../../../app-kit/index.ts";
+import { buildMap, rootBackToHome, type MapFragment } from "../../../app-kit/index.ts";
 import type {
   AppServerContext,
   NodePayload,
@@ -8,25 +8,17 @@ import type {
   StackEntry,
 } from "../../../core/types.ts";
 import { isActionExtras } from "../../../core/types.ts";
-import { parseNodeId, searchEmptyId, verseNodeId } from "../ids.ts";
-import type { CanonRef } from "../types.ts";
-import { resolveCopy, type ActionContribution } from "./copy.ts";
+import { parseNodeId } from "../ids.ts";
 import {
   addNode,
-  slotVerseId,
-  touchCommentaryRecency,
-  touchDictionaryRecency,
-  touchVersionRecency,
-  touchXrefRecency,
   viewSession,
   withTipLabel,
-  activeVersion,
+  type ActionContribution,
   type BibleViewDeps,
   type ViewSession,
 } from "./helpers.ts";
 import { KIND } from "./kinds.ts";
 import { emptyId, parseBiblePath } from "./path.ts";
-import { emptySearchLabel, searchHits } from "./search.ts";
 import { committedAncestry } from "./ancestry.ts";
 
 export type { BibleViewDeps };
@@ -50,70 +42,21 @@ export function refreshBibleView(
   ctx?: AppServerContext,
 ): RefreshResult {
   const session = viewSession(deps, extras, ctx);
-  if (isActionExtras(extras)) {
-    const search = applySearchAction(session, extras.action.triggerId);
-    if (search) {
-      return search;
-    }
-    const contribution = applyAction(session, extras.action.triggerId);
-    const view = buildBibleView(session, tipId);
-    return applyContribution(view, contribution);
+  if (!isActionExtras(extras)) {
+    return buildBibleView(session, tipId);
   }
-  return buildBibleView(session, tipId);
+  const contribution = applyAction(session, extras.action.triggerId);
+  const view = buildBibleView(session, contribution?.tipId ?? tipId);
+  return applyContribution(view, contribution);
 }
 
-function applySearchAction(session: ViewSession, triggerId: string): RefreshResult | null {
-  const parsed = parseNodeId(triggerId);
-  if (parsed?.kind === "search-input") {
-    return applySearch(session);
-  }
-  return null;
-}
-
+/** The trigger node's own kind decides what a deliberate traversal writes. */
 function applyAction(session: ViewSession, triggerId: string): ActionContribution | null {
   const parsed = parseNodeId(triggerId);
   if (!parsed) {
     return null;
   }
-  if (parsed.kind === "option" && parsed.option === "copy") {
-    return resolveCopy(session, parsed.ref);
-  }
-  if (parsed.kind === "option" && parsed.option === "bookmark") {
-    return applyBookmarkToggle(session, parsed.ref);
-  }
-  if (parsed.kind === "commentary-work") {
-    touchCommentaryRecency(session, parsed.commentaryId);
-    return null;
-  }
-  if (parsed.kind === "version-pick") {
-    touchVersionRecency(session, parsed.versionId);
-    return null;
-  }
-  if (parsed.kind === "verse-version-pick") {
-    touchVersionRecency(session, parsed.targetVersionId);
-    return null;
-  }
-  if (parsed.kind === "xref-work") {
-    touchXrefRecency(session, parsed.workId);
-    return null;
-  }
-  if (parsed.kind === "dictionary-work") {
-    touchDictionaryRecency(session, parsed.workId);
-    return null;
-  }
-  return null;
-}
-
-function applyBookmarkToggle(session: ViewSession, ref: CanonRef): ActionContribution | null {
-  if (!session.userId) {
-    return null;
-  }
-  const verseId = slotVerseId(session.deps.store, ref);
-  if (verseId === null) {
-    return { statusLabel: "Bookmark failed: verse not found." };
-  }
-  session.deps.store.toggleBookmark(session.userId, verseId);
-  return null;
+  return KIND[parsed.kind].action?.(session, parsed) ?? null;
 }
 
 function applyContribution(view: RefreshResult, contribution: ActionContribution | null): RefreshResult {
@@ -128,38 +71,6 @@ function applyContribution(view: RefreshResult, contribution: ActionContribution
     next = { ...next, clipboardText: contribution.clipboardText };
   }
   return next;
-}
-
-function applySearch(session: ViewSession): RefreshResult {
-  const query = session.extras.inputText ?? "";
-  const version = activeVersion(session);
-  if (!version) {
-    return emptyBibleView(session);
-  }
-  if (!session.sessionId) {
-    const id = searchEmptyId(0);
-    const label = emptySearchLabel(query);
-    return {
-      navigationMap: { [id]: { back: edgePop() } },
-      warm: [{ id, label }],
-      node: { id, label },
-      location: { appId: session.deps.appId, path: "/search" },
-    };
-  }
-  const hits = searchHits(session, version.id, query);
-  const queryId = session.deps.store.createSearchQuery(session.sessionId, query, version.id, hits);
-  if (hits.length === 0) {
-    const id = searchEmptyId(queryId);
-    const label = emptySearchLabel(query);
-    return {
-      navigationMap: { [id]: { back: edgePop() } },
-      warm: [{ id, label }],
-      node: { id, label },
-      location: { appId: session.deps.appId, path: "/search" },
-    };
-  }
-  const first = hits[0]!;
-  return buildBibleView(session, verseNodeId({ type: "search", queryId }, first));
 }
 
 export function buildBibleView(session: ViewSession, tipId: string): RefreshResult {
@@ -177,10 +88,6 @@ export function buildBibleView(session: ViewSession, tipId: string): RefreshResu
   if (!version) {
     return emptyBibleView(session);
   }
-  if (row.directView) {
-    return row.directView(session, parsed, version);
-  }
-
   const payloads = new Map<string, NodePayload>();
   const fragments: MapFragment[] = [];
   row.addLevel?.(session, payloads, fragments, parsed, version);

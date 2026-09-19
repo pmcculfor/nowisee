@@ -35,6 +35,7 @@ export class NavPads {
   private readonly onFocusIn: (event: Event) => void;
   private readonly onClick: (event: Event) => void;
   private attached = false;
+  private hidden = false;
   /** Button whose focusin already fired; the paired click must not fire again. */
   private suppressClickFor: HTMLButtonElement | null = null;
 
@@ -67,6 +68,22 @@ export class NavPads {
       button.addEventListener("click", this.onClick);
     }
     this.attached = true;
+  }
+
+  /**
+   * Hidden while an input tip is showing: the pads overlay the whole screen and
+   * would cover Cancel / Done / Recent apps, and fire on explore-by-touch.
+   * `hidden` also takes them out of the accessibility tree, which focus-driven
+   * navigation requires — CSS alone would leave them reachable.
+   */
+  setHidden(hidden: boolean): void {
+    if (this.hidden === hidden) {
+      return;
+    }
+    this.hidden = hidden;
+    for (const button of this.buttons.keys()) {
+      button.hidden = hidden;
+    }
   }
 
   detach(): void {

@@ -72,7 +72,8 @@ Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). Th
 | Surface | Job |
 |---------|-----|
 | `GET /oauth/callback` | IdP redirect. Dispatch by `state`, not by app id in the path. Cookie + hashed state is CSRF for this GET — do **not** run the JSON Origin check. |
-| `POST /oauth/:appId/events` | Reserved for cookie-less provider webhooks (deauthorize, data deletion). No first-party handler ships yet. |
+
+There is no provider-webhook route. A provider that needs to tell us a user revoked access or asked for deletion would get a new cookie-less route that authenticates the provider's own signature; nothing in the broker presumes its shape today.
 
 Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when `oauthAppIds` is non-empty. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less **or dead/expired** cookie on the callback does **not** mint a session and does **not** send `Set-Cookie`. The callback looks the token up; it never calls `resolve`.
 
@@ -95,7 +96,7 @@ First-party mail is the first consumer (`ctx.oauth`).
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
 - **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`001_host.sql`](../server/db/migrations/001_host.sql)).
 - **Admin console (landed):** same host file, tables `login_events` and `usage_hourly` ([`002_usage.sql`](../server/db/migrations/002_usage.sql)). Visual `/admin` page; §15.
-- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Production origin: **https://nowisee.app**. Staging on the same droplet: **https://dev.nowisee.app** (own `NOWISEE_ORIGIN`, SQLite, and lockbox key — [`deploy/README.md`](../deploy/README.md)). Entry point: `server/index.ts` (`npm start` after `npm run build`). Vite `npm run dev` still serves `/api` in-process. `Secure` cookies work on `http://localhost`. Production should terminate TLS at the reverse proxy (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy. Env: [`.env.production.example`](../.env.production.example), [`.env.staging.example`](../.env.staging.example).
+- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Production origin: **https://nowisee.app**. Staging on the same droplet: **https://dev.nowisee.app** (own `NOWISEE_ORIGIN`, SQLite, and lockbox key — [`deploy/README.md`](../deploy/README.md)). Entry point: `server/index.ts` (`npm start` after `npm run build`). There is no local-machine mode. Production should terminate TLS at the reverse proxy (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy. Env: [`.env.production.example`](../.env.production.example), [`.env.staging.example`](../.env.staging.example).
 
 ---
 
@@ -103,7 +104,7 @@ First-party mail is the first consumer (`ctx.oauth`).
 
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
-1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin. Vite plugin remains for `npm run dev`.
+1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin.
 2. **Database.** `server/db/` — host identity, lockbox, and OAuth state (`001_host.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Each app opens its own file.
 3. **Identity service.** `server/identity/` — email, sign-in codes, sessions, `resolve` / `requestSignIn` / `verifySignIn` / `signOut`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
@@ -184,7 +185,7 @@ export interface IdentityService {
 /** Structured, not prose — the Account app owns the words the user hears. */
 export type RequestSignInOutcome =
   | { ok: true }
-  | { ok: false; reason: "invalid-credentials" | "throttled" };
+  | { ok: false; reason: "invalid-credentials" | "throttled" | "send-failed" };
 
 export type AuthOutcome =
   | { ok: true; userId: string }
@@ -250,6 +251,7 @@ A host mailer (`server/mail/`) sends the plaintext code. Drivers: `console` (loc
 | Failure reason | One `invalid-credentials` for a bad/unknown code, an expired challenge, and closed registration of an unknown email |
 | Throttle | 1 request / 30s per session; 5 / hour per email; 10 / hour per session. Over limit → `throttled` |
 | Enumeration | `requestSignIn` returns `{ ok: true }` for a well-formed email that is not throttled, including unknown addresses when registration is closed (no mail is sent then) |
+| Mail failure | When the send **throws**, the challenge is deleted and the caller gets `send-failed`. Never report success for a code that does not exist — the user would wait for mail that never arrives and retry into the same wall. This is distinct from the enumeration case above, where no send was attempted |
 
 **Registration is open by default.** Owner decision, August 2026: this product is not advertised, so anyone who finds it may register. There is no invite code. `allowRegistration` on the host (default `true`) can close it later without a schema change. Closed registration plus an unknown email: no mail, no challenge, verify fails with `invalid-credentials`. First successful verify of a new address creates the user — email is verified by construction.
 

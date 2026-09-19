@@ -25,6 +25,7 @@ import {
 } from "../src/apps/lists/store.ts";
 import type { ListItemRecord, ListRecord, ListsStore } from "../src/apps/lists/types.ts";
 import type { AppServerContext } from "../src/core/types.ts";
+import { nodeEdge } from "./helpers/edges.ts";
 import { refreshApp } from "./helpers/refreshCall.ts";
 
 const OWNER = "user-1";
@@ -213,7 +214,7 @@ describe("Lists app", () => {
       stackBehavior: "replace",
     });
     expect(interior.navigationMap[deleteNodeId("shop")]?.prev).toBeUndefined();
-    expect(interior.navigationMap[activeItemNodeId("older")]?.next?.toNodeId).toBe(
+    expect(nodeEdge(interior.navigationMap[activeItemNodeId("older")]?.next)?.toNodeId).toBe(
       activeItemNodeId("newer"),
     );
     expect(interior.navigationMap[activeItemNodeId("older")]?.back).toEqual({
@@ -272,7 +273,7 @@ describe("Lists app", () => {
     expect(created.node.label).toBe("Add an item");
     const items = await store.listItems(OWNER, "shop", "active");
     expect(items.map((i) => i.body)).toEqual(["Milk"]);
-    expect(created.navigationMap[addNodeId("shop")]?.next?.toNodeId).toBe(activeItemNodeId("item-1"));
+    expect(nodeEdge(created.navigationMap[addNodeId("shop")]?.next)?.toNodeId).toBe(activeItemNodeId("item-1"));
   });
 
   it("trimmed empty create and add do not write", async () => {
@@ -378,11 +379,7 @@ describe("Lists app", () => {
         }),
       ],
     });
-    const repaired = await refreshApp(app,
-      [{ nodeId: activeItemNodeId("milk"), label: "Milk", location: null }],
-      {},
-      signedIn(),
-    );
+    const repaired = await refreshApp(app, activeItemNodeId("milk"), {}, signedIn());
     expect(repaired.node.id).toBe(addNodeId("shop"));
   });
 
@@ -459,7 +456,7 @@ describe("Lists app", () => {
     });
     const completed = await app.open("/list/shop/completed", {}, signedIn());
     expect(completed.node.id).toBe(completedItemNodeId("newDone"));
-    expect(completed.navigationMap[completedItemNodeId("newDone")]?.next?.toNodeId).toBe(
+    expect(nodeEdge(completed.navigationMap[completedItemNodeId("newDone")]?.next)?.toNodeId).toBe(
       completedItemNodeId("oldDone"),
     );
     expect(completed.navigationMap[completedItemNodeId("newDone")]?.enter).toMatchObject({
@@ -531,11 +528,7 @@ describe("Lists app", () => {
       lists: [listRow({ id: "shop", title: "Shopping" })],
       items: [itemRow({ id: "milk", listId: "shop", body: "Milk" })],
     });
-    await refreshApp(app,
-      [{ nodeId: itemDoneNodeId("milk"), label: "Completed.", location: null }],
-      {},
-      signedIn(),
-    );
+    await refreshApp(app, itemDoneNodeId("milk"), {}, signedIn());
     expect((await store.getItem(OWNER, "milk"))?.completedAt).toBeNull();
   });
 
@@ -549,8 +542,9 @@ describe("Lists app", () => {
     expect(result.navigationMap[result.node.id]?.back).toEqual(
       edgeApp({ appId: "home", path: "/app/lists" }),
     );
-    await refreshApp(app,
-      [{ nodeId: CREATE_EDIT_NODE_ID, label: "", location: null }],
+    await refreshApp(
+      app,
+      CREATE_EDIT_NODE_ID,
       { action: true, inputText: "Nope" },
       signedOutCtx(),
     );
@@ -578,19 +572,11 @@ describe("Lists app", () => {
     expect(mine.node.label).toBe("My list");
     expect(mine.warm.some((n) => n.label.includes("Secret"))).toBe(false);
 
-    const forgedList = await refreshApp(app,
-      [{ nodeId: catalogListNodeId("theirs"), label: "Secret list", location: null }],
-      {},
-      signedIn(OWNER),
-    );
+    const forgedList = await refreshApp(app, catalogListNodeId("theirs"), {}, signedIn(OWNER));
     expect(forgedList.node.label).not.toContain("Secret");
     expect(forgedList.node.id).toBe(catalogListNodeId("mine"));
 
-    const forgedItem = await refreshApp(app,
-      [{ nodeId: activeItemNodeId("their-item"), label: "Secret item", location: null }],
-      {},
-      signedIn(OWNER),
-    );
+    const forgedItem = await refreshApp(app, activeItemNodeId("their-item"), {}, signedIn(OWNER));
     expect(forgedItem.node.label).not.toContain("Secret");
 
     await app.refresh(
@@ -611,14 +597,7 @@ describe("Lists app", () => {
       lists: [listRow({ id: "shop", title: "Shopping" })],
       items: [itemRow({ id: "milk", listId: "shop", body: "Milk" })],
     });
-    const result = await refreshApp(app,
-      [
-        { nodeId: catalogListNodeId("shop"), label: "Shopping", location: null },
-        { nodeId: activeItemNodeId("milk"), label: "Milk", location: null },
-      ],
-      {},
-      signedIn(),
-    );
+    const result = await refreshApp(app, activeItemNodeId("milk"), {}, signedIn());
     expect(result.navigationMap[activeItemNodeId("milk")]?.back).toEqual({
       kind: "node",
       stackBehavior: "pop",

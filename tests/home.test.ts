@@ -21,6 +21,7 @@ import {
   startHomeApp,
 } from "../src/apps/home/store.ts";
 import type { AppDescriptor, AppServerContext, RefreshResult } from "../src/core/types.ts";
+import { nodeEdge } from "./helpers/edges.ts";
 import { refreshApp } from "./helpers/refreshCall.ts";
 
 const OWNER = "user-1";
@@ -183,22 +184,14 @@ describe("Home app", () => {
 
     const openedResult = (await home.open("/", {}, ctx())) as RefreshResult;
     const mail = openedResult.warm.find((n) => n.label === "Mail")!;
-    const refreshed = (await refreshApp(home,
-      [{ nodeId: mail.id, label: mail.label, location: null }],
-      {},
-      ctx(),
-    )) as RefreshResult;
+    const refreshed = (await refreshApp(home, mail.id, {}, ctx())) as RefreshResult;
     expect(refreshed.node.id).toBe(mail.id);
 
     list = [
       { id: "home", label: "Home", homeRole: "internal" },
       { id: "bible", label: "Bible", homeRole: "default" },
     ];
-    const repaired = (await refreshApp(home,
-      [{ nodeId: mail.id, label: mail.label, location: null }],
-      {},
-      ctx(),
-    )) as RefreshResult;
+    const repaired = (await refreshApp(home, mail.id, {}, ctx())) as RefreshResult;
     expect(repaired.node.label).toBe("Bible");
   });
 
@@ -255,11 +248,7 @@ describe("Home app", () => {
       stackBehavior: "push",
     });
 
-    const refreshed = (await refreshApp(app,
-      [{ nodeId: MANAGE_NODE_ID, label: "Manage Apps", location: null }],
-      {},
-      ctx,
-    )) as RefreshResult;
+    const refreshed = (await refreshApp(app, MANAGE_NODE_ID, {}, ctx)) as RefreshResult;
     expect(refreshed.node.id).toBe(MANAGE_NODE_ID);
     expect(refreshed.node.label).toBe("Manage Apps");
     expect(refreshed.location).toEqual({ appId: "home", path: "/manage" });
@@ -271,11 +260,7 @@ describe("Home app", () => {
     const catalog = (await app.open("/manage", {}, ctx)) as RefreshResult;
     expect(catalog.node.label).toBe("Manage Apps");
 
-    const result = (await refreshApp(app,
-      [{ nodeId: MANAGE_SIGNED_OUT_ID, label: "Sign in to manage apps.", location: null }],
-      {},
-      ctx,
-    )) as RefreshResult;
+    const result = (await refreshApp(app, MANAGE_SIGNED_OUT_ID, {}, ctx)) as RefreshResult;
     expect(result.node.label).toBe("Sign in to manage apps.");
     expect(result.node.id).toBe(MANAGE_SIGNED_OUT_ID);
     expect(result.navigationMap[MANAGE_SIGNED_OUT_ID]?.enter).toEqual({
@@ -294,8 +279,8 @@ describe("Home app", () => {
     const entered = (await homeApp().open("/manage/add", {}, signedInCtx())) as RefreshResult;
     expect(entered.node.label).toBe("Add Apps");
     expect(entered.warm.map((n) => n.label)).toEqual(["Add Apps", "Remove Apps", "Reorder Apps"]);
-    expect(entered.navigationMap[ADD_MENU_ID]?.next?.toNodeId).toBe(REMOVE_MENU_ID);
-    expect(entered.navigationMap[REMOVE_MENU_ID]?.next?.toNodeId).toBe(REORDER_MENU_ID);
+    expect(nodeEdge(entered.navigationMap[ADD_MENU_ID]?.next)?.toNodeId).toBe(REMOVE_MENU_ID);
+    expect(nodeEdge(entered.navigationMap[REMOVE_MENU_ID]?.next)?.toNodeId).toBe(REORDER_MENU_ID);
     expect(entered.navigationMap[REORDER_MENU_ID]?.next).toBeUndefined();
   });
 
@@ -309,8 +294,9 @@ describe("Home app", () => {
       toNodeId: addAddedNodeId("gmail"),
     });
 
-    const added = (await refreshApp(app,
-      [{ nodeId: addAddedNodeId("gmail"), label: "App added to home screen", location: null }],
+    const added = (await refreshApp(
+      app,
+      addAddedNodeId("gmail"),
       { action: { triggerId: addAppNodeId("gmail") } },
       ctx,
     )) as RefreshResult;
@@ -335,8 +321,9 @@ describe("Home app", () => {
     expect(list.node.label).toBe("Tutorial");
     expect(list.warm.map((n) => n.label).includes("Account")).toBe(false);
 
-    const removed = (await refreshApp(app,
-      [{ nodeId: removeRemovedNodeId("tutorial"), label: "App removed from home screen", location: null }],
+    const removed = (await refreshApp(
+      app,
+      removeRemovedNodeId("tutorial"),
       { action: { triggerId: removeAppNodeId("tutorial") } },
       ctx,
     )) as RefreshResult;
@@ -391,30 +378,27 @@ describe("Home app", () => {
       frame: "home-reorder",
     });
 
-    const moveUp = (await refreshApp(app,
-      [{ nodeId: reorderMoveUpId("bible"), label: "Move up", location: null }],
-      {},
-      ctx,
-    )) as RefreshResult;
+    const moveUp = (await refreshApp(app, reorderMoveUpId("bible"), {}, ctx)) as RefreshResult;
     expect(moveUp.node.label).toBe("Move up");
     expect(moveUp.navigationMap[reorderMoveUpId("bible")]?.enter).toMatchObject({
       action: true,
       stackBehavior: "popTransient",
     });
-    expect(moveUp.navigationMap[reorderMoveUpId("bible")]?.next?.toNodeId).toBe(
+    expect(nodeEdge(moveUp.navigationMap[reorderMoveUpId("bible")]?.next)?.toNodeId).toBe(
       reorderMoveDownId("bible"),
     );
 
-    const moved = (await refreshApp(app,
-      [{ nodeId: reorderAppNodeId("bible"), label: "Bible", location: null }],
+    const moved = (await refreshApp(
+      app,
+      reorderAppNodeId("bible"),
       { action: { triggerId: reorderMoveUpId("bible") } },
       ctx,
     )) as RefreshResult;
     expect(moved.node.id).toBe(reorderAppNodeId("bible"));
     expect(moved.node.label).toBe("Bible");
     const tutorialId = reorderAppNodeId("tutorial");
-    expect(moved.navigationMap[moved.node.id]?.prev?.toNodeId).toBeUndefined();
-    expect(moved.navigationMap[moved.node.id]?.next?.toNodeId).toBe(tutorialId);
+    expect(nodeEdge(moved.navigationMap[moved.node.id]?.prev)?.toNodeId).toBeUndefined();
+    expect(nodeEdge(moved.navigationMap[moved.node.id]?.next)?.toNodeId).toBe(tutorialId);
 
     const home = (await app.open("/", {}, ctx)) as RefreshResult;
     expect(home.warm.map((n) => n.label)).toEqual([
@@ -433,19 +417,16 @@ describe("Home app", () => {
     expect(tutorial.navigationMap[reorderAppNodeId("tutorial")]?.enter).toMatchObject({
       toNodeId: reorderMoveDownId("tutorial"),
     });
-    const move = (await refreshApp(app,
-      [{ nodeId: reorderMoveDownId("tutorial"), label: "Move down", location: null }],
-      {},
-      ctx,
-    )) as RefreshResult;
+    const move = (await refreshApp(app, reorderMoveDownId("tutorial"), {}, ctx)) as RefreshResult;
     expect(move.node.label).toBe("Move down");
     expect(move.navigationMap[reorderMoveUpId("tutorial")]).toBeUndefined();
   });
 
   it("store is owner-scoped", async () => {
     const app = homeApp();
-    await refreshApp(app,
-      [{ nodeId: addAddedNodeId("gmail"), label: ADDED, location: null }],
+    await refreshApp(
+      app,
+      addAddedNodeId("gmail"),
       { action: { triggerId: addAppNodeId("gmail") } },
       signedInCtx(),
     );
@@ -462,5 +443,3 @@ describe("Home app", () => {
     expect(result.node.label).toBe("Tutorial");
   });
 });
-
-const ADDED = "App added to home screen";

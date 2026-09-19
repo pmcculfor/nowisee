@@ -756,7 +756,7 @@ describe("Navigator + Router contracts", () => {
           location: { appId: "probe", path: "/here" },
         };
       },
-      async refresh(nodeId) {
+      async refresh(nodeId): Promise<RefreshResult> {
         refreshCount += 1;
         const tipId = nodeId || "here";
         if (refreshCount === 1) {
@@ -885,7 +885,7 @@ describe("Navigator + Router contracts", () => {
           location: { appId: "probe", path: "/here" },
         };
       },
-      async refresh(nodeId) {
+      async refresh(nodeId): Promise<RefreshResult> {
         refreshCount += 1;
         const tipId = nodeId || "here";
         if (refreshCount === 1) {

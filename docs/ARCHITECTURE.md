@@ -34,31 +34,28 @@ server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
 server/index.ts   production entry (SPA + /api)
 ```
 
-### Dev
+### Running it
 
-`npm run dev` runs Vite plus `/api` middleware on the same origin, with SQLite and sessions.
+`npm run build && npm start` has `server/index.ts` serve `dist/` and `/api` together. Vite `base` is `/`. Vite is the bundler and the test runner's config host; there is no Vite dev server.
 
-`npm run preview` uses the same API plugin on the preview server.
-
-`npm run build && npm start` has `server/index.ts` serve `dist/` and `/api` together. Vite `base` is `/`.
+**Nowisee runs only on a server.** There is no local-machine mode and no default that lets the host boot without configuration: `npm start` reads every value from the environment and throws on a missing one. Work against staging (https://dev.nowisee.app), not a laptop. Tests are the local feedback loop and need no environment at all.
 
 ### Environment
 
-See [`.env.example`](../.env.example) (local), [`.env.production.example`](../.env.production.example) (https://nowisee.app), and [`.env.staging.example`](../.env.staging.example) (https://dev.nowisee.app). Production `npm start` and Vite grant lockbox/OAuth to apps that declare them, so they **do** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service), [`deploy/nowisee-dev.service`](../deploy/nowisee-dev.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
+See [`.env.production.example`](../.env.production.example) (https://nowisee.app) and [`.env.staging.example`](../.env.staging.example) (https://dev.nowisee.app). The running host grants lockbox/OAuth to apps that declare them, so it **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service), [`deploy/nowisee-dev.service`](../deploy/nowisee-dev.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
 
 | Variable | Role |
 |----------|------|
-| `PORT` | Listen port (default `3000`) |
-| `NOWISEE_DB` | Host SQLite file (default `data/nowisee.db`) |
-| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Production: `https://nowisee.app`. Staging: `https://dev.nowisee.app`. If unset, every `/api` Origin check fails (no `Host` fallback). |
+| `PORT` | Listen port. Required |
+| `NOWISEE_DB` | Host SQLite file. Required |
+| `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Required. Production: `https://nowisee.app`. Staging: `https://dev.nowisee.app` |
+| `NOWISEE_MAIL_FROM` | From: header for Resend. Required |
+| `NOWISEE_RESEND_API_KEY` | Resend API key. Required |
+| `NOWISEE_OTP_PEPPER` | 32-byte HMAC key, base64. Required |
 | `NOWISEE_LOCKBOX_KEY` | 32-byte AES key, base64. Required if lockbox/OAuth apps are granted |
-| `NOWISEE_LOCKBOX_KEY_ID` | Optional key id (default `v1`) |
+| `NOWISEE_LOCKBOX_KEY_ID` | Key id naming the key above. Required whenever that key is set |
 | `NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET` | Per-app OAuth client credentials. Not lockbox. `<APP>` is the app id, uppercased, non-alphanumerics → `_` |
 | `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY` | Optional PEM paths; both set enables HTTPS |
-| `NOWISEE_MAIL_DRIVER` | `console` (localhost default) or `resend` |
-| `NOWISEE_MAIL_FROM` | From: header when using Resend |
-| `NOWISEE_RESEND_API_KEY` | Resend API key |
-| `NOWISEE_OTP_PEPPER` | 32-byte HMAC key, base64. Required for Resend |
 | `NOWISEE_ADMIN_EMAILS` | Comma-separated emails allowed to open `/admin`. Empty disables it. Not an `is_admin` column |
 
 ---
@@ -131,7 +128,7 @@ This is a discipline, not a sandbox.
 | Path | Contents |
 |------|----------|
 | `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities |
-| `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, neighborhood walk, signed-out, split text) |
+| `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, signed-out, split text) |
 | `src/apps/` | First-party `AppModule`s. Graph/docs next to each app |
 | `src/shell/` | Bootstrap: config, lazy generic RPC stub, mount display, wire keyboard |
 

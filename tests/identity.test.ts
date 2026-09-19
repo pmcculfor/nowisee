@@ -266,6 +266,21 @@ describe("identity service", () => {
     expect(again.userId).toBeNull();
   });
 
+  it("a failed send reports send-failed and leaves no challenge behind", async () => {
+    db = openDatabase({ path: ":memory:" });
+    const failing = capturingMailer();
+    failing.send = async () => {
+      throw new Error("resend down");
+    };
+    const { id } = service(db, { mailer: failing });
+    const anon = await id.resolve(null);
+    expect(await id.requestSignIn(anon.sessionId, "a@b.co")).toEqual({
+      ok: false,
+      reason: "send-failed",
+    });
+    expect(db.all("SELECT session_id FROM login_challenges")).toHaveLength(0);
+  });
+
   it("malformed email is invalid-credentials", async () => {
     db = openDatabase({ path: ":memory:" });
     const { id } = service(db);

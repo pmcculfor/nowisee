@@ -28,6 +28,11 @@ export type DisplayMode = "text" | "input";
 export interface DisplayHost {
   isBlocked(): boolean;
   onIntent(intent: NavIntent): void;
+  /**
+   * Display announces the switch; it does not reach outside its own root to
+   * act on it. The shell decides who else cares (NavPads hides in input mode).
+   */
+  onModeChange?(mode: DisplayMode): void;
 }
 
 export class Display {
@@ -133,14 +138,7 @@ export class Display {
   private setMode(mode: DisplayMode): void {
     this.mode = mode;
     this.root.dataset.mode = mode;
-    const parent = this.root.parentElement;
-    if (parent) {
-      if (mode === "input") {
-        parent.setAttribute("data-input-open", "");
-      } else {
-        parent.removeAttribute("data-input-open");
-      }
-    }
+    this.host?.onModeChange?.(mode);
   }
 
   private fireIntent(intent: NavIntent): void {
