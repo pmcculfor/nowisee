@@ -565,7 +565,7 @@ Navigator **never** imports these for automatic behavior. Apps may import freely
 
 - Build `ShellConfig` (`rootAppId`, optional `recentsAppId`, optional `keyBindings`). Core files never name an app.
 - Construct an empty registry. Inject `resolveApp` so Navigator can mint a generic `createRemoteApp` stub for whatever id the URL or an `app` edge names. Do **not** pre-register a product list.
-- Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `createAppHost`).
+- Inject `AppRpc` (default: POST `/api/apps/:id/…`; tests pass `startTestFleet().rpc`).
 - Construct cache, map store, display, navigator, router, keyboard, platform capabilities.
 - Router uses `isAppId` (syntax), not the client registry, to accept a path segment.
 - Initial `navigator.openLocation(router.parse(location.pathname))`.

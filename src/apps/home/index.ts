@@ -6,6 +6,11 @@ import type {
 } from "../../core/types.ts";
 import { HOME_APP_ID } from "./ids.ts";
 import { buildHomeView, openHomePath, type HomeViewDeps } from "./view.ts";
+import {
+  createSqliteHomeStore,
+  DEFAULT_HOME_DB_PATH,
+  openHomeDatabase,
+} from "./store.ts";
 import type { HomeStore } from "./types.ts";
 
 export type HomeAppDeps = {
@@ -14,6 +19,19 @@ export type HomeAppDeps = {
 };
 
 export type HomeApp = AppModule & { close(): void };
+
+export type StartHomeAppOptions = {
+  readonly dbPath?: string;
+};
+
+/** Opens Home's own SQLite file and returns the AppModule. */
+export function startHomeApp(options: StartHomeAppOptions = {}): HomeApp {
+  const db = openHomeDatabase(options.dbPath ?? DEFAULT_HOME_DB_PATH);
+  return createHomeApp({
+    store: createSqliteHomeStore(db),
+    close: () => db.close(),
+  });
+}
 
 /**
  * Home is an ordinary AppModule. It lists installed apps from `ctx.directory`
@@ -47,3 +65,4 @@ export function createHomeApp(deps: HomeAppDeps = {}): HomeApp {
 
 export type { HomeStore } from "./types.ts";
 export { HOME_APP_ID } from "./ids.ts";
+export { DEFAULT_HOME_DB_PATH, openHomeDatabase, createSqliteHomeStore } from "./store.ts";

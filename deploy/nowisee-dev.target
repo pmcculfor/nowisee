@@ -1,0 +1,16 @@
+[Unit]
+Description=Nowisee (dev)
+Wants=nowisee-dev.service \
+  nowisee-dev-app@home.service \
+  nowisee-dev-app@recents.service \
+  nowisee-dev-app@tutorial.service \
+  nowisee-dev-app@bible.service \
+  nowisee-dev-app@notes.service \
+  nowisee-dev-app@lists.service \
+  nowisee-dev-app@weather.service \
+  nowisee-dev-app@gmail.service \
+  nowisee-dev-app@account.service
+After=network.target
+
+[Install]
+WantedBy=multi-user.target

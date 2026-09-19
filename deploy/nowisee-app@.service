@@ -1,0 +1,17 @@
+[Unit]
+Description=Nowisee app (%i)
+After=network.target nowisee.service
+PartOf=nowisee.target
+
+[Service]
+Type=simple
+User=nowisee-%i
+Group=nowisee
+WorkingDirectory=/var/www/nowisee
+EnvironmentFile=/etc/nowisee/apps/%i.env
+ExecStart=/usr/bin/node --experimental-strip-types src/apps/%i/main.ts
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=nowisee.target

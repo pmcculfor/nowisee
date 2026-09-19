@@ -7,6 +7,11 @@ import type {
 import { ACCOUNT_APP_ID } from "./ids.ts";
 import type { AccountFlowStore } from "./types.ts";
 import { openAccount, refreshAccount, type AccountViewDeps } from "./view.ts";
+import {
+  createAccountFlowStore,
+  DEFAULT_ACCOUNT_DB_PATH,
+  openAccountDatabase,
+} from "./store.ts";
 
 export type AccountAppDeps = {
   readonly rootAppId: string;
@@ -15,6 +20,21 @@ export type AccountAppDeps = {
 };
 
 export type AccountApp = AppModule & { close(): void };
+
+export type StartAccountAppOptions = {
+  readonly rootAppId: string;
+  readonly dbPath?: string;
+};
+
+/** Opens Account's own SQLite file and returns the AppModule. */
+export function startAccountApp(options: StartAccountAppOptions): AccountApp {
+  const db = openAccountDatabase(options.dbPath ?? DEFAULT_ACCOUNT_DB_PATH);
+  return createAccountApp({
+    rootAppId: options.rootAppId,
+    flow: createAccountFlowStore(db),
+    close: () => db.close(),
+  });
+}
 
 export function createAccountApp(deps: AccountAppDeps): AccountApp {
   const viewDeps: AccountViewDeps = {
@@ -43,3 +63,4 @@ export function createAccountApp(deps: AccountAppDeps): AccountApp {
 
 export type { AccountFlowStore } from "./types.ts";
 export { ACCOUNT_APP_ID } from "./ids.ts";
+export { DEFAULT_ACCOUNT_DB_PATH, openAccountDatabase, createAccountFlowStore } from "./store.ts";

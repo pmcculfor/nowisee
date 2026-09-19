@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../server/db/index.ts";
-import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 import type { AppModule, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, signInForTest } from "./helpers/signIn.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -64,9 +64,9 @@ function vaultApp(): AppModule {
 let ctxDb: ReturnType<typeof openDatabase>;
 
 describe("owner-scoped stack ids", () => {
-  let h: NowiseeHost;
-  afterEach(() => {
-    h?.close();
+  let fleet: TestFleet;
+  afterEach(async () => {
+    await fleet?.close();
   });
 
   it("a forged stack node id belonging to another user returns not-found", async () => {
@@ -75,13 +75,14 @@ describe("owner-scoped stack ids", () => {
       "CREATE TABLE vault_items (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, body TEXT NOT NULL)",
     );
     const mailer = capturingMailer();
-    h = createNowiseeHost({
+    fleet = await startTestFleet({
       db: ctxDb,
-      ephemeral: true,
+      apps: [],
+      probes: [{ app: vaultApp() }],
       mailer,
       configuredOrigin: ORIGIN,
-      extraApps: [vaultApp()],
     });
+    const h = fleet.host;
 
     const cookieA = (await signInForTest(h, mailer, "owner-a@example.com")).cookie;
     await signInForTest(h, mailer, "owner-b@example.com");

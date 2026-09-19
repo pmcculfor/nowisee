@@ -2,14 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SESSION_COOKIE_NAME } from "../server/cookie.ts";
 import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";
-
-function host(): NowiseeHost {
-  return createNowiseeHost({
-    configuredOrigin: ORIGIN,
-  });
-}
 
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return {
@@ -22,12 +17,17 @@ function headers(extra: Record<string, string> = {}): Record<string, string> {
 
 describe("CSRF layers", () => {
   let h: NowiseeHost;
-  afterEach(() => {
-    h?.close();
+  let fleet: TestFleet;
+
+  afterEach(async () => {
+    await fleet?.close();
+    fleet = undefined as unknown as TestFleet;
+    await h?.close();
+    h = undefined as unknown as NowiseeHost;
   });
 
   it("rejects a non-JSON Content-Type even with a valid Origin", async () => {
-    h = host();
+    h = await createNowiseeHost({ configuredOrigin: ORIGIN });
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
@@ -39,7 +39,7 @@ describe("CSRF layers", () => {
   });
 
   it("rejects a missing Origin even with application/json", async () => {
-    h = host();
+    h = await createNowiseeHost({ configuredOrigin: ORIGIN });
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
@@ -54,7 +54,7 @@ describe("CSRF layers", () => {
   });
 
   it("rejects a foreign Origin even with application/json", async () => {
-    h = host();
+    h = await createNowiseeHost({ configuredOrigin: ORIGIN });
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
@@ -66,8 +66,8 @@ describe("CSRF layers", () => {
   });
 
   it("accepts same-origin JSON and sets SameSite=Lax on the session cookie", async () => {
-    h = host();
-    const out = await handleSessionHttp(h, {
+    fleet = await startTestFleet({ apps: ["home"], configuredOrigin: ORIGIN });
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/home/open",
       headers: headers(),
@@ -86,7 +86,7 @@ describe("CSRF layers", () => {
   });
 
   it("rejects even a matching Origin when configuredOrigin is unset", async () => {
-    h = createNowiseeHost({});
+    h = await createNowiseeHost({});
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",

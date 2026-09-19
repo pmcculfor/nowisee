@@ -2,13 +2,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
 import { tokenize } from "./search.ts";
-import { createBibleApp, type BibleApp } from "./index.ts";
-import { ensureCatalog, type EnsureCatalogOptions } from "./import.ts";
-import { MEMORY_SEED } from "./memorySeed.ts";
 import type {
   BibleBook,
   BibleChapter,
-  BibleSeed,
   BibleStore,
   BibleVersion,
   BookmarkRecord,
@@ -492,24 +488,4 @@ function wholeWordSql(column: string): string {
 
 function wholeWordParams(token: string): readonly [string, string, string, string] {
   return [token, `${token}[^a-z]*`, `*[^a-z]${token}`, `*[^a-z]${token}[^a-z]*`];
-}
-
-export type StartBibleAppOptions = {
-  readonly rootAppId: string;
-  readonly dbPath?: string;
-  readonly seed?: BibleSeed;
-  readonly rawDir?: string;
-};
-
-/** Opens Bible's own SQLite file and returns the AppModule. Used by the host. */
-export function startBibleApp(options: StartBibleAppOptions): BibleApp {
-  const dbPath = options.dbPath ?? DEFAULT_BIBLE_DB_PATH;
-  const db = openBibleDatabase(dbPath);
-  const catalog: EnsureCatalogOptions = {
-    seed: options.seed ?? (dbPath === ":memory:" ? MEMORY_SEED : undefined),
-    rawDir: options.rawDir,
-  };
-  ensureCatalog(db, catalog);
-  const store = createSqliteBibleStore(db);
-  return createBibleApp({ rootAppId: options.rootAppId, store });
 }

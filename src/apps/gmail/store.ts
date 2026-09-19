@@ -1,8 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import { createGmailApp, type GmailApp } from "./index.ts";
-import { createGmailApiClient } from "./gmailClient.ts";
 import type { ComposeDraft, GmailStore, InboxMessage, SendResult } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -116,22 +114,6 @@ export function openGmailDatabase(path: string = DEFAULT_GMAIL_DB_PATH): Db {
   return openSqlite({
     path,
     migrations: { dir: MIGRATIONS_DIR, files: ["001_gmail.sql"] },
-  });
-}
-
-export type StartGmailAppOptions = {
-  readonly rootAppId: string;
-  readonly dbPath?: string;
-  readonly fetch?: typeof fetch;
-};
-
-export function startGmailApp(options: StartGmailAppOptions): GmailApp {
-  const db = openGmailDatabase(options.dbPath ?? DEFAULT_GMAIL_DB_PATH);
-  return createGmailApp({
-    rootAppId: options.rootAppId,
-    store: createSqliteGmailStore(db),
-    client: createGmailApiClient({ fetch: options.fetch }),
-    close: () => db.close(),
   });
 }
 

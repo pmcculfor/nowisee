@@ -1,11 +1,24 @@
 /** @vitest-environment happy-dom */
 
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startShell } from "../src/shell/bootstrap.ts";
 import { createHomeApp } from "../src/apps/home/index.ts";
-import { createAppHost } from "../server/host.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 describe("shell bootstrap", () => {
+  let fleet: TestFleet;
+
+  beforeAll(async () => {
+    fleet = await startTestFleet({
+      apps: ["home", "bible"],
+      configuredOrigin: "http://localhost:5173",
+    });
+  });
+
+  afterAll(async () => {
+    await fleet.close();
+  });
+
   it("opens Home at / with rootAppId home and lists Tutorial first", async () => {
     window.history.replaceState(null, "", "/");
     const mount = document.createElement("div");
@@ -13,7 +26,7 @@ describe("shell bootstrap", () => {
 
     const shell = startShell(mount, {
       config: { rootAppId: "home" },
-      rpc: createAppHost({ rootAppId: "home" }),
+      rpc: fleet.rpc,
     });
     await shell.navigator.openLocation({ appId: "home", path: "/" });
 
@@ -33,7 +46,7 @@ describe("shell bootstrap", () => {
 
     const shell = startShell(mount, {
       config: { rootAppId: "home" },
-      rpc: createAppHost({ rootAppId: "home" }),
+      rpc: fleet.rpc,
     });
     await shell.navigator.openLocation({ appId: "bible", path: "/" });
 

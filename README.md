@@ -10,16 +10,16 @@ You need Node 22. There are no runtime npm dependencies.
 npm ci
 npm test
 npm run build
-npm start            # serves dist/ and /api on one origin
+npm start            # host only — serves dist/ and /api; does not start apps
 ```
 
 Nowisee runs only on a server. There is no local-machine mode: `npm start` reads everything from the environment and refuses to boot if a required value is missing. Develop against the staging host, **https://dev.nowisee.app**.
 
 The public origin is **https://nowisee.app**. Staging on the same droplet is **https://dev.nowisee.app**. Droplet pull/restart: [`deploy/README.md`](deploy/README.md).
 
-Tests use in-memory SQLite and need no secrets. The running host grants Gmail lockbox and OAuth, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET`. Sign-in codes need `NOWISEE_MAIL_FROM`, `NOWISEE_RESEND_API_KEY`, and `NOWISEE_OTP_PEPPER`.
+The running host grants Gmail lockbox and OAuth from `app_catalog`, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, `NOWISEE_HOST_SIGNING_KEY`, `NOWISEE_CAPABILITY_LISTEN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET` on the **host**. Sign-in codes need `NOWISEE_MAIL_FROM`, `NOWISEE_RESEND_API_KEY`, and `NOWISEE_OTP_PEPPER`.
 
-**Production env:** Node does not read `.env` files. Put secrets in `/etc/nowisee/nowisee.env` (mode `640`, `root:nowisee`) from [`.env.production.example`](.env.production.example). Staging uses `/etc/nowisee/nowisee-dev.env` from [`.env.staging.example`](.env.staging.example) and [`deploy/nowisee-dev.service`](deploy/nowisee-dev.service). The unit [`deploy/nowisee.service`](deploy/nowisee.service) loads that file with `EnvironmentFile=` — do not paste keys into the unit. OAuth redirect: `{NOWISEE_ORIGIN}/oauth/callback`. If a reverse proxy terminates TLS, leave `NOWISEE_TLS_*` unset. Production listens on `PORT=3000`; staging on `3001`.
+**Production env:** Node does not read `.env` files. Put host secrets in `/etc/nowisee/nowisee.env` (mode `640`, `root:nowisee-host`) from [`.env.production.example`](.env.production.example). App env files: [`deploy/app.env.example`](deploy/app.env.example). Staging uses `/etc/nowisee/nowisee-dev.env` and [`deploy/nowisee-dev.target`](deploy/nowisee-dev.target). The host unit loads `EnvironmentFile=` — do not paste keys into the unit. OAuth redirect: `{NOWISEE_ORIGIN}/oauth/callback`. If a reverse proxy terminates TLS, leave `NOWISEE_TLS_*` unset. Production listens on `PORT=3000`; staging on `3001`.
 
 On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an input node, type in the field (Enter inserts a newline); **Done** commits and **Cancel** abandons. Tab and Escape are unbound.
 
@@ -28,10 +28,10 @@ On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an 
 ```text
 src/core/       client shell (navigator, display, keyboard, …)
 src/app-kit/    optional helpers apps import
-src/apps/       Home, Recents, Tutorial, Bible, Notes, Lists, Weather, Gmail, Account (server AppModules)
+src/apps/       Home, Recents, Tutorial, Bible, Notes, Lists, Weather, Gmail, Account (`main.ts` per app)
 src/shell/      browser bootstrap — remote stubs only
 ios/            Swift client (Navigator + URLSession; build on a Mac; see ios/README.md)
-server/         HTTP, CSRF, identity, lockbox, OAuth; packs first-party apps
+server/         HTTP broker, CSRF, identity, lockbox, OAuth, app_catalog
 tests/          Vitest, node environment; `fixtures/navigator/` is shared with `swift test`
 ```
 

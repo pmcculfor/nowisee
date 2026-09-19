@@ -7,6 +7,7 @@ import { parseAdminEmails } from "../server/admin/emails.ts";
 import { handleAdminHttp } from "../server/admin/http.ts";
 import { hourBucket } from "../server/usage.ts";
 import { capturingMailer, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";
 const ADMIN_EMAIL = "admin@example.com";
@@ -24,11 +25,11 @@ function apiHeaders(cookie?: string, extra: Record<string, string> = {}): Record
   return h;
 }
 
-function makeHost(): { host: NowiseeHost; mailer: CapturingMailer } {
+async function makeHost(): Promise<{ host: NowiseeHost; mailer: CapturingMailer }> {
   const mailer = capturingMailer();
   return {
     mailer,
-    host: createNowiseeHost({
+    host: await createNowiseeHost({
       mailer,
       configuredOrigin: ORIGIN,
       adminEmails: [ADMIN_EMAIL],
@@ -59,13 +60,27 @@ describe("admin emails", () => {
 
 describe("usage recording and admin console", () => {
   let h: NowiseeHost;
-  afterEach(() => {
-    h?.close();
+  let fleet: TestFleet;
+  afterEach(async () => {
+    if (fleet) {
+      await fleet.close();
+      fleet = undefined as unknown as TestFleet;
+      h = undefined as unknown as NowiseeHost;
+      return;
+    }
+    await h?.close();
+    h = undefined as unknown as NowiseeHost;
   });
 
   it("counts opens, refreshes, and actions hourly by session, overwrites ip, and promotes user_id", async () => {
-    const made = makeHost();
-    h = made.host;
+    const mailer = capturingMailer();
+    fleet = await startTestFleet({
+      apps: ["home", "notes"],
+      mailer,
+      configuredOrigin: ORIGIN,
+      adminEmails: [ADMIN_EMAIL],
+    });
+    h = fleet.host;
     const opened = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
@@ -91,7 +106,7 @@ describe("usage recording and admin console", () => {
     await h.identity.requestSignIn(live!.sessionId, "user@example.com");
     const verified = await h.identity.verifySignIn(
       live!.sessionId,
-      made.mailer.lastCode(),
+      mailer.lastCode(),
       "192.0.2.44",
     );
     expect(verified.ok).toBe(true);
@@ -167,7 +182,7 @@ describe("usage recording and admin console", () => {
   });
 
   it("does not mint a session for GET /admin and 404s non-admins", async () => {
-    const made = makeHost();
+    const made = await makeHost();
     h = made.host;
     const missing = await handleAdminHttp(h, {
       method: "GET",
@@ -188,7 +203,7 @@ describe("usage recording and admin console", () => {
   });
 
   it("serves the dashboard to an allowlisted session and rejects CSRF on POSTs", async () => {
-    const made = makeHost();
+    const made = await makeHost();
     h = made.host;
     const admin = await signInForTest(h, made.mailer, ADMIN_EMAIL);
 
@@ -234,7 +249,7 @@ describe("usage recording and admin console", () => {
 
   it("404s admin POSTs when the allowlist is empty", async () => {
     const mailer = capturingMailer();
-    h = createNowiseeHost({ mailer, configuredOrigin: ORIGIN });
+    h = await createNowiseeHost({ mailer, configuredOrigin: ORIGIN });
     const admin = await signInForTest(h, mailer, ADMIN_EMAIL);
     const out = await handleAdminHttp(h, {
       method: "POST",

@@ -14,12 +14,8 @@ import {
   reorderMoveDownId,
   reorderMoveUpId,
 } from "../src/apps/home/ids.ts";
-import { createHomeApp, type HomeApp } from "../src/apps/home/index.ts";
-import {
-  createSqliteHomeStore,
-  openHomeDatabase,
-  startHomeApp,
-} from "../src/apps/home/store.ts";
+import { createHomeApp, startHomeApp, type HomeApp } from "../src/apps/home/index.ts";
+import { createSqliteHomeStore, openHomeDatabase } from "../src/apps/home/store.ts";
 import type { AppDescriptor, AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { nodeEdge } from "./helpers/edges.ts";
 import { refreshApp } from "./helpers/refreshCall.ts";

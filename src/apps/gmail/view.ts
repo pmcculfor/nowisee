@@ -80,16 +80,23 @@ export async function buildGmailView(
     return unavailable(deps);
   }
 
-  if (isActionExtras(extras) && tipId) {
-    return applyAction(deps, ownerId, tipId, extras, ctx, oauth);
-  }
+  try {
+    if (isActionExtras(extras) && tipId) {
+      return await applyAction(deps, ownerId, tipId, extras, ctx, oauth);
+    }
 
-  const status = await oauthStatus(oauth);
-  if (status !== "ready") {
-    return connectView(deps, oauth, ctx);
-  }
+    const status = await oauthStatus(oauth);
+    if (status !== "ready") {
+      return connectView(deps, oauth, ctx);
+    }
 
-  return connectedView(deps, ownerId, tipId, extras, ctx, oauth);
+    return await connectedView(deps, ownerId, tipId, extras, ctx, oauth);
+  } catch (err) {
+    if (isOAuthCode(err, ["forbidden", "not-configured"])) {
+      return unavailable(deps);
+    }
+    throw err;
+  }
 }
 
 function signedOutGmail(deps: GmailViewDeps, ctx: AppServerContext | undefined): RefreshResult {
@@ -562,6 +569,9 @@ async function oauthStatus(oauth: OAuthCapability): Promise<"missing" | "ready" 
   } catch (err) {
     if (isOAuthCode(err, ["not-signed-in"])) {
       return "missing";
+    }
+    if (isOAuthCode(err, ["forbidden", "not-configured"])) {
+      throw err;
     }
     throw err;
   }

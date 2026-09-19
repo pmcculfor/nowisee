@@ -2,7 +2,7 @@ import type { WireExtras } from "../src/apps/rpc.ts";
 import { readSessionToken, serializeSessionCookie } from "./cookie.ts";
 import { checkCsrf, expectedOriginFromRequest } from "./csrf.ts";
 import { AppNotFoundError } from "./errors.ts";
-import type { NowiseeHost } from "./host.ts";
+import { UnsafeLocatorError, type NowiseeHost } from "./host.ts";
 import type { CookieSlot } from "./identity/context.ts";
 import { clientIpFromRequest } from "./clientIp.ts";
 import { header, type HeadersLike } from "./headers.ts";
@@ -214,6 +214,9 @@ async function callHost(
   } catch (err) {
     if (err instanceof AppNotFoundError) {
       return json(404, { error: err.message }, cookieHeader(slot));
+    }
+    if (err instanceof UnsafeLocatorError) {
+      return json(500, { error: "App RPC failed" }, cookieHeader(slot));
     }
     return json(500, { error: "App RPC failed" }, cookieHeader(slot));
   }

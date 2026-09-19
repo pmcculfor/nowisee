@@ -19,7 +19,7 @@
 
 This is not “every keypress waits on the network.” A cache hit is local. A cache miss, a first open, or a background revalidation is a server call. Copy-to-clipboard still happens on the device; the app returns `clipboardText` and core writes it.
 
-**Landed:** first-party apps run on the server. Lockbox and the generic OAuth broker are host capabilities (`ctx.lockbox` / `ctx.oauth`). The running host grants those to apps that declare them on the pack catalog.
+**Landed:** first-party apps run as separate processes. Lockbox and the generic OAuth broker are host capability APIs. The catalog `grant_*` columns decide 200 vs 403.
 
 ---
 
@@ -42,7 +42,7 @@ Neither store belongs to the Account app. Who owns what is §6.
 
 ## 3. App secrets (lockbox) — landed
 
-A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`server/lockbox/`](../server/lockbox/). The host grants `ctx.lockbox` only to app ids in `lockboxAppIds` (default empty).
+A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`server/lockbox/`](../server/lockbox/). The capability port grants lockbox only when `app_catalog.grant_lockbox = 1`.
 
 - An app says: “save this blob under slot `personal`” / “give me slot `personal`.”
 - The service keys it by **this user + this app id + this slot**. One app may have many slots (two connected accounts). Two apps with different ids cannot read each other’s slots, even if they talk to the same provider.
@@ -51,7 +51,7 @@ A **platform** service (same idea as clipboard: the shell/platform provides it; 
 
 Refresh tokens **are** meant to be stored — on the **server**, encrypted, never in the page. OAuth 2 warns against keeping them in browser JavaScript, not against a backend remembering them so the user is not sent through the provider every hour.
 
-Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If `lockboxAppIds` or `oauthAppIds` is non-empty and there is no keyring, the host throws at startup. Tests are ephemeral and leave those lists empty unless a test passes them. The running host grants lockbox/OAuth to apps that declare them on the pack catalog.
+Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_LOCKBOX_KEY`, 32 bytes base64; optional `NOWISEE_LOCKBOX_KEY_ID`, default `v1`), **not** in the git repo and **not** in the database file. Associated data is `userId\0appId\0slot`. Every row stores `key_id`; a get whose `key_id` is not current re-encrypts in place. If the catalog grants lockbox or OAuth and there is no keyring, the host throws at startup. Tests use a test keyring (`ephemeral: true`). The running host enforces grants from `app_catalog`.
 
 ### Normative
 
@@ -65,7 +65,7 @@ Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_
 
 ### OAuth broker — landed
 
-Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). The host grants `ctx.oauth` only to app ids in `oauthAppIds` (default empty). App client id/secret come from host env (`NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET`), never the lockbox. Per-user tokens live in lockbox slot `(userId, appId, slot)`.
+Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). The capability port answers OAuth RPCs only when `app_catalog.grant_oauth = 1` for that app id. App client id/secret come from host env (`NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET`), never the lockbox. Per-user tokens live in lockbox slot `(userId, appId, slot)`. Provider endpoints come from `app_catalog.oauth_provider`.
 
 `oauth.start()` runs while rendering the Connect node (Navigator follows `kind: "external"` without a refresh). PKCE S256; one live state per `(sessionId, appId, slot)`; 10-minute TTL; about 20 live states per session.
 
@@ -75,7 +75,7 @@ Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). Th
 
 There is no provider-webhook route. A provider that needs to tell us a user revoked access or asked for deletion would get a new cookie-less route that authenticates the provider's own signature; nothing in the broker presumes its shape today.
 
-Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when `oauthAppIds` is non-empty. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less **or dead/expired** cookie on the callback does **not** mint a session and does **not** send `Set-Cookie`. The callback looks the token up; it never calls `resolve`.
+Redirect URI registered with the IdP: `{configuredOrigin}/oauth/callback`. `configuredOrigin` is required when any catalog row has `grant_oauth = 1`. Callback GET: 302, empty body, `Cache-Control: no-store`, `X-Frame-Options: DENY`, never JSON tokens. A cookie-less **or dead/expired** cookie on the callback does **not** mint a session and does **not** send `Set-Cookie`. The callback looks the token up; it never calls `resolve`.
 
 | Outcome | Location |
 |---------|----------|
@@ -130,14 +130,14 @@ The split needs one distinction: **identity** — can this request prove it belo
 | Resolve a token to `{ sessionId, userId }` | **Identity service** |
 | Email rules and code format (normalization, uniqueness, throttle) | **Identity service**, returning a structured reason — never prose |
 | Read the cookie off the request; write `Set-Cookie` | **Host HTTP layer** |
-| Which apps may receive the identity capability | **Host config** |
+| Which apps may receive the identity capability | **Host**, hardcoded to `accountAppId` (`"account"`). Not a catalog column |
 | Sign-in / register / sign-out node graph, wording, error text | **Account app** |
 | Profile that is not identity (display name, preferences) | **Account app**, its own table, keyed by `userId` |
 | Scoping every query by owner | **Every app, always** (§9) |
 
 ### The identity service is not an app
 
-It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-layer module** (`server/identity/`) that the host constructs and wires — the same way the host grants `ctx.identity` to Account and does not open Account's database.
+It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-layer module** (`server/identity/`) that the host constructs and exposes on the capability port — the same way the host grants identity RPCs only to Account and does not open Account's database.
 
 Two reasons it cannot live inside the Account app:
 
@@ -148,9 +148,9 @@ Two reasons it cannot live inside the Account app:
 
 This is the shape a domain store already established: the app owns the graph and the wording; a store the **app** opens owns persistence. Home does not own the registry. Account does not own the users table. Account remains an ordinary `AppModule` — the registry does not know it is different, core does not know it exists, and it gains no extra methods.
 
-The only asymmetry is a host config list naming which app ids receive `ctx.identity`. That is data, it belongs to the host, and it generalizes: the same mechanism governs the lockbox (§3) and, later, per-capability permissions for third-party apps. Building it now for one app brings a planned mechanism forward instead of carving out a special case.
+The only asymmetry is that identity RPCs are allowed only when the ticket's `appId` is `accountAppId`. That is hardcoded on the host, not a `grant_*` column: minting a session must never become a catalog toggle. Lockbox, OAuth, and directory stay integer grants on `app_catalog`.
 
-Keep the dependency arrow one-way: **Account app → identity service**, through the capability on `ctx`. The host never calls an app in order to authenticate, and the identity service never knows an app exists.
+Keep the dependency arrow one-way: **Account app → identity service**, through the ticket-scoped capability HTTP (this slice still wraps those POSTs as `ctx.identity` inside the Account process). The host never calls an app in order to authenticate, and the identity service never knows an app exists.
 
 ### Why the cookie is not the identity service's job
 
@@ -192,7 +192,7 @@ export type AuthOutcome =
   | { ok: false; reason: "invalid-credentials" };
 ```
 
-The host calls `resolve` once per request and sets a cookie when `issuedToken` comes back. The Account app calls `requestSignIn` / `verifySignIn` through `ctx.identity` (which never sees the session token) and renders the outcome. Only a successful `verifySignIn` rotates the cookie. The HTTP layer owns `Set-Cookie`. Neither does the other's job.
+The host calls `resolve` once per public `/api` request and sets a cookie when `issuedToken` comes back. During dispatch, Account POSTs `requestSignIn` / `verifySignIn` to the capability port (this slice still via `ctx.identity` inside the Account process), which never sees the session token, and renders the outcome. Only a successful `verifySignIn` rotates the cookie. The HTTP layer owns `Set-Cookie`. Neither does the other's job.
 
 ---
 
@@ -265,21 +265,21 @@ A host mailer (`server/mail/`) sends the plaintext code. Drivers: `console` (loc
 
 ## 9. Where the verified user id enters an app
 
-The host passes the verified user as a third, server-only context argument — `open(path, extras, ctx)` / `refresh(nodeId, extras, ctx)` — where `ctx` carries at least `userId: string | null`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). `RefreshExtras` still comes from the client (`inputText`, `action?: { triggerId }`). `ctx` never crosses to the browser.
+The host signs a **data-only** wire ctx (`userId`, `sessionId`, `accountAppId`, optional `directory[]`, `requestId`, `exp`, `sig`) and POSTs it to the app locator. Lockbox, OAuth, and identity are **not** on that payload. Inside the app process, `serveApp` hydrates local HTTP wrappers so this slice can still call `ctx.lockbox` / `ctx.oauth` / `ctx.identity`; those wrappers POST to the capability port with `Authorization: Bearer {requestId}`. The ticket dies when dispatch ends. `RefreshExtras` still comes from the client (`inputText`, `action?: { triggerId }`). Wire ctx never crosses to the browser.
 
 | Rule | Note |
 |------|------|
 | `ctx.userId` comes from the identity service resolving the session cookie | **Never** from `extras`, the path, the stack, or any other client-supplied field |
-| `ctx` is optional in the type | In-process unit tests pass nothing; apps that do not care never look |
+| `ctx` is optional in the type | Graph unit tests pass nothing; apps that do not care never look |
 | Signed out is `userId: null`, not a missing app | The request still reaches the app. What that means is the app's decision — §10 |
 | `ctx.sessionId` is always present, signed in or not | This browser, not this account. Server-side only — never in a node id, label, or URL. See §11.2 |
 | `ctx.accountAppId` | Host config, so no app hardcodes a peer app's id when it offers a "sign in" edge |
-| `ctx.identity` | Only for apps the host allows (§6). Everything else never sees it |
-| `ctx.lockbox` | Only for apps in `lockboxAppIds` (§3). Bound to `(userId, appId)` |
-| `ctx.oauth` | Only for apps in `oauthAppIds` (§3). Bound to `(userId, sessionId, appId)` |
-| `ctx.directory` | Only for apps the pack catalog marks (today: Home and Recents). `list()` returns `{ id, label, homeRole?, parkable? }`, never modules |
+| `ctx.identity` | Wrapper in the app process. Capability port 403 unless `appId === accountAppId` (§6) |
+| `ctx.lockbox` | Wrapper; 403 unless `grant_lockbox = 1`. Bound to `(userId, appId)` via the capability ticket |
+| `ctx.oauth` | Wrapper; 403 unless `grant_oauth = 1`. Bound to `(userId, sessionId, appId)` |
+| `ctx.directory` | Signed snapshot on the wire when `grant_directory = 1` (today: Home and Recents). `{ id, label, homeRole?, parkable? }`, never modules |
 
-`ctx` may carry host **capabilities** (methods), not only data — see §11.3. That does not weaken the app boundary: the plain-data rule in [`ARCHITECTURE.md`](ARCHITECTURE.md) governs *payloads* (`stack`, `RefreshResult`, `NodePayload`, `NavigationMap`), and `PlatformContext` already establishes that capabilities are method-bearing.
+`ctx` as seen by app graph code may still carry host **capabilities** (methods) — see §11.3. Those methods are local wrappers, not objects the host sent. The plain-data rule in [`ARCHITECTURE.md`](ARCHITECTURE.md) governs *payloads* (`stack`, `RefreshResult`, `NodePayload`, `NavigationMap`, signed wire ctx).
 
 ### The tip id and triggerId are attacker-controlled input
 
@@ -334,7 +334,7 @@ The mechanism already exists and needs no new core concept: an `app` edge trigge
 
 ### Home is an ordinary app
 
-`AppRegistry.listDescriptors()` returns `[{ id, label }]` for every registered app — plain descriptors, never the registry object. The host grants a directory list as `ctx.directory` only to apps the pack catalog marks (today: Home and Recents). That list is `{ id, label, homeRole?, parkable? }`: `homeRole` and `parkable` come from the pack row. `listDescriptors()` itself stays `{ id, label }`. Home and Recents feature-detect the directory on each `open` / `refresh`.
+`AppRegistry.listDescriptors()` returns `[{ id, label }]` for every registered **client** stub — plain descriptors, never the registry object. The host grants a directory snapshot as `ctx.directory` only to apps with `grant_directory = 1` (today: Home and Recents). That list is `{ id, label, homeRole?, parkable? }` from `app_catalog`. Home and Recents feature-detect the directory on each `open` / `refresh`.
 
 Home is **not special** for identity: it receives `ctx.userId` like every app. Signed out, Home shows `required` ∪ `default` plus Manage Apps (not the full registered list). Signed-in layout is Home’s own store, keyed by `ctx.userId`. The host does not rewrite any app's catalog label. `rootAppId` remains the shell root; it is not derived from `homeRole`.
 
@@ -378,15 +378,15 @@ Note the privacy consequence to decide alongside this: every visitor now receive
 
 ### 11.3 How sign-in establishes the session — decided
 
-**Owner decision, August 2026.** The Account app receives `ctx.identity`, the capability from §6. `await ctx.identity.requestSignIn(email)` sends (or dummy-accepts) a code. `await ctx.identity.verifySignIn(code)` returns an `AuthOutcome`, the app renders it, and the HTTP layer sets the cookie on that response because the outcome carried a new token.
+**Owner decision, August 2026.** The Account app calls identity through the capability from §6 (this slice: `ctx.identity` wrappers over capability HTTP). `await ctx.identity.requestSignIn(email)` sends (or dummy-accepts) a code. `await ctx.identity.verifySignIn(code)` returns an `AuthOutcome`, the app renders it, and the HTTP layer sets the cookie on that response because the outcome carried a new token.
 
 Why a capability rather than a declarative field like `clipboardText`: the app must **render the outcome** — "we sent a code", "signed in", or "that code did not match" — in the same response, and a declarative field is only read *after* the app has already answered. The app needs the result before it can build its node.
 
-**How the HTTP layer learns a token was issued.** The host constructs `ctx.identity` **per request**, bound to that request's `sessionId` and to a pending-cookie slot the HTTP layer owns. Whenever the service issues or clears a token — anonymous creation, sign-in rotation, sign-out — it records that in the slot. After the app returns, successfully or not, the HTTP layer reads the slot and emits at most one `Set-Cookie`. Building the capability per request also means an app cannot stash it for later and cannot act for a different session. `requestSignIn` does not write the slot.
+**How the HTTP layer learns a token was issued.** Each dispatch holds a pending-cookie slot on the capability ticket, bound to that request's `sessionId`. Identity RPCs during that dispatch write the slot. After the app returns, successfully or not, the HTTP layer reads the slot and emits at most one `Set-Cookie`. The ticket is dropped when dispatch ends, so an app cannot stash a bearer and cannot act for a different session. `requestSignIn` does not write the slot.
 
-- This does not break the app boundary. The plain-data rule governs payloads; `PlatformContext` already sanctions method-bearing capabilities (`clipboard.writeText`). Because the call is already async, a future worker or sandbox host turns it into a message round-trip with no contract change.
+- This does not break the app boundary. The plain-data rule governs payloads; the wrappers are local to the app process. A later slice can drop them and call the capability HTTP directly.
 - The app never sees a code hash, never writes the `sessions` table, and never names a `userId` it was not handed. Email or code in, structured outcome out.
-- **Only apps the host allows receive `ctx.identity`** (today: the Account app). A third-party app must never be able to mint a session — this is the one capability that would be catastrophic to hand out by default.
+- **Identity RPCs 403 unless the ticket `appId` is `accountAppId`.** A third-party app must never be able to mint a session — this is the one capability that would be catastrophic to hand out by default, which is why it is not a catalog column.
 - Sign-out is the same capability, and it is what performs the row deletion §7 requires.
 
 ### 11.4 The sign-in flow on screen — landed

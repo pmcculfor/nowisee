@@ -18,5 +18,15 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "server"]
+  "include": [
+    "vite.config.ts",
+    "server",
+    "src/apps/serve.ts",
+    "src/apps/wireCtx.ts",
+    "src/apps/capClient.ts",
+    "src/apps/appEnv.ts",
+    "src/apps/**/main.ts",
+    "src/apps/**/store.ts",
+    "src/apps/**/index.ts"
+  ]
 }

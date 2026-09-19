@@ -6,6 +6,12 @@ import type {
 } from "../../core/types.ts";
 import { GMAIL_APP_ID, GMAIL_APP_LABEL } from "./ids.ts";
 import { buildGmailView, openGmailPath, type GmailViewDeps } from "./view.ts";
+import {
+  createSqliteGmailStore,
+  DEFAULT_GMAIL_DB_PATH,
+  openGmailDatabase,
+} from "./store.ts";
+import { createGmailApiClient } from "./gmailClient.ts";
 import type { GmailClient, GmailStore } from "./types.ts";
 
 export type GmailAppDeps = {
@@ -16,6 +22,22 @@ export type GmailAppDeps = {
 };
 
 export type GmailApp = AppModule & { close(): void };
+
+export type StartGmailAppOptions = {
+  readonly rootAppId: string;
+  readonly dbPath?: string;
+  readonly fetch?: typeof fetch;
+};
+
+export function startGmailApp(options: StartGmailAppOptions): GmailApp {
+  const db = openGmailDatabase(options.dbPath ?? DEFAULT_GMAIL_DB_PATH);
+  return createGmailApp({
+    rootAppId: options.rootAppId,
+    store: createSqliteGmailStore(db),
+    client: createGmailApiClient({ fetch: options.fetch }),
+    close: () => db.close(),
+  });
+}
 
 export function createGmailApp(deps: GmailAppDeps): GmailApp {
   const viewDeps: GmailViewDeps = {
@@ -46,3 +68,4 @@ export function createGmailApp(deps: GmailAppDeps): GmailApp {
 export type { ComposeDraft, GmailClient, GmailStore, InboxMessage } from "./types.ts";
 export { GMAIL_APP_ID, GMAIL_APP_LABEL, GMAIL_OAUTH_SLOT, NODE } from "./ids.ts";
 export { GMAIL_OAUTH_PROVIDER } from "./oauth.ts";
+export { DEFAULT_GMAIL_DB_PATH, openGmailDatabase, createSqliteGmailStore } from "./store.ts";

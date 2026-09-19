@@ -1,13 +1,14 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
+import type { NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 import type { LockboxKeyring } from "../server/lockbox/crypto.ts";
 import { handleOAuthHttp } from "../server/oauth/http.ts";
 import { mapOAuthSecrets } from "../server/oauth/secrets.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";
 
@@ -15,28 +16,63 @@ function testKeyring(): LockboxKeyring {
   return { currentId: "v1", keys: { v1: new Uint8Array(32).fill(9) } };
 }
 
-function emptyRefresh(appId: string): RefreshResult {
+function emptyRefresh(appId: string, label = appId): RefreshResult {
   return {
     navigationMap: {},
     warm: [],
-    node: { id: `${appId}:root`, label: appId },
+    node: { id: `${appId}:root`, label },
     location: { appId, path: "/" },
   };
 }
 
-function probe(id: string, seen: AppServerContext[]): AppModule {
+function capCode(err: unknown): string {
+  return typeof err === "object" && err !== null && "code" in err
+    ? String((err as { code: unknown }).code)
+    : "unknown";
+}
+
+function oauthProbe(id: string): AppModule {
   return {
     id,
     label: id,
-    async open(_path, _extras, ctx) {
-      seen.push(ctx as AppServerContext);
-      return emptyRefresh(id);
+    open(path, _extras, ctx) {
+      return runOauth(id, path, ctx);
     },
-    async refresh(_nodeId, _extras, ctx) {
-      seen.push(ctx as AppServerContext);
-      return emptyRefresh(id);
+    refresh(nodeId, _extras, ctx) {
+      return runOauth(id, nodeId, ctx);
     },
   };
+}
+
+async function runOauth(
+  id: string,
+  op: string,
+  ctx: AppServerContext | undefined,
+): Promise<RefreshResult> {
+  const oauth = ctx?.oauth;
+  if (!oauth) {
+    return emptyRefresh(id, "no-oauth");
+  }
+  const path = op.startsWith("/") ? op : `/${op}`;
+  try {
+    if (path === "/start") {
+      const started = await oauth.start({ slot: "personal" });
+      return emptyRefresh(id, started.authorizeUrl);
+    }
+    if (path === "/status") {
+      return emptyRefresh(id, await oauth.status("personal"));
+    }
+    if (path === "/token") {
+      return emptyRefresh(id, await oauth.getAccessToken("personal"));
+    }
+    if (path === "/disconnect") {
+      await oauth.disconnect("personal");
+      return emptyRefresh(id, "disconnected");
+    }
+    return emptyRefresh(id, "ok");
+  } catch (err) {
+    return emptyRefresh(id, capCode(err));
+  }
 }
 
 function headers(cookie?: string): Record<string, string> {
@@ -157,57 +193,60 @@ function startMockIdp(opts?: {
 
 describe("oauth broker", () => {
   let h: NowiseeHost;
+  let fleet: TestFleet;
   let idp: MockIdp | undefined;
 
   afterEach(async () => {
-    h?.close();
+    await fleet?.close();
     await idp?.close();
     idp = undefined;
   });
 
-  async function hostFor(apps: string[]): Promise<Record<string, AppServerContext[]>> {
-    const seen: Record<string, AppServerContext[]> = {};
-    const extraApps = apps.map((id) => {
-      seen[id] = [];
-      return probe(id, seen[id]!);
-    });
+  async function hostFor(apps: string[]): Promise<void> {
     currentMailer = capturingMailer();
-    h = createNowiseeHost({
+    fleet = await startTestFleet({
+      apps: [],
+      probes: apps.map((id) => ({
+        app: oauthProbe(id),
+        grantOauth: true,
+        grantLockbox: true,
+        oauthProvider: {
+          appId: id,
+          authorizationEndpoint: `${idp!.origin}/authorize`,
+          tokenEndpoint: `${idp!.origin}/token-${id === "probe-b" ? "b" : "a"}`,
+          revokeEndpoint: `${idp!.origin}/revoke`,
+          scopes: ["email"],
+          extraAuthorizeParams: { access_type: "offline", prompt: "consent" },
+        },
+      })),
       mailer: currentMailer,
       configuredOrigin: ORIGIN,
-      extraApps,
       lockboxKeys: testKeyring(),
-      oauthAppIds: apps,
-      oauthProviders: apps.map((id) => ({
-        appId: id,
-        authorizationEndpoint: `${idp!.origin}/authorize`,
-        tokenEndpoint: `${idp!.origin}/token-${id === "probe-b" ? "b" : "a"}`,
-        revokeEndpoint: `${idp!.origin}/revoke`,
-        scopes: ["email"],
-        extraAuthorizeParams: { access_type: "offline", prompt: "consent" },
-      })),
       oauthSecrets: mapOAuthSecrets(
         Object.fromEntries(
           apps.map((id) => [id, { clientId: `${id}-id`, clientSecret: `${id}-secret` }]),
         ),
       ),
     });
-    return seen;
+    h = fleet.host;
+  }
+
+  async function openLabel(appId: string, path: string, cookie?: string): Promise<string> {
+    const out = await handleSessionHttp(h, {
+      method: "POST",
+      url: `/api/apps/${appId}/open`,
+      headers: headers(cookie),
+      body: { path },
+    });
+    return (out.body as RefreshResult).node.label;
   }
 
   it("builds a PKCE authorize URL and reuses it until the callback", async () => {
     idp = await startMockIdp();
-    const seen = await hostFor(["probe"]);
+    await hostFor(["probe"]);
     const alice = await signIn(h, "alice@example.com");
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(alice.cookie),
-      body: { path: "/" },
-    });
-    const oauth = seen.probe![0]!.oauth!;
-    const first = await oauth.start({ slot: "personal" });
-    const url = new URL(first.authorizeUrl);
+    const first = await openLabel("probe", "/start", alice.cookie);
+    const url = new URL(first);
     expect(url.origin + url.pathname).toBe(`${idp.origin}/authorize`);
     expect(url.searchParams.get("client_id")).toBe("probe-id");
     expect(url.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/oauth/callback`);
@@ -217,38 +256,23 @@ describe("oauth broker", () => {
     expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(url.searchParams.get("state")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(url.searchParams.get("access_type")).toBe("offline");
-    const second = await oauth.start({ slot: "personal" });
-    expect(second.authorizeUrl).toBe(first.authorizeUrl);
-    expect(await oauth.status("personal")).toBe("missing");
+    const second = await openLabel("probe", "/start", alice.cookie);
+    expect(second).toBe(first);
+    expect(await openLabel("probe", "/status", alice.cookie)).toBe("missing");
   });
 
   it("unsigned-in start fails", async () => {
     idp = await startMockIdp();
-    const seen = await hostFor(["probe"]);
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(),
-      body: { path: "/" },
-    });
-    await expect(seen.probe![0]!.oauth!.start({ slot: "personal" })).rejects.toMatchObject({
-      code: "not-signed-in",
-    });
+    await hostFor(["probe"]);
+    expect(await openLabel("probe", "/start")).toBe("not-signed-in");
   });
 
   it("callback stores tokens; redirect body and Location never contain them", async () => {
     idp = await startMockIdp();
-    const seen = await hostFor(["probe"]);
+    await hostFor(["probe"]);
     const alice = await signIn(h, "alice@example.com");
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(alice.cookie),
-      body: { path: "/" },
-    });
-    const oauth = seen.probe![0]!.oauth!;
-    const started = await oauth.start({ slot: "personal" });
-    const state = new URL(started.authorizeUrl).searchParams.get("state")!;
+    const started = await openLabel("probe", "/start", alice.cookie);
+    const state = new URL(started).searchParams.get("state")!;
     const out = await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state}`,
@@ -263,23 +287,16 @@ describe("oauth broker", () => {
     expect(JSON.stringify(out)).not.toContain("refresh-1");
     expect(idp.tokenPosts[0]?.code_verifier).toBeTruthy();
     expect(idp.tokenPosts[0]?.redirect_uri).toBe(`${ORIGIN}/oauth/callback`);
-    expect(await oauth.status("personal")).toBe("ready");
-    expect(await oauth.getAccessToken("personal")).toBe("access-1");
+    expect(await openLabel("probe", "/status", alice.cookie)).toBe("ready");
+    expect(await openLabel("probe", "/token", alice.cookie)).toBe("access-1");
     expect(idp.refreshCount).toBe(0);
   });
 
   it("rejects bad state, replay, access_denied, session mismatch, and mix-up", async () => {
     idp = await startMockIdp();
-    const seen = await hostFor(["probe", "probe-b"]);
+    await hostFor(["probe", "probe-b"]);
     const alice = await signIn(h, "alice@example.com");
     const bob = await signIn(h, "bob@example.com");
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(alice.cookie),
-      body: { path: "/" },
-    });
-    const oauth = seen.probe![0]!.oauth!;
 
     const bad = await handleOAuthHttp(h, {
       method: "GET",
@@ -288,46 +305,39 @@ describe("oauth broker", () => {
     });
     expect(bad.headers?.Location).toBe(`${ORIGIN}/`);
 
-    const started = await oauth.start({ slot: "personal" });
-    const state = new URL(started.authorizeUrl).searchParams.get("state")!;
+    const started = await openLabel("probe", "/start", alice.cookie);
+    const state = new URL(started).searchParams.get("state")!;
     const denied = await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?error=access_denied&state=${state}`,
       headers: { cookie: alice.cookie },
     });
     expect(denied.headers?.Location).toBe(`${ORIGIN}/probe`);
-    expect(await oauth.status("personal")).toBe("missing");
+    expect(await openLabel("probe", "/status", alice.cookie)).toBe("missing");
 
-    const started2 = await oauth.start({ slot: "personal" });
-    const state2 = new URL(started2.authorizeUrl).searchParams.get("state")!;
+    const started2 = await openLabel("probe", "/start", alice.cookie);
+    const state2 = new URL(started2).searchParams.get("state")!;
     const mismatch = await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state2}`,
       headers: { cookie: bob.cookie },
     });
     expect(mismatch.headers?.Location).toBe(`${ORIGIN}/`);
-    expect(await oauth.status("personal")).toBe("missing");
+    expect(await openLabel("probe", "/status", alice.cookie)).toBe("missing");
 
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe-b/open",
-      headers: headers(alice.cookie),
-      body: { path: "/" },
-    });
-    const oauthB = seen["probe-b"]![0]!.oauth!;
-    const startedA = await oauth.start({ slot: "personal" });
-    const stateA = new URL(startedA.authorizeUrl).searchParams.get("state")!;
+    const startedA = await openLabel("probe", "/start", alice.cookie);
+    const stateA = new URL(startedA).searchParams.get("state")!;
     const mix = await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=code-b&state=${stateA}`,
       headers: { cookie: alice.cookie },
     });
     expect(mix.headers?.Location).toBe(`${ORIGIN}/probe`);
-    expect(await oauth.status("personal")).toBe("missing");
-    expect(await oauthB.status("personal")).toBe("missing");
+    expect(await openLabel("probe", "/status", alice.cookie)).toBe("missing");
+    expect(await openLabel("probe-b", "/status", alice.cookie)).toBe("missing");
 
-    const started3 = await oauth.start({ slot: "personal" });
-    const state3 = new URL(started3.authorizeUrl).searchParams.get("state")!;
+    const started3 = await openLabel("probe", "/start", alice.cookie);
+    const state3 = new URL(started3).searchParams.get("state")!;
     const ok = await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state3}`,
@@ -344,27 +354,20 @@ describe("oauth broker", () => {
 
   it("skips refresh when unexpired and disconnects", async () => {
     idp = await startMockIdp();
-    const seen = await hostFor(["probe"]);
+    await hostFor(["probe"]);
     const alice = await signIn(h, "alice@example.com");
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(alice.cookie),
-      body: { path: "/" },
-    });
-    const oauth = seen.probe![0]!.oauth!;
-    const started = await oauth.start({ slot: "personal" });
-    const state = new URL(started.authorizeUrl).searchParams.get("state")!;
+    const started = await openLabel("probe", "/start", alice.cookie);
+    const state = new URL(started).searchParams.get("state")!;
     await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state}`,
       headers: { cookie: alice.cookie },
     });
-    expect(await oauth.getAccessToken("personal")).toBe("access-1");
-    expect(await oauth.getAccessToken("personal")).toBe("access-1");
+    expect(await openLabel("probe", "/token", alice.cookie)).toBe("access-1");
+    expect(await openLabel("probe", "/token", alice.cookie)).toBe("access-1");
     expect(idp.refreshCount).toBe(0);
-    await oauth.disconnect("personal");
-    expect(await oauth.status("personal")).toBe("missing");
+    expect(await openLabel("probe", "/disconnect", alice.cookie)).toBe("disconnected");
+    expect(await openLabel("probe", "/status", alice.cookie)).toBe("missing");
   });
 
   it("refreshes under a mutex; invalid_grant clears the slot", async () => {
@@ -376,23 +379,19 @@ describe("oauth broker", () => {
         expires_in: 3600,
       }),
     });
-    const seen = await hostFor(["probe"]);
+    await hostFor(["probe"]);
     const alice = await signIn(h, "alice@example.com");
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(alice.cookie),
-      body: { path: "/" },
-    });
-    const oauth = seen.probe![0]!.oauth!;
-    const started = await oauth.start({ slot: "personal" });
-    const state = new URL(started.authorizeUrl).searchParams.get("state")!;
+    const started = await openLabel("probe", "/start", alice.cookie);
+    const state = new URL(started).searchParams.get("state")!;
     await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state}`,
       headers: { cookie: alice.cookie },
     });
-    const [a, b] = await Promise.all([oauth.getAccessToken("personal"), oauth.getAccessToken("personal")]);
+    const [a, b] = await Promise.all([
+      openLabel("probe", "/token", alice.cookie),
+      openLabel("probe", "/token", alice.cookie),
+    ]);
     expect(a).toBe("access-refreshed");
     expect(b).toBe("access-refreshed");
     expect(idp.refreshCount).toBe(1);
@@ -402,27 +401,18 @@ describe("oauth broker", () => {
       codeExpiresIn: 1,
       onRefresh: () => ({ error: "invalid_grant" }),
     });
-    h.close();
-    const seen2 = await hostFor(["probe"]);
+    await fleet.close();
+    await hostFor(["probe"]);
     const carol = await signIn(h, "carol@example.com");
-    await handleSessionHttp(h, {
-      method: "POST",
-      url: "/api/apps/probe/open",
-      headers: headers(carol.cookie),
-      body: { path: "/" },
-    });
-    const oauth2 = seen2.probe![0]!.oauth!;
-    const started2 = await oauth2.start({ slot: "personal" });
-    const state2 = new URL(started2.authorizeUrl).searchParams.get("state")!;
+    const started2 = await openLabel("probe", "/start", carol.cookie);
+    const state2 = new URL(started2).searchParams.get("state")!;
     await handleOAuthHttp(h, {
       method: "GET",
       url: `/oauth/callback?code=ok&state=${state2}`,
       headers: { cookie: carol.cookie },
     });
-    await expect(oauth2.getAccessToken("personal")).rejects.toMatchObject({
-      code: "needs-reconnect",
-    });
-    expect(await oauth2.status("personal")).toBe("missing");
+    expect(await openLabel("probe", "/token", carol.cookie)).toBe("needs-reconnect");
+    expect(await openLabel("probe", "/status", carol.cookie)).toBe("missing");
   });
 
   it("expired callback cookie does not mint a session or Set-Cookie", async () => {

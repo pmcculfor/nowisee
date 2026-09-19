@@ -10,6 +10,11 @@ import {
   openListsPath,
   type ListsViewDeps,
 } from "./view.ts";
+import {
+  createSqliteListsStore,
+  DEFAULT_LISTS_DB_PATH,
+  openListsDatabase,
+} from "./store.ts";
 import type { ListsStore } from "./types.ts";
 
 export type ListsAppDeps = {
@@ -19,6 +24,21 @@ export type ListsAppDeps = {
 };
 
 export type ListsApp = AppModule & { close(): void };
+
+export type StartListsAppOptions = {
+  readonly rootAppId: string;
+  readonly dbPath?: string;
+};
+
+/** Opens Lists' own SQLite file and returns the AppModule. */
+export function startListsApp(options: StartListsAppOptions): ListsApp {
+  const db = openListsDatabase(options.dbPath ?? DEFAULT_LISTS_DB_PATH);
+  return createListsApp({
+    rootAppId: options.rootAppId,
+    store: createSqliteListsStore(db),
+    close: () => db.close(),
+  });
+}
 
 /**
  * Lists as a portable AppModule.
@@ -53,3 +73,4 @@ export function createListsApp(deps: ListsAppDeps): ListsApp {
 
 export type { FirstActiveItem, ListItemRecord, ListRecord, ListsStore } from "./types.ts";
 export { firstLineLabel, LISTS_APP_ID } from "./ids.ts";
+export { DEFAULT_LISTS_DB_PATH, openListsDatabase, createSqliteListsStore } from "./store.ts";

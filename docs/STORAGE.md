@@ -18,13 +18,13 @@ This layer does not include the client warm cache (tab-lifetime) or anything in 
 
 ## Who opens which file
 
-The host opens **only** the host database ([`server/db/`](../server/db/)) — identity, lockbox, OAuth state, login events, and admin usage. It registers apps; it does not pass them a `Db` or a corpus.
+The host opens **only** the host database ([`server/db/`](../server/db/)) — identity, lockbox, OAuth state, login events, admin usage, and `app_catalog`. It does not import or start apps.
 
 Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a library (`openSqlite`) that turns on WAL, foreign keys, a busy timeout, and numbered migrations for *that* path. Third-party apps do not have to use it.
 
 | Database | Default path | Migrations / detail |
 |----------|----------------|---------------------|
-| Host (identity, lockbox, OAuth state, login events, usage) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql), [`002_usage.sql`](../server/db/migrations/002_usage.sql) |
+| Host (identity, lockbox, OAuth state, login events, usage, app catalog) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql), [`002_usage.sql`](../server/db/migrations/002_usage.sql), [`003_app_catalog.sql`](../server/db/migrations/003_app_catalog.sql) |
 | Home | `data/apps/home.db` | [`src/apps/home/db/migrations/`](../src/apps/home/db/migrations/). Per-user home list. Graph: [`src/apps/home/README.md`](../src/apps/home/README.md) |
 | Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
 | Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
@@ -33,7 +33,7 @@ Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a libr
 | Weather | `data/apps/weather.db` | [`src/apps/weather/db/migrations/`](../src/apps/weather/db/migrations/). Per-user ZIP only; forecasts are live. Graph: [`src/apps/weather/README.md`](../src/apps/weather/README.md) |
 | Gmail | `data/apps/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/). Tokens via `ctx.oauth` only. Graph: [`src/apps/gmail/README.md`](../src/apps/gmail/README.md) |
 
-Tests pass `:memory:` for each file that the test needs. `createNowiseeHost` defaults to `ephemeral: true`, which tells each pack's `start` to open `:memory:` (via `packStorePath` in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts)) so tests do not write `data/`. Production (`server/index.ts`, Vite plugin) passes `ephemeral: false`. The flag is intentional — do not infer it from whether `db` is a path string or a `Db` handle. The host still never injects a database into an app; each pack chooses a path and the app opens it.
+Tests pass `:memory:` for each app file that the test needs. Host tests use [`startTestFleet`](../tests/helpers/fleet.ts), which starts app listeners on ephemeral ports and writes locators into `app_catalog`. `createNowiseeHost` defaults to `ephemeral: true` (test lockbox keyring and OTP pepper). Production (`server/index.ts`) passes `ephemeral: false` and does not start apps. The host never injects a database into an app; each app process reads `NOWISEE_APP_DB`.
 
 `ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). It never carries a database.
 
@@ -49,7 +49,7 @@ Do not put sign-in codes (identity), OAuth tokens (lockbox), or huge binaries (f
 
 ## Secrets lockbox — landed
 
-See [`IDENTITY.md`](IDENTITY.md) §3. The host database holds `lockbox` and `oauth_states`. The host master key is `NOWISEE_LOCKBOX_KEY`. `ctx.lockbox` and `ctx.oauth` go to allowed apps only. This is not a place for note bodies or files. OAuth client id and secret stay in host env, not in the lockbox.
+See [`IDENTITY.md`](IDENTITY.md) §3. The host database holds `lockbox` and `oauth_states`. The host master key is `NOWISEE_LOCKBOX_KEY`. Apps reach lockbox and OAuth only through the capability port (403 unless `grant_lockbox` / `grant_oauth` is 1). This is not a place for note bodies or files. OAuth client id and secret stay in host env, not in the lockbox.
 
 ## Attachments (path only)
 

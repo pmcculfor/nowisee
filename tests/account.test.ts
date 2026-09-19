@@ -1,28 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 import { NODE } from "../src/apps/account/ids.ts";
 import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";
-import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
+import type { AppModule, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, type CapturingMailer } from "./helpers/signIn.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";
-
-function makeHost(extra?: {
-  extraApps?: AppModule[];
-  identityAppIds?: string[];
-}): { host: NowiseeHost; mailer: CapturingMailer } {
-  const mailer = capturingMailer();
-  return {
-    mailer,
-    host: createNowiseeHost({
-      mailer,
-      configuredOrigin: ORIGIN,
-      extraApps: extra?.extraApps,
-      identityAppIds: extra?.identityAppIds,
-    }),
-  };
-}
 
 function headers(cookie?: string): Record<string, string> {
   const h: Record<string, string> = {
@@ -40,15 +24,63 @@ function cookieFrom(setCookie: string | undefined): string | undefined {
   return setCookie?.split(";")[0];
 }
 
+function identityProbe(): AppModule {
+  return {
+    id: "probe",
+    label: "Probe",
+    async open(_path, _extras, ctx) {
+      try {
+        await ctx?.identity?.requestSignIn("x@example.com");
+        return {
+          navigationMap: {},
+          warm: [],
+          node: { id: "probe:root", label: "has-identity" },
+          location: { appId: "probe", path: "/" },
+        };
+      } catch (err) {
+        const code =
+          typeof err === "object" && err !== null && "code" in err
+            ? String((err as { code: unknown }).code)
+            : "unknown";
+        return {
+          navigationMap: {},
+          warm: [],
+          node: { id: "probe:root", label: code },
+          location: { appId: "probe", path: "/" },
+        };
+      }
+    },
+    refresh() {
+      return {
+        navigationMap: {},
+        warm: [],
+        node: { id: "probe:root", label: "probe" },
+        location: { appId: "probe", path: "/" },
+      };
+    },
+  };
+}
+
 describe("Account app", () => {
-  let h: NowiseeHost;
-  afterEach(() => {
-    h?.close();
+  let fleet: TestFleet;
+  let mailer: CapturingMailer;
+
+  afterEach(async () => {
+    await fleet?.close();
   });
 
+  async function boot(apps: readonly ("account" | "home" | "bible")[] = ["account"]) {
+    mailer = capturingMailer();
+    fleet = await startTestFleet({
+      apps,
+      mailer,
+      configuredOrigin: ORIGIN,
+    });
+    return fleet.host;
+  }
+
   it("signed-out open starts on the email prompt; signed-in open starts on Settings", async () => {
-    const made = makeHost();
-    h = made.host;
+    const h = await boot();
     const opened = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -87,7 +119,7 @@ describe("Account app", () => {
       headers: headers(cookie),
       body: {
         nodeId: NODE.auth,
-        extras: { action: { triggerId: NODE.code }, inputText: made.mailer.lastCode() },
+        extras: { action: { triggerId: NODE.code }, inputText: mailer.lastCode() },
       },
     });
     const signedBody = signedIn.body as RefreshResult;
@@ -112,8 +144,7 @@ describe("Account app", () => {
   });
 
   it("sign-in action sets exactly one Set-Cookie with a rotated token", async () => {
-    const made = makeHost();
-    h = made.host;
+    const h = await boot();
     const start = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -136,7 +167,7 @@ describe("Account app", () => {
       headers: headers(anon),
       body: {
         nodeId: NODE.auth,
-        extras: { action: { triggerId: NODE.code }, inputText: made.mailer.lastCode() },
+        extras: { action: { triggerId: NODE.code }, inputText: mailer.lastCode() },
       },
     });
     expect(action.status).toBe(200);
@@ -149,8 +180,7 @@ describe("Account app", () => {
   });
 
   it("a wrong code is unsuccessful sign-in, and back pops to the existing code node", async () => {
-    const made = makeHost();
-    h = made.host;
+    const h = await boot();
     const start = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -184,8 +214,7 @@ describe("Account app", () => {
   });
 
   it("a throttled code request pops back to email", async () => {
-    const made = makeHost();
-    h = made.host;
+    const h = await boot();
     const start = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/account/open",
@@ -217,46 +246,26 @@ describe("Account app", () => {
     expect(body.navigationMap[NODE.codePrompt]?.enter).toEqual({ kind: "node", stackBehavior: "pop" });
   });
 
-  it("does not grant ctx.identity to a non-allowed app", async () => {
-    const seen: Array<AppServerContext | undefined> = [];
-    const probe: AppModule = {
-      id: "probe",
-      label: "Probe",
-      open(_path, _extras, ctx) {
-        seen.push(ctx);
-        return {
-          navigationMap: {},
-          warm: [],
-          node: { id: "probe:root", label: ctx?.identity ? "has-identity" : "no-identity" },
-          location: { appId: "probe", path: "/" },
-        };
-      },
-      refresh(_nodeId, _extras, ctx) {
-        seen.push(ctx);
-        return {
-          navigationMap: {},
-          warm: [],
-          node: { id: "probe:root", label: ctx?.identity ? "has-identity" : "no-identity" },
-          location: { appId: "probe", path: "/" },
-        };
-      },
-    };
-    h = makeHost({ extraApps: [probe], identityAppIds: ["account"] }).host;
-    const out = await handleSessionHttp(h, {
+  it("does not grant identity APIs to a non-Account app", async () => {
+    mailer = capturingMailer();
+    fleet = await startTestFleet({
+      apps: [],
+      probes: [{ app: identityProbe() }],
+      mailer,
+      configuredOrigin: ORIGIN,
+    });
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/probe/open",
       headers: headers(),
       body: { path: "/" },
     });
     expect(out.status).toBe(200);
-    expect((out.body as RefreshResult).node.label).toBe("no-identity");
-    expect(seen[0]?.identity).toBeUndefined();
-    expect(seen[0]?.sessionId).toBeTruthy();
-    expect(seen[0]?.userId).toBeNull();
+    expect((out.body as RefreshResult).node.label).toBe("forbidden");
   });
 
   it("Home lists Account by its registered label when signed out", async () => {
-    h = makeHost().host;
+    const h = await boot(["home", "account"]);
     const opened = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/home/open",
@@ -276,7 +285,7 @@ describe("Account app", () => {
   });
 
   it("Bible still works with an anonymous session", async () => {
-    h = makeHost().host;
+    const h = await boot(["bible"]);
     const out = await handleSessionHttp(h, {
       method: "POST",
       url: "/api/apps/bible/open",

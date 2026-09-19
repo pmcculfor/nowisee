@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import { createNotesApp, type NotesApp } from "./index.ts";
 import type { NoteRecord, NotesStore } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -107,21 +106,6 @@ export function openNotesDatabase(path: string = DEFAULT_NOTES_DB_PATH): Db {
   return openSqlite({
     path,
     migrations: { dir: MIGRATIONS_DIR, files: ["001_notes.sql"] },
-  });
-}
-
-export type StartNotesAppOptions = {
-  readonly rootAppId: string;
-  readonly dbPath?: string;
-};
-
-/** Opens Notes' own SQLite file and returns the AppModule. Used by the host. */
-export function startNotesApp(options: StartNotesAppOptions): NotesApp {
-  const db = openNotesDatabase(options.dbPath ?? DEFAULT_NOTES_DB_PATH);
-  return createNotesApp({
-    rootAppId: options.rootAppId,
-    store: createSqliteNotesStore(db),
-    close: () => db.close(),
   });
 }
 

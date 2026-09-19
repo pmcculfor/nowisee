@@ -25,7 +25,7 @@ Typical sites force tabbing through chrome or exploring by touch, so users canno
 8. **Gmail** connects a Google account and shows inbox messages (subject, then from), body chunks, and compose/send. Tokens go through host OAuth/lockbox.
 9. **Account** is sign in / register / sign out. Credentials live in the identity service, not in this app.
 
-Long-term there should be many apps, and possibly third-party apps and an in-product App Store. Core must never special-case product names. A new app is a module plus a pack row, not a core edit.
+Long-term there should be many apps, and possibly third-party apps and an in-product App Store. Core must never special-case product names. A new app is a module plus an `app_catalog` row, not a core edit.
 
 Prefer robust, generic, long-term design over shipping fast. Incomplete is OK; sloppy, duplicated, or product-specific core design is not.
 

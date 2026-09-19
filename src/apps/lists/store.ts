@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import { createListsApp, type ListsApp } from "./index.ts";
 import type { FirstActiveItem, ListItemRecord, ListRecord, ListsStore } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -250,21 +249,6 @@ export function openListsDatabase(path: string = DEFAULT_LISTS_DB_PATH): Db {
   return openSqlite({
     path,
     migrations: { dir: MIGRATIONS_DIR, files: ["001_lists.sql"] },
-  });
-}
-
-export type StartListsAppOptions = {
-  readonly rootAppId: string;
-  readonly dbPath?: string;
-};
-
-/** Opens Lists' own SQLite file and returns the AppModule. Used by the host. */
-export function startListsApp(options: StartListsAppOptions): ListsApp {
-  const db = openListsDatabase(options.dbPath ?? DEFAULT_LISTS_DB_PATH);
-  return createListsApp({
-    rootAppId: options.rootAppId,
-    store: createSqliteListsStore(db),
-    close: () => db.close(),
   });
 }
 

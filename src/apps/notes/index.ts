@@ -10,6 +10,11 @@ import {
   openNotesPath,
   type NotesViewDeps,
 } from "./view.ts";
+import {
+  createSqliteNotesStore,
+  DEFAULT_NOTES_DB_PATH,
+  openNotesDatabase,
+} from "./store.ts";
 import type { NotesStore } from "./types.ts";
 
 export type NotesAppDeps = {
@@ -17,6 +22,21 @@ export type NotesAppDeps = {
   readonly store: NotesStore;
   readonly close?: () => void;
 };
+
+export type StartNotesAppOptions = {
+  readonly rootAppId: string;
+  readonly dbPath?: string;
+};
+
+/** Opens Notes' own SQLite file and returns the AppModule. */
+export function startNotesApp(options: StartNotesAppOptions): NotesApp {
+  const db = openNotesDatabase(options.dbPath ?? DEFAULT_NOTES_DB_PATH);
+  return createNotesApp({
+    rootAppId: options.rootAppId,
+    store: createSqliteNotesStore(db),
+    close: () => db.close(),
+  });
+}
 
 export type NotesApp = AppModule & { close(): void };
 
@@ -53,3 +73,4 @@ export function createNotesApp(deps: NotesAppDeps): NotesApp {
 
 export type { NoteRecord, NotesStore } from "./types.ts";
 export { firstLineLabel, NOTES_APP_ID } from "./ids.ts";
+export { DEFAULT_NOTES_DB_PATH, openNotesDatabase, createSqliteNotesStore } from "./store.ts";

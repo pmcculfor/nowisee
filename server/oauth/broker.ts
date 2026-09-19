@@ -62,24 +62,27 @@ export function createOAuthBroker(args: {
   readonly db: Db;
   readonly lockbox: LockboxService;
   readonly keyring: LockboxKeyring;
-  readonly providers: readonly OAuthProviderConfig[];
+  readonly getProvider: (appId: string) => OAuthProviderConfig | undefined;
   readonly secrets: OAuthSecrets;
   readonly configuredOrigin: string;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
 }): OAuthBroker {
-  const providers = registerProviders(args.providers);
   const doFetch = args.fetch ?? fetch;
   const now = args.now ?? Date.now;
   const refreshLocks = new Map<string, Promise<unknown>>();
   const origin = args.configuredOrigin.replace(/\/+$/, "");
 
   function requireProvider(appId: string): OAuthProviderConfig {
-    const config = providers.get(appId);
+    const config = args.getProvider(appId);
     if (!config) {
       throw new OAuthError("not-configured");
     }
-    return config;
+    const registered = registerProviders([config]).get(appId);
+    if (!registered) {
+      throw new OAuthError("not-configured");
+    }
+    return registered;
   }
 
   function requireSecrets(appId: string) {

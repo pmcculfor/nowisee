@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { startBibleApp } from "../src/apps/bible/store.ts";
+import { startBibleApp } from "../src/apps/bible/index.ts";
 import { fixtureBible } from "./helpers/kjvFixture.ts";
-import { startNotesApp } from "../src/apps/notes/store.ts";
-import { startListsApp } from "../src/apps/lists/store.ts";
+import { startNotesApp } from "../src/apps/notes/index.ts";
+import { startListsApp } from "../src/apps/lists/index.ts";
 import type { AppServerContext } from "../src/core/types.ts";
 
 function signedOut(): AppServerContext {

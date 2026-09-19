@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type BibleApp, createBibleApp } from "../src/apps/bible/index.ts";
+import { type BibleApp, createBibleApp, startBibleApp } from "../src/apps/bible/index.ts";
 import {
   createSqliteBibleStore,
   openBibleDatabase,
   SEARCH_QUERY_TTL_MS,
   RECENCY_TTL_MS,
-  startBibleApp,
 } from "../src/apps/bible/store.ts";
 import { ensureCatalog, parseHelloAoChapter, parseTsk, parseVpl, stripSuppliedWordBrackets } from "../src/apps/bible/import.ts";
 import {

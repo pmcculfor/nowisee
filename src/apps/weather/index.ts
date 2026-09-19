@@ -6,6 +6,12 @@ import type {
 } from "../../core/types.ts";
 import { NODE, WEATHER_APP_ID, WEATHER_APP_LABEL } from "./ids.ts";
 import { buildWeatherView, openWeatherPath, type WeatherViewDeps } from "./view.ts";
+import {
+  createSqliteWeatherStore,
+  DEFAULT_WEATHER_DB_PATH,
+  openWeatherDatabase,
+} from "./store.ts";
+import { createNwsWeatherClient } from "./nwsClient.ts";
 import type { WeatherClient, WeatherStore } from "./types.ts";
 
 export type WeatherAppDeps = {
@@ -16,6 +22,23 @@ export type WeatherAppDeps = {
 };
 
 export type WeatherApp = AppModule & { close(): void };
+
+export type StartWeatherAppOptions = {
+  readonly rootAppId: string;
+  readonly dbPath?: string;
+  readonly fetch?: typeof fetch;
+};
+
+/** Opens Weather's own SQLite file and returns the AppModule. */
+export function startWeatherApp(options: StartWeatherAppOptions): WeatherApp {
+  const db = openWeatherDatabase(options.dbPath ?? DEFAULT_WEATHER_DB_PATH);
+  return createWeatherApp({
+    rootAppId: options.rootAppId,
+    store: createSqliteWeatherStore(db),
+    client: createNwsWeatherClient({ fetch: options.fetch }),
+    close: () => db.close(),
+  });
+}
 
 /**
  * Weather as a portable AppModule.
@@ -52,3 +75,4 @@ export function createWeatherApp(deps: WeatherAppDeps): WeatherApp {
 export type { WeatherClient, WeatherDay, WeatherSnapshot, WeatherStore } from "./types.ts";
 export { WEATHER_APP_ID, WEATHER_APP_LABEL, NODE, dayNodeId, parseZip, placeLabel } from "./ids.ts";
 export { WeatherClientError } from "./types.ts";
+export { DEFAULT_WEATHER_DB_PATH, openWeatherDatabase, createSqliteWeatherStore } from "./store.ts";

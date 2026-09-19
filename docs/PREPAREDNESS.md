@@ -10,9 +10,9 @@ Until the product is no longer in development, there is **no compatibility tax**
 
 The expensive bets are already in place. They exist so that app number fifty, a phone swipe layer, or a worker/iframe host do not force a rewrite of the shell.
 
-- **Apps answer `open` / `refresh`.** Core never computes the next node id. A new app is a module plus a pack row.
+- **Apps answer `open` / `refresh`.** Core never computes the next node id. A new app is a process (`main.ts`) plus an `app_catalog` row.
 - **Intents, not keystrokes, in app data.** Remapping, right-to-left locales, VoiceOver pads, and a native gesture layer are all one binding table in core.
-- **Message-shaped boundary.** Stack, map, and payloads are plain data. That is what makes a later sandbox — a worker, an iframe, or a server — the same protocol over a different transport. It is a discipline today, not isolation yet.
+- **Message-shaped boundary.** Stack, map, and payloads are plain data. The host POSTs signed ctx to each app process and mediates lockbox/OAuth/identity on a loopback capability port.
 - **Per-app stack; Home is an app.** Histories do not mix products. Core identifies Home only as `config.rootAppId`. Recents restores parked stacks; catalog launch still resets that app.
 - **App-owned stores; host-owned identity.** Core has no database. `ctx.userId` comes from the session cookie. Secrets such as OAuth tokens sit in the host lockbox, not in an app file and not in a `RefreshResult`.
 
@@ -26,12 +26,12 @@ Production is a Node host that serves the site and `/api` together (`npm start`)
 
 | Growth | What changes | What must not change |
 |--------|----------------|----------------------|
-| More first-party apps | A folder, an `AppModule`, a pack row (`homeRole` as needed), and a remote stub. Home lists `ctx.directory` using `homeRole` plus its store. | No product names in core. The host does not open that app’s database. |
+| More first-party apps | A folder, `main.ts`, an `app_catalog` row (`home_role` as needed), and a systemd instance. Home lists `ctx.directory` using `homeRole` plus its store. | No product names in core. The host does not open that app’s database or import its graph. |
 | Larger corpora | They stay on the server; the app seeds its own file. The client bundle stays a shell. | No corpus in `src/core/` or in the browser graph. |
 | Hosted identity at volume | The identity service could swap SQLite for another engine behind `server/db`. | Apps still see `ctx.userId`, never `ctx.db`. |
 | Native client (iPhone) | Swift Navigator + URLSession RPC + native text/input. Same `open` / `refresh` JSON. Cookie jar plus `Origin` header. OAuth uses `ASWebAuthenticationSession`. | Do not port apps to Swift. Do not teach apps about swipes. Do not build a second login path. |
 | Live updates | Implement reserved `platform.requestRefresh()` as a read-only refresh of the current tip. The label updates in place; there is no teleport. | Apps must not `setInterval` or touch the DOM to fake push. |
-| Third-party apps | Same `open` / `refresh` messages. Then validate at Navigator `apply()`, add `apiVersion`, cap warm/map size, and run a sandbox host with catalog/review. | Do not hand apps the DOM, the registry, or live objects. Do not grow core branches per outsider feature. |
+| Third-party apps | Same HTTP `open` / `refresh` as first-party. Catalog locator (loopback this slice). Then validate at Navigator `apply()`, cap warm/map size, and remote locators. | Do not hand apps the DOM, the registry, or live objects. Do not grow core branches per outsider feature. |
 | Payments | The Account app plus an external processor. Freemium stays at the app layer. | No ad region or second competing surface on Display. |
 
 Keep `owner_id` (from `ctx.userId`) in every user-data query. Keep returning JSON that would survive `structuredClone`.

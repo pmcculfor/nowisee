@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { edgeApp, edgeExternal, edgePop } from "../src/app-kit/index.ts";
-import { createGmailApp, type GmailApp } from "../src/apps/gmail/index.ts";
+import { createGmailApp, startGmailApp, type GmailApp } from "../src/apps/gmail/index.ts";
 import {
   chunkNodeId,
   GMAIL_APP_ID,
@@ -9,11 +9,7 @@ import {
 } from "../src/apps/gmail/ids.ts";
 import { createGmailApiClient } from "../src/apps/gmail/gmailClient.ts";
 import { decodeBase64Url, encodeRawMessage, extractPlainText } from "../src/apps/gmail/mime.ts";
-import {
-  createSqliteGmailStore,
-  openGmailDatabase,
-  startGmailApp,
-} from "../src/apps/gmail/store.ts";
+import { createSqliteGmailStore, openGmailDatabase } from "../src/apps/gmail/store.ts";
 import {
   GmailClientError,
   type GmailClient,

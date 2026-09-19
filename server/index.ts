@@ -13,6 +13,8 @@
  *   NOWISEE_MAIL_FROM            From: header for Resend
  *   NOWISEE_RESEND_API_KEY       Resend API key
  *   NOWISEE_OTP_PEPPER           32-byte HMAC key, base64
+ *   NOWISEE_HOST_SIGNING_KEY     Ed25519 PKCS8 DER, base64
+ *   NOWISEE_CAPABILITY_LISTEN    loopback host:port for capability RPCs
  *
  * Environment (required when lockbox / OAuth apps are granted):
  *   NOWISEE_LOCKBOX_KEY          32-byte AES key, base64
@@ -55,11 +57,13 @@ if (!Number.isInteger(PORT) || PORT <= 0) {
 }
 const DB_PATH = required("NOWISEE_DB");
 
-const host = createNowiseeHost({
+const host = await createNowiseeHost({
   db: DB_PATH,
   ephemeral: false,
   configuredOrigin: required("NOWISEE_ORIGIN"),
   adminEmails: adminEmailsFromEnv(),
+  capabilityListen: required("NOWISEE_CAPABILITY_LISTEN"),
+  hostSigningKey: required("NOWISEE_HOST_SIGNING_KEY"),
 });
 
 async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {

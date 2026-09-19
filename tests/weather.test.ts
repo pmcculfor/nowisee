@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { edgeApp } from "../src/app-kit/index.ts";
-import { createWeatherApp, type WeatherApp } from "../src/apps/weather/index.ts";
+import { createWeatherApp, startWeatherApp, type WeatherApp } from "../src/apps/weather/index.ts";
 import {
   NODE,
   WEATHER_APP_ID,
@@ -13,11 +13,7 @@ import {
   formatCurrentLabel,
   groupForecastDays,
 } from "../src/apps/weather/nwsClient.ts";
-import {
-  createSqliteWeatherStore,
-  openWeatherDatabase,
-  startWeatherApp,
-} from "../src/apps/weather/store.ts";
+import { createSqliteWeatherStore, openWeatherDatabase } from "../src/apps/weather/store.ts";
 import {
   WeatherClientError,
   type WeatherClient,

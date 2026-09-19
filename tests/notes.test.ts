@@ -7,12 +7,8 @@ import {
   noteEditNodeId,
   noteNodeId,
 } from "../src/apps/notes/ids.ts";
-import { createNotesApp, type NotesApp } from "../src/apps/notes/index.ts";
-import {
-  createSqliteNotesStore,
-  openNotesDatabase,
-  startNotesApp,
-} from "../src/apps/notes/store.ts";
+import { createNotesApp, startNotesApp, type NotesApp } from "../src/apps/notes/index.ts";
+import { createSqliteNotesStore, openNotesDatabase } from "../src/apps/notes/store.ts";
 import type { NoteRecord, NotesStore } from "../src/apps/notes/types.ts";
 import type { AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { refreshApp } from "./helpers/refreshCall.ts";

@@ -17,12 +17,8 @@ import {
   itemDoneNodeId,
   itemUndoNodeId,
 } from "../src/apps/lists/ids.ts";
-import { createListsApp, type ListsApp } from "../src/apps/lists/index.ts";
-import {
-  createSqliteListsStore,
-  openListsDatabase,
-  startListsApp,
-} from "../src/apps/lists/store.ts";
+import { createListsApp, startListsApp, type ListsApp } from "../src/apps/lists/index.ts";
+import { createSqliteListsStore, openListsDatabase } from "../src/apps/lists/store.ts";
 import type { ListItemRecord, ListRecord, ListsStore } from "../src/apps/lists/types.ts";
 import type { AppServerContext } from "../src/core/types.ts";
 import { nodeEdge } from "./helpers/edges.ts";

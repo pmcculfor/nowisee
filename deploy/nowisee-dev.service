@@ -1,10 +1,11 @@
 [Unit]
-Description=Nowisee (dev)
+Description=Nowisee host (dev)
 After=network.target
+PartOf=nowisee-dev.target
 
 [Service]
 Type=simple
-User=nowisee
+User=nowisee-host
 Group=nowisee
 WorkingDirectory=/var/www/nowisee-dev
 EnvironmentFile=/etc/nowisee/nowisee-dev.env
@@ -13,4 +14,4 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=nowisee-dev.target

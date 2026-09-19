@@ -1,7 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import { createAccountApp, type AccountApp } from "./index.ts";
 import type { AccountFlowStore } from "./types.ts";
 
 export type { AccountFlowStore };
@@ -38,20 +37,5 @@ export function openAccountDatabase(path: string = DEFAULT_ACCOUNT_DB_PATH): Db 
   return openSqlite({
     path,
     migrations: { dir: MIGRATIONS_DIR, files: ["001_flow.sql"] },
-  });
-}
-
-export type StartAccountAppOptions = {
-  readonly rootAppId: string;
-  readonly dbPath?: string;
-};
-
-/** Opens Account's own SQLite file and returns the AppModule. Used by the host. */
-export function startAccountApp(options: StartAccountAppOptions): AccountApp {
-  const db = openAccountDatabase(options.dbPath ?? DEFAULT_ACCOUNT_DB_PATH);
-  return createAccountApp({
-    rootAppId: options.rootAppId,
-    flow: createAccountFlowStore(db),
-    close: () => db.close(),
   });
 }

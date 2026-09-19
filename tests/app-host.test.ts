@@ -1,23 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { getApp, listDirectory } from "../server/catalog.ts";
+import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
+import { handleSessionHttp } from "../server/http.ts";
 import { getCanonBook } from "../src/apps/bible/catalog.ts";
 import { optionId } from "../src/apps/bible/ids.ts";
 import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";
-import { startFirstPartyApps, type FirstPartyCatalog } from "../server/firstPartyApps.ts";
-import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
+import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";
-
-function host() {
-  return createAppHost({ rootAppId: "home" });
-}
-
-function sessionHost(): NowiseeHost {
-  return createNowiseeHost({
-    rootAppId: "home",
-    configuredOrigin: ORIGIN,
-  });
-}
 
 function headers(): Record<string, string> {
   return {
@@ -28,8 +18,18 @@ function headers(): Record<string, string> {
 }
 
 describe("app host", () => {
-    it("opens Home with Tutorial first, then Bible, Notes, Lists, Weather, Account, and Manage Apps", async () => {
-    const result = await host().open("home", "/", {});
+  let fleet: TestFleet;
+
+  beforeAll(async () => {
+    fleet = await startTestFleet({ rootAppId: "home", configuredOrigin: ORIGIN });
+  });
+
+  afterAll(async () => {
+    await fleet.close();
+  });
+
+  it("opens Home with Tutorial first, then Bible, Notes, Lists, Weather, Account, and Manage Apps", async () => {
+    const result = await fleet.rpc.open("home", "/", {});
     expect(result.warm.map((n) => n.label)).toEqual([
       TUTORIAL_APP_LABEL,
       "Bible",
@@ -43,42 +43,38 @@ describe("app host", () => {
   });
 
   it("open Home /app/bible lands on the Bible catalog row", async () => {
-    const result = await host().open("home", "/app/bible", {});
+    const result = await fleet.rpc.open("home", "/app/bible", {});
     expect(result.node.label).toBe("Bible");
     expect(result.location).toEqual({ appId: "home", path: "/app/bible" });
   });
 
   it("opens Notes signed-out as a sign-in node", async () => {
-    const result = await host().open("notes", "/", {});
+    const result = await fleet.rpc.open("notes", "/", {});
     expect(result.node.label).toBe("Sign in to use Notes.");
   });
 
   it("opens a Bible verse", async () => {
-    const result = await host().open("bible", "/Genesis/1/1", {});
+    const result = await fleet.rpc.open("bible", "/Genesis/1/1", {});
     expect(result.node.label).toContain("In the beginning");
     expect(result.location).toEqual({ appId: "bible", path: "/Genesis/1/1" });
   });
 
   it("Copy action returns clipboardText without needing a clipboard on extras", async () => {
     const copyId = optionId(
-            {
-              bookId: getCanonBook("GEN")!.sort,
-              chapter: 1,
-              verse: 1,
-            },
-            "copy",
-          );
-    const result = await host().refresh(
-      "bible",
-      copyId,
-      { action: { triggerId: copyId } },
+      {
+        bookId: getCanonBook("GEN")!.sort,
+        chapter: 1,
+        verse: 1,
+      },
+      "copy",
     );
+    const result = await fleet.rpc.refresh("bible", copyId, { action: { triggerId: copyId } });
     expect(result.node.label).toBe("Copied");
     expect(result.clipboardText).toContain("Genesis 1:1.");
   });
 
   it("opens Recents with parked ids; skips Home and unparkable Recents", async () => {
-    const result = await host().open("recents", "/", {
+    const result = await fleet.rpc.open("recents", "/", {
       parkedAppIds: ["home", "notes", "recents"],
     });
     expect(result.node.label).toBe("Notes (recent)");
@@ -100,14 +96,18 @@ describe("app host", () => {
 });
 
 describe("app HTTP", () => {
-  let h: NowiseeHost;
-  afterEach(() => {
-    h?.close();
+  let fleet: TestFleet;
+
+  beforeAll(async () => {
+    fleet = await startTestFleet({ rootAppId: "home", configuredOrigin: ORIGIN });
+  });
+
+  afterAll(async () => {
+    await fleet.close();
   });
 
   it("POST open round-trips JSON", async () => {
-    h = sessionHost();
-    const out = await handleSessionHttp(h, {
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/home/open",
       headers: headers(),
@@ -119,8 +119,7 @@ describe("app HTTP", () => {
   });
 
   it("unknown app is 404", async () => {
-    h = sessionHost();
-    const out = await handleSessionHttp(h, {
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/mail/open",
       headers: headers(),
@@ -130,8 +129,7 @@ describe("app HTTP", () => {
   });
 
   it("GET is 405", async () => {
-    h = sessionHost();
-    const out = await handleSessionHttp(h, {
+    const out = await handleSessionHttp(fleet.host, {
       method: "GET",
       url: "/api/apps/home/open",
       headers: headers(),
@@ -140,8 +138,7 @@ describe("app HTTP", () => {
   });
 
   it("rejects a refresh body that still sends stack", async () => {
-    h = sessionHost();
-    const out = await handleSessionHttp(h, {
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/bible/refresh",
       headers: headers(),
@@ -151,8 +148,7 @@ describe("app HTTP", () => {
   });
 
   it("rejects extras.action as a boolean", async () => {
-    h = sessionHost();
-    const out = await handleSessionHttp(h, {
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/bible/refresh",
       headers: headers(),
@@ -162,8 +158,7 @@ describe("app HTTP", () => {
   });
 
   it("rejects extras.parkedAppIds that are not string arrays", async () => {
-    h = sessionHost();
-    const out = await handleSessionHttp(h, {
+    const out = await handleSessionHttp(fleet.host, {
       method: "POST",
       url: "/api/apps/recents/open",
       headers: headers(),
@@ -173,44 +168,36 @@ describe("app HTTP", () => {
   });
 });
 
-/**
- * The running host derives its grant lists from the same pack rows, but skips
- * them when `ephemeral` is true, so no session test ever reads them. These cover
- * the derivation itself.
- */
-describe("first-party catalog", () => {
-  let catalog: FirstPartyCatalog;
+describe("app_catalog", () => {
+  let h: NowiseeHost;
 
-  beforeEach(() => {
-    catalog = startFirstPartyApps({ rootAppId: "home", ephemeral: true });
+  afterEach(async () => {
+    await h?.close();
   });
 
-  afterEach(() => {
-    for (const app of catalog.apps) {
-      app.close?.();
-    }
-  });
-
-  it("grants lockbox and OAuth to Gmail and to no one else", () => {
-    expect(catalog.lockbox).toEqual(["gmail"]);
-    expect(catalog.oauth).toEqual(["gmail"]);
-    expect(catalog.providers.map((p) => p.appId)).toEqual(["gmail"]);
-  });
-
-  it("grants identity to Account and the directory to Home and Recents", () => {
-    expect(catalog.identity).toEqual(["account"]);
-    expect(catalog.directory).toEqual(["home", "recents"]);
-  });
-
-  it("reads every grant off the row that started the app", () => {
-    const ids = catalog.apps.map((app) => app.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    for (const list of [catalog.identity, catalog.lockbox, catalog.oauth, catalog.directory]) {
-      for (const id of list) {
-        expect(ids).toContain(id);
-      }
-    }
-    expect(catalog.homeRoleByAppId.get("account")).toBe("required");
-    expect(catalog.parkableByAppId.get("recents")).toBe(false);
+  it("seeds nine apps; Gmail has lockbox and OAuth; identity is Account by id", async () => {
+    h = await createNowiseeHost({ rootAppId: "home" });
+    const ids = listDirectory(h.db).map((d) => d.id);
+    expect(ids).toEqual([
+      "home",
+      "recents",
+      "tutorial",
+      "bible",
+      "notes",
+      "lists",
+      "weather",
+      "gmail",
+      "account",
+    ]);
+    const gmail = getApp(h.db, "gmail")!;
+    expect(gmail.grantLockbox).toBe(true);
+    expect(gmail.grantOauth).toBe(true);
+    expect(gmail.oauthProvider?.appId).toBe("gmail");
+    const notes = getApp(h.db, "notes")!;
+    expect(notes.grantLockbox).toBe(false);
+    expect(getApp(h.db, "home")!.grantDirectory).toBe(true);
+    expect(getApp(h.db, "recents")!.parkable).toBe(false);
+    expect(getApp(h.db, "account")!.homeRole).toBe("required");
+    expect(h.accountAppId).toBe("account");
   });
 });

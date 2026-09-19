@@ -1,7 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSqlite, type Db } from "../../../server/sqlite.ts";
-import { createHomeApp, type HomeApp } from "./index.ts";
 import type { HomeStore } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");
@@ -39,18 +38,5 @@ export function openHomeDatabase(path: string = DEFAULT_HOME_DB_PATH): Db {
   return openSqlite({
     path,
     migrations: { dir: MIGRATIONS_DIR, files: ["001_home.sql"] },
-  });
-}
-
-export type StartHomeAppOptions = {
-  readonly dbPath?: string;
-};
-
-/** Opens Home's own SQLite file and returns the AppModule. Used by the host. */
-export function startHomeApp(options: StartHomeAppOptions = {}): HomeApp {
-  const db = openHomeDatabase(options.dbPath ?? DEFAULT_HOME_DB_PATH);
-  return createHomeApp({
-    store: createSqliteHomeStore(db),
-    close: () => db.close(),
   });
 }

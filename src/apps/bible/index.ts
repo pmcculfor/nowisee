@@ -5,8 +5,15 @@ import type {
   RefreshExtras,
   RefreshResult,
 } from "../../core/types.ts";
-import type { BibleStore } from "./types.ts";
+import type { BibleStore, BibleSeed } from "./types.ts";
 import { openBibleView, refreshBibleView, type BibleViewDeps } from "./view/index.ts";
+import { ensureCatalog, type EnsureCatalogOptions } from "./import.ts";
+import { MEMORY_SEED } from "./memorySeed.ts";
+import {
+  createSqliteBibleStore,
+  DEFAULT_BIBLE_DB_PATH,
+  openBibleDatabase,
+} from "./store.ts";
 
 export const BIBLE_APP_ID = "bible";
 
@@ -16,6 +23,26 @@ export type BibleAppDeps = {
 };
 
 export type BibleApp = AppModule & { close(): void };
+
+export type StartBibleAppOptions = {
+  readonly rootAppId: string;
+  readonly dbPath?: string;
+  readonly seed?: BibleSeed;
+  readonly rawDir?: string;
+};
+
+/** Opens Bible's own SQLite file and returns the AppModule. */
+export function startBibleApp(options: StartBibleAppOptions): BibleApp {
+  const dbPath = options.dbPath ?? DEFAULT_BIBLE_DB_PATH;
+  const db = openBibleDatabase(dbPath);
+  const catalog: EnsureCatalogOptions = {
+    seed: options.seed ?? (dbPath === ":memory:" ? MEMORY_SEED : undefined),
+    rawDir: options.rawDir,
+  };
+  ensureCatalog(db, catalog);
+  const store = createSqliteBibleStore(db);
+  return createBibleApp({ rootAppId: options.rootAppId, store });
+}
 
 /**
  * Bible as a portable AppModule.
@@ -58,3 +85,4 @@ export type {
   BibleStore,
   BibleVersion,
 } from "./types.ts";
+export { DEFAULT_BIBLE_DB_PATH, openBibleDatabase, createSqliteBibleStore } from "./store.ts";

@@ -12,7 +12,7 @@ This file covers contracts, packaging, and the stack. Product locks are in [`SPE
 |--------|----------|-----|
 | Client | Vanilla TypeScript + Vite | One text/input surface; no UI framework |
 | App host | TypeScript on Node, small `/api` router (no Express) | Same language and `RefreshResult` types as the apps |
-| Where apps run | First-party `open` / `refresh` on the server | Proof of the intended split; large corpora stay off the client bundle |
+| Where apps run | Own Node process per app; host POSTs signed ctx to the catalog locator | Isolation; first-party and third-party share one HTTP contract |
 | Client apps | Generic `createRemoteApp` stub, minted by app id | Not a phone book of first-party apps |
 | Database | SQLite via `node:sqlite` (`server/sqlite.ts`) | Host identity in `data/nowisee.db`; each app opens `data/apps/*.db`. `:memory:` in tests |
 | URL style | Pathnames behind `AppLocation` | Hash routes were an MVP; a locale segment or sub-path mount still touches Router only |
@@ -24,14 +24,15 @@ This file covers contracts, packaging, and the stack. Product locks are in [`SPE
 ```text
 src/core/         shell (navigator, display, …)
 src/app-kit/      optional helpers apps import
-src/apps/         AppModules (imported by the server host)
+src/apps/         AppModules (graphs, stores, `main.ts` process entry)
+src/apps/serve.ts   shared `/open` `/refresh` `/health` HTTP for every app
 src/apps/remote.ts  client RPC stub
 src/shell/        lazy generic stub by app id, mounts display, wires keyboard
 ios/              Swift iPhone client (same open/refresh HTTP; not a WebView)
                   Package.swift runs Foundation Navigator fixtures (`swift test`)
-server/           HTTP, host identity SQLite, identity service, first-party pack list
+server/           HTTP broker, host identity SQLite, identity service, app_catalog
 server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
-server/index.ts   production entry (SPA + /api)
+server/index.ts   production host entry (SPA + /api; does not start apps)
 ```
 
 ### Running it
@@ -42,13 +43,15 @@ server/index.ts   production entry (SPA + /api)
 
 ### Environment
 
-See [`.env.production.example`](../.env.production.example) (https://nowisee.app) and [`.env.staging.example`](../.env.staging.example) (https://dev.nowisee.app). The running host grants lockbox/OAuth to apps that declare them, so it **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests leave those grant lists empty. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service), [`deploy/nowisee-dev.service`](../deploy/nowisee-dev.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
+See [`.env.production.example`](../.env.production.example) (https://nowisee.app) and [`.env.staging.example`](../.env.staging.example) (https://dev.nowisee.app). The running host grants lockbox/OAuth from `app_catalog.grant_*`, so it **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, `NOWISEE_HOST_SIGNING_KEY`, `NOWISEE_CAPABILITY_LISTEN`, and that app’s `NOWISEE_OAUTH_<APP>_CLIENT_*`. Tests use `startTestFleet` and the seeded catalog grants. Node does not read `.env` files; systemd uses `EnvironmentFile=` ([`deploy/nowisee.service`](../deploy/nowisee.service), [`deploy/nowisee-dev.service`](../deploy/nowisee-dev.service)). Droplet pull/restart: [`deploy/README.md`](../deploy/README.md).
 
 | Variable | Role |
 |----------|------|
 | `PORT` | Listen port. Required |
 | `NOWISEE_DB` | Host SQLite file. Required |
 | `NOWISEE_ORIGIN` | Public origin for CSRF and OAuth redirect URI. Required. Production: `https://nowisee.app`. Staging: `https://dev.nowisee.app` |
+| `NOWISEE_CAPABILITY_LISTEN` | Loopback `host:port` for ticket-scoped lockbox/OAuth/identity HTTP. Required. Not in Caddy |
+| `NOWISEE_HOST_SIGNING_KEY` | Ed25519 PKCS8 DER, base64. Required. Apps get the matching public key |
 | `NOWISEE_MAIL_FROM` | From: header for Resend. Required |
 | `NOWISEE_RESEND_API_KEY` | Resend API key. Required |
 | `NOWISEE_OTP_PEPPER` | 32-byte HMAC key, base64. Required |
@@ -134,7 +137,7 @@ This is a discipline, not a sandbox.
 
 **Smell test:** if a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app — not in core. If every session would break unless Navigator runs it, it belongs in core.
 
-To add an app, implement `AppModule` and add a pack row in [`server/firstPartyApps.ts`](../server/firstPartyApps.ts) (`homeRole` if it should not be a normal optional Home item). The client POSTs `/api/apps/:id/…` using that id; it does not keep a matching stub list. Home lists peers from `ctx.directory` according to `homeRole` and the user’s store.
+To add an app: `src/apps/<id>/` with `main.ts`, a systemd instance, and an `app_catalog` row (`homeRole` if it should not be a normal optional Home item). The host has no compile-time app list. The client POSTs `/api/apps/:id/…` using that id; it does not keep a matching stub list. Home lists peers from `ctx.directory` according to `homeRole` and the user’s store.
 
 ---
 
@@ -154,7 +157,7 @@ See [`MODULES.md`](MODULES.md) for full behavior.
 
 **NodeCache** stores warm payloads, pins stack ids, and clears on app switch.
 
-**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (`{ id, label }`). The host directory bind may attach pack `homeRole` and `parkable` when granting `ctx.directory`.
+**AppRegistry** has `register`, `get` (core-internal), and `listDescriptors` (`{ id, label }`). The signed directory snapshot may attach catalog `home_role` and `parkable` when `grant_directory = 1`.
 
 **Platform** owns the clipboard write for `clipboardText` during an action.
 
