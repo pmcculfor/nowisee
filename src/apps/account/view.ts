@@ -29,6 +29,7 @@ export type AccountViewDeps = {
 const START_LABEL = "Enter your email on the next screen to sign in or register.";
 const CODE_SENT_LABEL = "We sent a sign-in code to that email. Enter it on the next screen.";
 const CODE_THROTTLED_LABEL = "Please wait before requesting another sign-in code.";
+const CODE_SEND_FAILED_LABEL = "We could not send the sign-in code. Please try again.";
 const SETTINGS_LABEL = "Settings. This screen is not available yet.";
 const SIGN_OUT_LABEL = "Sign out";
 const AUTH_WARM_LABEL = "Signing in…";
@@ -124,6 +125,9 @@ async function applyAction(
     const outcome = await identity.requestSignIn(email);
     if (!outcome.ok && outcome.reason === "throttled") {
       return codePromptStatusView(CODE_THROTTLED_LABEL);
+    }
+    if (!outcome.ok && outcome.reason === "send-failed") {
+      return codePromptStatusView(CODE_SEND_FAILED_LABEL);
     }
     if (!outcome.ok) {
       return codePromptStatusView(AUTH_FAILED_LABEL);

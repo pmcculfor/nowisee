@@ -34,8 +34,8 @@ There is no Gmail API key that can read someone’s inbox. User mail is **OAuth 
 4. Add scopes (see §3). They will show as **Restricted** for read/modify.
 5. **Audience → Testing**, add up to **100 test Google accounts**. Only those accounts can connect. They will see a “Google hasn’t verified this app” screen; they click Advanced → Go to Nowisee.
 6. Credentials → **Create credentials → OAuth client ID → Web application** (not Desktop, not API key, not service account).
-   - Authorized JavaScript origins: `http://localhost:5173` (dev), later `https://your-origin`.
-   - Authorized redirect URIs: a **real HTTP path**, not a hash. The host callback is **`GET /oauth/callback`** for every app (dispatch by `state`). Example: `http://localhost:5173/oauth/callback` and later `https://your-origin/oauth/callback`.
+   - Authorized JavaScript origins: `https://dev.nowisee.app` (staging) and `https://nowisee.app` (production). Nowisee does not run on localhost.
+   - Authorized redirect URIs: a **real HTTP path**, not a hash. The host callback is **`GET /oauth/callback`** for every app (dispatch by `state`). So: `https://dev.nowisee.app/oauth/callback` and `https://nowisee.app/oauth/callback`.
 7. Copy client ID + secret into the host secrets store (or env, see options below). Never commit them. Never send them to the client bundle.
 
 **Service accounts cannot open consumer Gmail.** Domain-wide delegation is Workspace-admin only. Ignore that path.

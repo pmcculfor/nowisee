@@ -32,7 +32,10 @@ export function lockboxKeyringFromEnv(
   if (!raw) {
     return undefined;
   }
-  const id = env.NOWISEE_LOCKBOX_KEY_ID?.trim() || "v1";
+  const id = env.NOWISEE_LOCKBOX_KEY_ID?.trim();
+  if (!id) {
+    throw new Error("NOWISEE_LOCKBOX_KEY_ID is required when NOWISEE_LOCKBOX_KEY is set");
+  }
   return { currentId: id, keys: { [id]: parseLockboxKey(raw) } };
 }
 

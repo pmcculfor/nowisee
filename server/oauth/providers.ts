@@ -19,16 +19,6 @@ export type NormalizedTokens = {
   needsReconnect?: boolean;
 };
 
-export type ProviderEventRequest = {
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: string;
-};
-
-export type ProviderEventResponse = {
-  readonly status: number;
-  readonly body?: string;
-};
-
 export type OAuthProviderConfig = {
   readonly appId: string;
   readonly authorizationEndpoint: string;
@@ -39,7 +29,6 @@ export type OAuthProviderConfig = {
   readonly extraTokenParams?: Readonly<Record<string, string>>;
   readonly finalizeTokens?: (raw: TokenResponse) => Promise<NormalizedTokens>;
   readonly refreshTokens?: (current: NormalizedTokens) => Promise<NormalizedTokens>;
-  readonly onProviderEvent?: (req: ProviderEventRequest) => Promise<ProviderEventResponse>;
 };
 
 export function assertSafeEndpoint(url: string): void {

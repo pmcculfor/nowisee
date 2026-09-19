@@ -1,6 +1,6 @@
 # Production host (DigitalOcean)
 
-The droplet `nowisee-prod-00` runs **two** Node processes. Caddy terminates TLS and proxies by hostname. systemd runs Node; secrets live under `/etc/nowisee/`, not in git. Do not run Vite (`npm run dev`) on the droplet.
+The droplet `nowisee-prod-00` runs **two** Node processes. Caddy terminates TLS and proxies by hostname. systemd runs Node; secrets live under `/etc/nowisee/`, not in git.
 
 | Origin | Checkout | Unit | Env | Port |
 |--------|----------|------|-----|------|

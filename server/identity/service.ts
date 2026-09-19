@@ -280,9 +280,10 @@ export function createIdentityService(options: IdentityServiceOptions): Identity
           subject: SIGN_IN_MAIL_SUBJECT,
           text: signInCodeEmailText(code),
         });
-      } catch {
+      } catch (err) {
         db.run("DELETE FROM login_challenges WHERE session_id = ?", sessionId);
-        console.error("sign-in mail failed");
+        console.error("sign-in mail failed", err);
+        return { ok: false, reason: "send-failed" };
       }
       return { ok: true };
     },

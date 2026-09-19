@@ -5,6 +5,7 @@ import { AppNotFoundError } from "./errors.ts";
 import type { NowiseeHost } from "./host.ts";
 import type { CookieSlot } from "./identity/context.ts";
 import { clientIpFromRequest } from "./clientIp.ts";
+import { header, type HeadersLike } from "./headers.ts";
 
 export type AppHttpResponse = {
   readonly status: number;
@@ -18,10 +19,6 @@ export type SessionHttpRequest = {
   readonly headers: HeadersLike;
   readonly body?: unknown;
   readonly remoteAddress?: string;
-};
-
-export type HeadersLike = {
-  readonly [name: string]: string | string[] | undefined;
 };
 
 const API_HEADERS = {
@@ -242,12 +239,4 @@ function json(
     body,
     headers: { ...API_HEADERS, ...extraHeaders },
   };
-}
-
-function header(headers: HeadersLike, name: string): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
 }

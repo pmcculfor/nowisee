@@ -7,6 +7,7 @@ function emptyResult(id: string): RefreshResult {
     navigationMap: {},
     warm: [],
     node: { id, label: id },
+    location: null,
   };
 }
 

@@ -25,10 +25,4 @@ export { edgeToHome, homeCatalogPath, rootBackToHome } from "./home.ts";
 
 export { signedOut, type SignedOutOptions } from "./signedOut.ts";
 
-export {
-  collectNeighborhood,
-  type CollectNeighborhoodOptions,
-  type NeighborhoodNeighbor,
-} from "./neighborhood.ts";
-
 export { splitText } from "./splitText.ts";

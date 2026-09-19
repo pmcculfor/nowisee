@@ -50,19 +50,12 @@ Busy and dead-end are still identical silence for this audience. They cannot tel
 
 **When taken up:** add a second, screen-reader-only announcement channel in Display, distinct from the focused content surface. It is an announcement, not a competing interactive region. Pending work after a short delay can speak a polite “working”; a dead end can use a distinguishable cue (or silence as a setting). Warm-miss load failure already uses the content surface. Content announcement stays focus-only. Until this lands, apps **MUST** resolve action calls with a status node rather than reject — a rejection strands the user on the working label.
 
-### Deep-link ancestry — landed
-
-`open` may return committed ancestry (`OpenResult.stack`). Core installs it when the last entry is the tip and every non-null ancestor location is canonical. Invalid ancestry is discarded and warned. `refresh` has no stack field. Overlay frames are client-only and never appear on open ancestry. Dual-Navigator JSON scenarios live in [`tests/fixtures/navigator/`](../tests/fixtures/navigator/); the geometry catalog remains [`tests/fixtures/navigation-geometry.json`](../tests/fixtures/navigation-geometry.json).
-
 ### Other reserved work
 
 | Item | Notes |
 |------|--------|
 | `requestRefresh` | Typed, not provided. Implement it before a tip must update without a user intent (for example, new mail on the current subject). |
-| Dual Navigator | Website TypeScript and iOS Swift Navigators stay aligned via JSON in `tests/fixtures/navigator/` (Vitest + `swift test` in `ios/`). Add a scenario when changing concurrency, park, stack, or decode. Geometry catalog: `tests/fixtures/navigation-geometry.json`. |
 | Response validation / `apiVersion` / unknown values | Typed, not provided. The single choke point is Navigator `apply()`. Wait until apps you did not write exist. Intended later: unknown edge kind → missing edge; unknown node kind → render as text; unknown intent → never matched. |
 | Browser Back/Forward vs session stack | `popstate` → `openLocation` is enough for now. |
 | Identity rate limits, password reset, email verify, export/deletion | See [`IDENTITY.md`](IDENTITY.md) §13. |
 | Monetization | Wait. Do not leave an ad hole in core. |
-
-Screen-reader browse mode (arrows never reaching the page) was an existential risk. It is **settled** in the product: `role="application"` on text tips, Cancel/Done on input, and VoiceOver edge pads. Evidence is in [`spikes/README.md`](../spikes/README.md).

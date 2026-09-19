@@ -97,6 +97,25 @@ describe("NavPads", () => {
     expect(intents).toEqual(["next", "back"]);
   });
 
+  it("setHidden takes the pads out of the accessibility tree and puts them back", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const host: NavPadsHost = {
+      isBlocked: () => false,
+      onIntent: () => {},
+    };
+
+    const pads = new NavPads({ parent, host });
+    const buttons = [...parent.querySelectorAll<HTMLButtonElement>("button[data-nav-pad]")];
+    expect(buttons.every((b) => b.hidden)).toBe(false);
+
+    pads.setHidden(true);
+    expect(buttons.every((b) => b.hidden)).toBe(true);
+
+    pads.setHidden(false);
+    expect(buttons.some((b) => b.hidden)).toBe(false);
+  });
+
   it("does not delay or lock out a later activation of the same pad", () => {
     const parent = document.createElement("div");
     document.body.appendChild(parent);

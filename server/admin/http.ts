@@ -2,7 +2,8 @@ import type { Db } from "../db/index.ts";
 import { readSessionToken } from "../cookie.ts";
 import { checkCsrf, expectedOriginFromRequest } from "../csrf.ts";
 import type { NowiseeHost } from "../host.ts";
-import type { AppHttpResponse, HeadersLike, SessionHttpRequest } from "../http.ts";
+import { header } from "../headers.ts";
+import type { AppHttpResponse, SessionHttpRequest } from "../http.ts";
 import { HOUR_MS } from "../usage.ts";
 import { ADMIN_PAGE_HTML } from "./page.ts";
 import {
@@ -184,14 +185,6 @@ function asRecord(body: unknown): Record<string, unknown> {
     return body as Record<string, unknown>;
   }
   return {};
-}
-
-function header(headers: HeadersLike, name: string): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
 }
 
 function notFound(): AppHttpResponse {

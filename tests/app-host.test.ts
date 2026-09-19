@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getCanonBook } from "../src/apps/bible/catalog.ts";
 import { optionId } from "../src/apps/bible/ids.ts";
 import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";
+import { startFirstPartyApps, type FirstPartyCatalog } from "../server/firstPartyApps.ts";
 import { createAppHost, createNowiseeHost, type NowiseeHost } from "../server/host.ts";
 import { handleSessionHttp } from "../server/http.ts";
 
@@ -169,5 +170,47 @@ describe("app HTTP", () => {
       body: { path: "/", extras: { parkedAppIds: "nope" } },
     });
     expect(out.status).toBe(400);
+  });
+});
+
+/**
+ * The running host derives its grant lists from the same pack rows, but skips
+ * them when `ephemeral` is true, so no session test ever reads them. These cover
+ * the derivation itself.
+ */
+describe("first-party catalog", () => {
+  let catalog: FirstPartyCatalog;
+
+  beforeEach(() => {
+    catalog = startFirstPartyApps({ rootAppId: "home", ephemeral: true });
+  });
+
+  afterEach(() => {
+    for (const app of catalog.apps) {
+      app.close?.();
+    }
+  });
+
+  it("grants lockbox and OAuth to Gmail and to no one else", () => {
+    expect(catalog.lockbox).toEqual(["gmail"]);
+    expect(catalog.oauth).toEqual(["gmail"]);
+    expect(catalog.providers.map((p) => p.appId)).toEqual(["gmail"]);
+  });
+
+  it("grants identity to Account and the directory to Home and Recents", () => {
+    expect(catalog.identity).toEqual(["account"]);
+    expect(catalog.directory).toEqual(["home", "recents"]);
+  });
+
+  it("reads every grant off the row that started the app", () => {
+    const ids = catalog.apps.map((app) => app.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const list of [catalog.identity, catalog.lockbox, catalog.oauth, catalog.directory]) {
+      for (const id of list) {
+        expect(ids).toContain(id);
+      }
+    }
+    expect(catalog.homeRoleByAppId.get("account")).toBe("required");
+    expect(catalog.parkableByAppId.get("recents")).toBe(false);
   });
 });

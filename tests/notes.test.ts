@@ -254,11 +254,7 @@ describe("Notes app", () => {
     const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    await refreshApp(app,
-      [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
-      { inputText: "should not save" },
-      signedIn(),
-    );
+    await refreshApp(app, noteNodeId("n1"), { inputText: "should not save" }, signedIn());
     expect((await store.get(OWNER, "n1"))?.body).toBe("Keep me");
   });
 
@@ -266,11 +262,7 @@ describe("Notes app", () => {
     const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    await refreshApp(app,
-      [{ nodeId: noteNodeId("n1"), label: "Keep me", location: null }],
-      { action: true },
-      signedIn(),
-    );
+    await refreshApp(app, noteNodeId("n1"), { action: true }, signedIn());
     expect((await store.get(OWNER, "n1"))?.body).toBe("Keep me");
   });
 
@@ -278,8 +270,9 @@ describe("Notes app", () => {
     const { app, store } = notesHarness({
       initial: [note({ id: "n1", body: "Keep me" })],
     });
-    const result = await refreshApp(app,
-      [{ nodeId: noteNodeId("gone"), label: "Gone", location: null }],
+    const result = await refreshApp(
+      app,
+      noteNodeId("gone"),
       { action: true, inputText: "nope" },
       signedIn(),
     );
@@ -308,8 +301,9 @@ describe("Notes app", () => {
       edgeApp({ appId: "home", path: "/app/notes" }),
     );
 
-    await refreshApp(app,
-      [{ nodeId: CREATE_EDIT_NODE_ID, label: "", location: null }],
+    await refreshApp(
+      app,
+      CREATE_EDIT_NODE_ID,
       { action: true, inputText: "should not save" },
       signedOutCtx(),
     );
@@ -333,16 +327,13 @@ describe("Notes app", () => {
     expect(mine.node.label).toBe("My note");
     expect(mine.warm.some((n) => n.label.includes("Secret"))).toBe(false);
 
-    const forged = await refreshApp(app,
-      [{ nodeId: noteNodeId("theirs"), label: "Secret other note", location: null }],
-      {},
-      signedIn(OWNER),
-    );
+    const forged = await refreshApp(app, noteNodeId("theirs"), {}, signedIn(OWNER));
     expect(forged.node.label).not.toContain("Secret");
     expect(forged.node.id).toBe(noteNodeId("mine"));
 
-    const stolenWrite = await refreshApp(app,
-      [{ nodeId: noteNodeId("theirs"), label: "Secret other note", location: null }],
+    const stolenWrite = await refreshApp(
+      app,
+      noteNodeId("theirs"),
       { action: true, inputText: "pwned" },
       signedIn(OWNER),
     );

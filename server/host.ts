@@ -1,4 +1,4 @@
-import { FIRST_PARTY_APPS, type StartedApp } from "./firstPartyApps.ts";
+import { startFirstPartyApps } from "./firstPartyApps.ts";
 import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
 import { AppRegistry } from "../src/core/registry.ts";
 import type {
@@ -17,7 +17,6 @@ import { createIdentityService, type IdentityService } from "./identity/service.
 import { lockboxKeyringFromEnv, type LockboxKeyring } from "./lockbox/crypto.ts";
 import {
   createSilentMailer,
-  DEV_OTP_PEPPER,
   mailerFromEnv,
   otpPepperFromEnv,
   type Mailer,
@@ -27,6 +26,9 @@ import { createOAuthBroker, type OAuthBroker } from "./oauth/broker.ts";
 import type { OAuthProviderConfig } from "./oauth/providers.ts";
 import { envOAuthSecrets, type OAuthSecrets } from "./oauth/secrets.ts";
 import { recordUsage, usageKind } from "./usage.ts";
+
+/** Fixed pepper for ephemeral (test) hosts, which never send real mail. */
+const EPHEMERAL_OTP_PEPPER = new Uint8Array(32).fill(1);
 
 export type AppHostOptions = {
   readonly rootAppId?: string;
@@ -111,11 +113,9 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
 
   const mailer =
     options.mailer ??
-    (ephemeral
-      ? createSilentMailer()
-      : mailerFromEnv({ configuredOrigin: options.configuredOrigin, fetch: options.fetch }));
+    (ephemeral ? createSilentMailer() : mailerFromEnv({ fetch: options.fetch }));
   const otpPepper =
-    options.otpPepper ?? (ephemeral ? DEV_OTP_PEPPER : otpPepperFromEnv());
+    options.otpPepper ?? (ephemeral ? EPHEMERAL_OTP_PEPPER : otpPepperFromEnv());
   const adminEmails = new Set(
     (options.adminEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean),
   );
@@ -127,20 +127,11 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
   });
 
   const registry = new AppRegistry();
-  const started: StartedApp[] = [];
-  const homeRoleByAppId = new Map<string, HomeRole>();
-  const parkableByAppId = new Map<string, boolean>();
-  const hostStart = { rootAppId, ephemeral };
-  for (const pack of FIRST_PARTY_APPS) {
-    const app = pack.start(hostStart);
+  const catalog = startFirstPartyApps({ rootAppId, ephemeral });
+  const started = catalog.apps;
+  const { homeRoleByAppId, parkableByAppId } = catalog;
+  for (const app of started) {
     registry.register(app);
-    started.push(app);
-    if (pack.homeRole) {
-      homeRoleByAppId.set(app.id, pack.homeRole);
-    }
-    if (pack.parkable === false) {
-      parkableByAppId.set(app.id, false);
-    }
   }
   for (const extra of options.extraApps ?? []) {
     registry.register(extra);
@@ -161,34 +152,11 @@ export function createNowiseeHost(options: AppHostOptions = {}): NowiseeHost {
     });
   }
 
-  const catalogIdentity: string[] = [];
-  const catalogLockbox: string[] = [];
-  const catalogOauth: string[] = [];
-  const catalogDirectory: string[] = [];
-  const catalogProviders: OAuthProviderConfig[] = [];
-  for (let i = 0; i < FIRST_PARTY_APPS.length; i++) {
-    const pack = FIRST_PARTY_APPS[i]!;
-    const app = started[i]!;
-    if (pack.identity) {
-      catalogIdentity.push(app.id);
-    }
-    if (pack.lockbox) {
-      catalogLockbox.push(app.id);
-    }
-    if (pack.oauth) {
-      catalogOauth.push(app.id);
-      catalogProviders.push(pack.oauth);
-    }
-    if (pack.directory) {
-      catalogDirectory.push(app.id);
-    }
-  }
-
-  const identityAppIds = new Set(options.identityAppIds ?? catalogIdentity);
-  const directoryAppIds = new Set(options.directoryAppIds ?? catalogDirectory);
-  const lockboxAppIds = new Set(options.lockboxAppIds ?? (ephemeral ? [] : catalogLockbox));
-  const oauthAppIds = new Set(options.oauthAppIds ?? (ephemeral ? [] : catalogOauth));
-  const oauthProviders = options.oauthProviders ?? (ephemeral ? [] : catalogProviders);
+  const identityAppIds = new Set(options.identityAppIds ?? catalog.identity);
+  const directoryAppIds = new Set(options.directoryAppIds ?? catalog.directory);
+  const lockboxAppIds = new Set(options.lockboxAppIds ?? (ephemeral ? [] : catalog.lockbox));
+  const oauthAppIds = new Set(options.oauthAppIds ?? (ephemeral ? [] : catalog.oauth));
+  const oauthProviders = options.oauthProviders ?? (ephemeral ? [] : catalog.providers);
 
   const keyring = options.lockboxKeys ?? lockboxKeyringFromEnv();
   if ((lockboxAppIds.size > 0 || oauthAppIds.size > 0) && !keyring) {

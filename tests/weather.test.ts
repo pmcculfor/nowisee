@@ -141,8 +141,9 @@ describe("Weather app graph", () => {
     expect(client.lookups).toEqual([]);
     expect(await store.getZip(USER)).toBe(ZIP);
 
-    await refreshApp(app,
-      [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
+    await refreshApp(
+      app,
+      NODE.zipSave,
       { action: { triggerId: NODE.setupEdit }, inputText: "10001" },
       signedOutCtx(),
     );
@@ -183,8 +184,9 @@ describe("Weather app graph", () => {
 
   it("Done with a 5-digit zip saves, looks up once, and tips current", async () => {
     const { app, store, client } = harness();
-    const result = await refreshApp(app,
-      [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
+    const result = await refreshApp(
+      app,
+      NODE.zipSave,
       { action: { triggerId: NODE.setupEdit }, inputText: ZIP },
       signedIn(),
     );
@@ -197,8 +199,9 @@ describe("Weather app graph", () => {
 
   it("Done with ZIP+4 stores the first five digits", async () => {
     const { app, store, client } = harness();
-    await refreshApp(app,
-      [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
+    await refreshApp(
+      app,
+      NODE.zipSave,
       { action: { triggerId: NODE.setupEdit }, inputText: "90210-1234" },
       signedIn(),
     );
@@ -252,7 +255,7 @@ describe("Weather app graph", () => {
   it("looks up weather on every open and refresh; zip row is unchanged", async () => {
     const { app, store, client } = harness({ zipByUser: { [USER]: ZIP } });
     await app.open("/", {}, signedIn());
-    await refreshApp(app,[{ nodeId: NODE.current, label: SAMPLE.currentLabel, location: null }], {}, signedIn());
+    await refreshApp(app, NODE.current, {}, signedIn());
     await app.open("/place", {}, signedIn());
     expect(client.lookups).toEqual([ZIP, ZIP, ZIP]);
     expect(await store.getZip(USER)).toBe(ZIP);
@@ -260,8 +263,9 @@ describe("Weather app graph", () => {
 
   it("invalid zip does not look up or save", async () => {
     const { app, store, client } = harness();
-    const result = await refreshApp(app,
-      [{ nodeId: NODE.zipSave, label: "Saving…", location: null }],
+    const result = await refreshApp(
+      app,
+      NODE.zipSave,
       { action: { triggerId: NODE.setupEdit }, inputText: "abc" },
       signedIn(),
     );
@@ -283,8 +287,9 @@ describe("Weather app graph", () => {
       errorByZip: { "00000": new WeatherClientError("not-found") },
     });
     const { app, store } = harness({ zipByUser: { [USER]: ZIP }, client });
-    const result = await refreshApp(app,
-      [{ nodeId: NODE.place, label: placeLabel(ZIP), location: null }],
+    const result = await refreshApp(
+      app,
+      NODE.place,
       { action: { triggerId: NODE.placeEdit }, inputText: "00000" },
       signedIn(),
     );
@@ -333,29 +338,22 @@ describe("Weather app graph", () => {
     const other = await app.open("/", {}, signedIn(OTHER));
     expect(other.warm.find((n) => n.id === NODE.place)?.label).toBe(placeLabel("10001"));
 
-    const forged = await refreshApp(app,
-      [{ nodeId: dayNodeId("1999-01-01"), label: "Gone", location: null }],
-      {},
-      signedIn(USER),
-    );
+    const forged = await refreshApp(app, dayNodeId("1999-01-01"), {}, signedIn(USER));
     expect(forged.node.id).toBe(NODE.current);
   });
 
   it("does not save without extras.action", async () => {
     const { app, store, client } = harness({ zipByUser: { [USER]: ZIP } });
-    await refreshApp(app,
-      [{ nodeId: NODE.placeEdit, label: ZIP, location: null }],
-      { inputText: "10001" },
-      signedIn(),
-    );
+    await refreshApp(app, NODE.placeEdit, { inputText: "10001" }, signedIn());
     expect(await store.getZip(USER)).toBe(ZIP);
     expect(client.lookups).toEqual([ZIP]);
   });
 
   it("does not save when action is set but typed text is missing", async () => {
     const { app, store } = harness({ zipByUser: { [USER]: ZIP } });
-    const result = await refreshApp(app,
-      [{ nodeId: NODE.place, label: placeLabel(ZIP), location: null }],
+    const result = await refreshApp(
+      app,
+      NODE.place,
       { action: { triggerId: NODE.placeEdit } },
       signedIn(),
     );

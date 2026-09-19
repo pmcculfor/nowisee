@@ -6,7 +6,7 @@ Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts). Iden
 
 ## Signed out
 
-The tip is **Enter your email on the next screen to sign in or register.** `enter` goes to an email input (`autocomplete=username`). Email Done (`action` plus `passInputText`) keys the write on `triggerId` (the email input), calls `requestSignIn`, and lands on **We sent a sign-in code to that email. Enter it on the next screen.** (or a throttled / unsuccessful sentence that `pop`s). Then a plain code input (`autocomplete=off`, not `secret`). Code Done keys on the code input, shows a warm **Signing in…** node, then either **You are signed in as …** (enter/back go to Home) or **Sign-in was unsuccessful.** (enter/back `pop` to the same code input).
+The tip is **Enter your email on the next screen to sign in or register.** `enter` goes to an email input (`autocomplete=username`). Email Done (`action` plus `passInputText`) keys the write on `triggerId` (the email input), calls `requestSignIn`, and lands on **We sent a sign-in code to that email. Enter it on the next screen.** (or a throttled / send-failed / unsuccessful sentence that `pop`s). Then a plain code input (`autocomplete=off`, not `secret`). Code Done keys on the code input, shows a warm **Signing in…** node, then either **You are signed in as …** (enter/back go to Home) or **Sign-in was unsuccessful.** (enter/back `pop` to the same code input).
 
 A new address that completes a code becomes the account. Root `back` goes to Home.
 

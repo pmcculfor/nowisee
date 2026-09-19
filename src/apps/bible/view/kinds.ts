@@ -1,7 +1,8 @@
 import { edgePop, type MapFragment } from "../../../app-kit/index.ts";
-import type { AppLocation, NodePayload, RefreshResult } from "../../../core/types.ts";
-import { testamentLabel } from "../catalog.ts";
+import type { AppLocation, NodePayload } from "../../../core/types.ts";
+import { testamentLabel, type VerseOptionType } from "../catalog.ts";
 import { bookPathSegment } from "../canon.ts";
+import type { CanonRef } from "../types.ts";
 import {
   bookmarksEmptyId,
   bookmarksId,
@@ -30,8 +31,9 @@ import {
   type ParsedNode,
 } from "../ids.ts";
 import { addBookLevel, addChapterLevel, addRootLevel } from "./root.ts";
-import { addBookmarksEmpty } from "./bookmarks.ts";
+import { addBookmarksEmpty, toggleBookmark } from "./bookmarks.ts";
 import { addCommentaryWorks, commentaryChunkLabel } from "./commentary.ts";
+import { resolveCopy } from "./copy.ts";
 import {
   addDictionaryEmpty,
   addDictionaryWords,
@@ -50,11 +52,21 @@ import {
   activeVersion,
   addNode,
   searchQueryVersion,
+  touchCommentaryRecency,
+  touchDictionaryRecency,
+  touchVersionRecency,
+  touchXrefRecency,
   verseLocation,
   withDisplayVersion,
+  type ActionContribution,
   type ViewSession,
 } from "./helpers.ts";
-import { addSearchInput, emptySearchLabel, searchLimitedLabel } from "./search.ts";
+import {
+  addSearchInput,
+  applySearchAction,
+  emptySearchLabel,
+  searchLimitedLabel,
+} from "./search.ts";
 import { addSignIn } from "./signin.ts";
 import {
   addOptionLevel,
@@ -77,7 +89,19 @@ type KindRow = {
     parsed: ParsedNode,
     version: number,
   ): void;
-  directView?(session: ViewSession, parsed: ParsedNode, version: number): RefreshResult;
+  /**
+   * Side effect when this node is the action trigger. Omitted means a deliberate
+   * traversal of this node writes nothing — that is most kinds.
+   */
+  action?(session: ViewSession, parsed: ParsedNode): ActionContribution | null;
+};
+
+/** The verse menu is one kind; only two of its options do anything. */
+const OPTION_ACTION: Partial<
+  Record<VerseOptionType, (session: ViewSession, ref: CanonRef) => ActionContribution | null>
+> = {
+  copy: resolveCopy,
+  bookmark: toggleBookmark,
 };
 
 function asKind<K extends ParsedNode["kind"]>(
@@ -137,9 +161,11 @@ function addSearchEmpty(
   parsed: ParsedNode,
 ): void {
   const queryId = asKind(parsed, "search-empty").queryId;
-  const query = session.sessionId
-    ? (session.deps.store.getSearchQuery(queryId, session.sessionId)?.query ?? "")
-    : "";
+  // Signed out, nothing was recorded, so the text the user just typed is all there is.
+  const stored = session.sessionId
+    ? session.deps.store.getSearchQuery(queryId, session.sessionId)?.query
+    : undefined;
+  const query = stored ?? session.extras.inputText ?? "";
   const id = searchEmptyId(queryId);
   addNode(payloads, { id, label: emptySearchLabel(query) });
   fragments.push({ [id]: { back: edgePop() } });
@@ -196,6 +222,7 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     addLevel: (_s, pay, frag) => {
       addSearchInput(pay, frag);
     },
+    action: (s) => applySearchAction(s),
   },
   "search-working": {
     version: active,
@@ -244,6 +271,10 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
     addLevel: (s, pay, frag) => {
       addRootVersionList(s, pay, frag);
+    },
+    action: (s, parsed) => {
+      touchVersionRecency(s, asKind(parsed, "version-pick").versionId);
+      return null;
     },
   },
   signin: {
@@ -320,6 +351,10 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
       const n = asKind(parsed, "option");
       addOptionLevel(s, pay, frag, n.seq, n.ref);
     },
+    action: (s, parsed) => {
+      const n = asKind(parsed, "option");
+      return OPTION_ACTION[n.option]?.(s, n.ref) ?? null;
+    },
   },
   "verse-version-pick": {
     version: active,
@@ -334,6 +369,10 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     addLevel: (s, pay, frag, parsed) => {
       const n = asKind(parsed, "verse-version-pick");
       addVerseVersionList(s, pay, frag, n.seq, n.ref);
+    },
+    action: (s, parsed) => {
+      touchVersionRecency(s, asKind(parsed, "verse-version-pick").targetVersionId);
+      return null;
     },
   },
   "commentary-list": {
@@ -359,6 +398,10 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
     addLevel: (s, pay, frag, parsed) => {
       addCommentaryWorks(s, pay, frag, asKind(parsed, "commentary-work").ref);
+    },
+    action: (s, parsed) => {
+      touchCommentaryRecency(s, asKind(parsed, "commentary-work").commentaryId);
+      return null;
     },
   },
   "commentary-chunk": {
@@ -399,6 +442,10 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     addLevel: (s, pay, frag, parsed, version) => {
       addXrefWorks(s, pay, frag, asKind(parsed, "xref-work").ref, version);
     },
+    action: (s, parsed) => {
+      touchXrefRecency(s, asKind(parsed, "xref-work").workId);
+      return null;
+    },
   },
   "xref-phrase": {
     version: active,
@@ -438,6 +485,10 @@ export const KIND: Record<ParsedNode["kind"], KindRow> = {
     },
     addLevel: (s, pay, frag, parsed) => {
       addDictionaryWorks(s, pay, frag, asKind(parsed, "dictionary-work").ref);
+    },
+    action: (s, parsed) => {
+      touchDictionaryRecency(s, asKind(parsed, "dictionary-work").workId);
+      return null;
     },
   },
   "dictionary-word": {

@@ -80,11 +80,8 @@ body {
   color: #fff;
 }
 
-#app[data-input-open] button[data-nav-pad] {
-  display: none;
-}
-
-/* VoiceOver edge pads: huge hit targets, no visible chrome, name via aria-label only. */
+/* VoiceOver edge pads: huge hit targets, no visible chrome, name via aria-label only.
+   NavPads hides them in input mode via the `hidden` attribute, not CSS. */
 #app button[data-nav-pad] {
   position: fixed;
   z-index: 2;
