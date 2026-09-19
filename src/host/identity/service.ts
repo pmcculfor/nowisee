@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import type { AuthOutcome, RequestSignInOutcome } from "../../src/core/types.ts";
+import type { AuthOutcome, RequestSignInOutcome } from "../../core/types.ts";
 import type { Db } from "../db/index.ts";
 import type { Mailer } from "../mail/types.ts";
 import {

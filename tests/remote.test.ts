@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createRemoteApp } from "../src/apps/remote.ts";
-import { toWireExtras, type AppRpc } from "../src/apps/rpc.ts";
+import { createRemoteApp } from "../src/shell/remote.ts";
+import { toWireExtras, type AppRpc } from "../src/shell/rpc.ts";
 import type { RefreshResult } from "../src/core/types.ts";
 
 const emptyResult: RefreshResult = {

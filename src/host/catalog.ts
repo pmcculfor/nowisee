@@ -1,4 +1,4 @@
-import type { AppDescriptor, HomeRole } from "../src/core/types.ts";
+import type { AppDescriptor, HomeRole } from "../core/types.ts";
 import type { Db } from "./db/index.ts";
 import {
   assertSafeEndpoint,

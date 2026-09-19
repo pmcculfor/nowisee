@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { openDatabase, type Db } from "../server/db/index.ts";
-import { SIGN_IN_CODE_TTL_MS } from "../server/identity/code.ts";
-import { createIdentityService, hashToken, type IdentityService } from "../server/identity/service.ts";
+import { openDatabase, type Db } from "../src/host/db/index.ts";
+import { SIGN_IN_CODE_TTL_MS } from "../src/host/identity/code.ts";
+import { createIdentityService, hashToken, type IdentityService } from "../src/host/identity/service.ts";
 import { capturingMailer, TEST_OTP_PEPPER, type CapturingMailer } from "./helpers/signIn.ts";
 
 function service(

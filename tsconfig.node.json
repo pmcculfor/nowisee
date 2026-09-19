@@ -20,11 +20,8 @@
   },
   "include": [
     "vite.config.ts",
-    "server",
-    "src/apps/serve.ts",
-    "src/apps/wireCtx.ts",
-    "src/apps/capClient.ts",
-    "src/apps/appEnv.ts",
+    "src/host",
+    "src/node-kit",
     "src/apps/**/main.ts",
     "src/apps/**/store.ts",
     "src/apps/**/index.ts"

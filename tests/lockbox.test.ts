@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createNowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
+import { createNowiseeHost } from "../src/host/host.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
 import {
   associatedData,
   open,
   seal,
   type LockboxKeyring,
-} from "../server/lockbox/crypto.ts";
-import { LockboxError, MAX_BLOB_BYTES } from "../server/lockbox/errors.ts";
-import { generateHostSigningKeyPair } from "../src/apps/wireCtx.ts";
+} from "../src/host/lockbox/crypto.ts";
+import { LockboxError, MAX_BLOB_BYTES } from "../src/host/lockbox/errors.ts";
+import { generateHostSigningKeyPair } from "../src/node-kit/wireCtx.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, TEST_OTP_PEPPER, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
 import { startTestFleet, type ProbeSpec, type TestFleet } from "./helpers/fleet.ts";

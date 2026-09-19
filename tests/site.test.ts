@@ -6,7 +6,7 @@ import {
   IOS_BUNDLE_ID,
   pageFile,
   siteTarget,
-} from "../server/site.ts";
+} from "../src/host/site.ts";
 
 const DIST = resolve("/tmp/nowisee-dist");
 

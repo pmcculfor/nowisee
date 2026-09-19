@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { mailerFromEnv, otpPepperFromEnv, parseOtpPepper } from "../server/mail/fromEnv.ts";
-import { createResendMailer } from "../server/mail/resend.ts";
+import { mailerFromEnv, otpPepperFromEnv, parseOtpPepper } from "../src/host/mail/fromEnv.ts";
+import { createResendMailer } from "../src/host/mail/resend.ts";
 
 describe("mailer", () => {
   it("requires from and api key", () => {

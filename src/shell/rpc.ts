@@ -1,28 +1,6 @@
-import type { ActionExtras, RefreshExtras, RefreshResult } from "../core/types.ts";
+import type { ActionExtras, AppRpc, RefreshExtras, RefreshResult, WireExtras } from "../core/types.ts";
 
-/**
- * Extras that survive the app RPC. No abort signal.
- */
-export type WireExtras = {
-  readonly inputText?: string;
-  readonly action?: ActionExtras;
-  readonly parkedAppIds?: readonly string[];
-};
-
-export type AppRpc = {
-  open(
-    appId: string,
-    path: string,
-    extras: WireExtras,
-    signal?: AbortSignal,
-  ): Promise<RefreshResult>;
-  refresh(
-    appId: string,
-    nodeId: string,
-    extras: WireExtras,
-    signal?: AbortSignal,
-  ): Promise<RefreshResult>;
-};
+export type { AppRpc, WireExtras };
 
 export function toWireExtras(extras: RefreshExtras): WireExtras {
   const wire: {

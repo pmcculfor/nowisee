@@ -7,7 +7,7 @@ import type {
   LockboxCapability,
   OAuthCapability,
   RequestSignInOutcome,
-} from "../../src/core/types.ts";
+} from "../../core/types.ts";
 import { bindLockbox } from "../lockbox/capability.ts";
 import type { LockboxService } from "../lockbox/service.ts";
 import { bindOAuth } from "../oauth/capability.ts";

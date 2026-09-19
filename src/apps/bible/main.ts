@@ -1,5 +1,5 @@
-import { requiredEnv } from "../appEnv.ts";
-import { runAppMain } from "../serve.ts";
+import { requiredEnv } from "../../node-kit/appEnv.ts";
+import { runAppMain } from "../../node-kit/serve.ts";
 import { startBibleApp } from "./index.ts";
 
 const app = startBibleApp({

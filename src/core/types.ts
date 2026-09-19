@@ -147,6 +147,15 @@ export interface RefreshExtras {
 }
 
 /**
+ * Extras that survive the app RPC. No abort signal.
+ */
+export type WireExtras = {
+  readonly inputText?: string;
+  readonly action?: ActionExtras;
+  readonly parkedAppIds?: readonly string[];
+};
+
+/**
  * The only sanctioned channel for effects an app cannot perform itself.
  * Every member is optional: apps must feature-detect, because a given host
  * (or a future sandboxed host) may not offer all of them.
@@ -225,6 +234,21 @@ export interface RefreshResult {
 export interface OpenResult extends RefreshResult {
   readonly stack?: readonly StackEntry[];
 }
+
+export type AppRpc = {
+  open(
+    appId: string,
+    path: string,
+    extras: WireExtras,
+    signal?: AbortSignal,
+  ): Promise<RefreshResult>;
+  refresh(
+    appId: string,
+    nodeId: string,
+    extras: WireExtras,
+    signal?: AbortSignal,
+  ): Promise<RefreshResult>;
+};
 
 /** True when this call is the one traversal of an action edge. */
 export function isActionExtras(

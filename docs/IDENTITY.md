@@ -42,7 +42,7 @@ Neither store belongs to the Account app. Who owns what is §6.
 
 ## 3. App secrets (lockbox) — landed
 
-A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`server/lockbox/`](../server/lockbox/). The capability port grants lockbox only when `app_catalog.grant_lockbox = 1`.
+A **platform** service (same idea as clipboard: the shell/platform provides it; Navigator does not become a password manager). Code: [`src/host/lockbox/`](../src/host/lockbox/). The capability port grants lockbox only when `app_catalog.grant_lockbox = 1`.
 
 - An app says: “save this blob under slot `personal`” / “give me slot `personal`.”
 - The service keys it by **this user + this app id + this slot**. One app may have many slots (two connected accounts). Two apps with different ids cannot read each other’s slots, even if they talk to the same provider.
@@ -65,7 +65,7 @@ Encryption at rest: AES-256-GCM. A **master key** lives on the server (`NOWISEE_
 
 ### OAuth broker — landed
 
-Generic authorization-code helper. Code: [`server/oauth/`](../server/oauth/). The capability port answers OAuth RPCs only when `app_catalog.grant_oauth = 1` for that app id. App client id/secret come from host env (`NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET`), never the lockbox. Per-user tokens live in lockbox slot `(userId, appId, slot)`. Provider endpoints come from `app_catalog.oauth_provider`.
+Generic authorization-code helper. Code: [`src/host/oauth/`](../src/host/oauth/). The capability port answers OAuth RPCs only when `app_catalog.grant_oauth = 1` for that app id. App client id/secret come from host env (`NOWISEE_OAUTH_<APP>_CLIENT_ID` / `_CLIENT_SECRET`), never the lockbox. Per-user tokens live in lockbox slot `(userId, appId, slot)`. Provider endpoints come from `app_catalog.oauth_provider`.
 
 `oauth.start()` runs while rendering the Connect node (Navigator follows `kind: "external"` without a refresh). PKCE S256; one live state per `(sessionId, appId, slot)`; 10-minute TTL; about 20 live states per session.
 
@@ -94,9 +94,9 @@ First-party mail is the first consumer (`ctx.oauth`).
 
 - **App corpora (landed):** each app seeds its own SQLite file. The host does not import those files. Example: Bible — [`src/apps/bible/README.md`](../src/apps/bible/README.md).
 - **Identity slice (landed):** host SQLite (`node:sqlite`) for `users` / `sessions`. Account flow lives in Account's own database. Runtime details in §12. App files: [`STORAGE.md`](STORAGE.md).
-- **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`001_host.sql`](../server/db/migrations/001_host.sql)).
-- **Admin console (landed):** same host file, tables `login_events` and `usage_hourly` ([`002_usage.sql`](../server/db/migrations/002_usage.sql)). Visual `/admin` page; §15.
-- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Production origin: **https://nowisee.app**. Staging on the same droplet: **https://dev.nowisee.app** (own `NOWISEE_ORIGIN`, SQLite, and lockbox key — [`deploy/README.md`](../deploy/README.md)). Entry point: `server/index.ts` (`npm start` after `npm run build`). There is no local-machine mode. Production should terminate TLS at the reverse proxy (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy. Env: [`.env.production.example`](../.env.production.example), [`.env.staging.example`](../.env.staging.example).
+- **Lockbox / OAuth (landed):** same host file, tables `lockbox` and `oauth_states` ([`001_host.sql`](../src/host/db/migrations/001_host.sql)).
+- **Admin console (landed):** same host file, tables `login_events` and `usage_hourly` ([`002_usage.sql`](../src/host/db/migrations/002_usage.sql)). Visual `/admin` page; §15.
+- Public internet needs a host that runs Node and serves **both** the website and `/api` on the **same origin**. Production origin: **https://nowisee.app**. Staging on the same droplet: **https://dev.nowisee.app** (own `NOWISEE_ORIGIN`, SQLite, and lockbox key — [`deploy/README.md`](../deploy/README.md)). Entry point: `src/host/index.ts` (`npm start` after `npm run build`). There is no local-machine mode. Production should terminate TLS at the reverse proxy (or set `NOWISEE_TLS_CERT` / `NOWISEE_TLS_KEY`); `NOWISEE_ORIGIN` is the CSRF origin when behind a proxy. Env: [`.env.production.example`](../.env.production.example), [`.env.staging.example`](../.env.staging.example).
 
 ---
 
@@ -104,9 +104,9 @@ First-party mail is the first consumer (`ctx.oauth`).
 
 Login, cookies, Account, and SQLite were **one slice**. All five steps have landed:
 
-1. **Host.** `server/index.ts` serves `dist/` and `/api` on one origin.
-2. **Database.** `server/db/` — host identity, lockbox, and OAuth state (`001_host.sql`). `openSqlite` in `server/sqlite.ts` is the shared helper. Each app opens its own file.
-3. **Identity service.** `server/identity/` — email, sign-in codes, sessions, `resolve` / `requestSignIn` / `verifySignIn` / `signOut`.
+1. **Host.** `src/host/index.ts` serves `dist/` and `/api` on one origin.
+2. **Database.** `src/host/db/` — host identity, lockbox, and OAuth state (`001_host.sql`). `openSqlite` in `src/node-kit/sqlite.ts` is the shared helper. Each app opens its own file.
+3. **Identity service.** `src/host/identity/` — email, sign-in codes, sessions, `resolve` / `requestSignIn` / `verifySignIn` / `signOut`.
 4. **Request plumbing.** Three CSRF layers, session cookie, `ctx` on `open` / `refresh`, `Cache-Control: no-store`, 1 MiB body cap.
 5. **Account app.** `src/apps/account/` — ordinary `AppModule`. Graph in §11.4.
 
@@ -137,7 +137,7 @@ The split needs one distinction: **identity** — can this request prove it belo
 
 ### The identity service is not an app
 
-It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-layer module** (`server/identity/`) that the host constructs and exposes on the capability port — the same way the host grants identity RPCs only to Account and does not open Account's database.
+It has no nodes, no graph, and neither `open` nor `refresh`. It is a **host-layer module** (`src/host/identity/`) that the host constructs and exposes on the capability port — the same way the host grants identity RPCs only to Account and does not open Account's database.
 
 Two reasons it cannot live inside the Account app:
 
@@ -161,7 +161,7 @@ This is not two owners for expiry. The service decides and enforces it; the cook
 ### Sketch
 
 ```ts
-// server/identity/service.ts — no HTTP, no nodes, not an AppModule
+// src/host/identity/service.ts — no HTTP, no nodes, not an AppModule
 export interface IdentityService {
   /** Every `/api` request. Creates an anonymous session when the token is absent or dead. */
   resolve(token: string | null): Promise<{
@@ -234,7 +234,7 @@ A double-submit CSRF token is unnecessary while everything is one origin. If a s
 
 Owned by the identity service (§6). The user proves they can read mail at that address. After a successful check, the same session cookie as §7 is the continuing credential.
 
-A host mailer (`server/mail/`) sends the plaintext code. Drivers: `console` (localhost only) and `resend` (HTTPS `fetch`, no npm dependency). Account never sends mail. The Gmail app is not the login mailer.
+A host mailer (`src/host/mail/`) sends the plaintext code. Drivers: `console` (localhost only) and `resend` (HTTPS `fetch`, no npm dependency). Account never sends mail. The Gmail app is not the login mailer.
 
 | Rule | Value |
 |------|-------|
@@ -408,7 +408,7 @@ Identity-relevant rules (the Account app implements them; they are not Account-o
 | Choice | Value |
 |--------|-------|
 | Driver | Built-in `node:sqlite`. Unflagged since Node 22.13 and CI already pins Node 22, so this keeps the zero-runtime-dependency property |
-| Caveat | Still marked experimental in Node 22. Keep driver wrapping in [`server/sqlite.ts`](../server/sqlite.ts) so swapping to `better-sqlite3` is one library file, and pin the Node major in CI and in production |
+| Caveat | Still marked experimental in Node 22. Keep driver wrapping in [`src/node-kit/sqlite.ts`](../src/node-kit/sqlite.ts) so swapping to `better-sqlite3` is one library file, and pin the Node major in CI and in production |
 | Journal mode | WAL |
 | Pragmas | `foreign_keys = ON`, a `busy_timeout` |
 | Schema changes | A numbered migration runner per database — a `migrations` table plus ordered files, applied in a transaction when *that* file is opened. Not scattered `CREATE TABLE IF NOT EXISTS` |
@@ -424,7 +424,7 @@ Recorded so these are decisions rather than oversights. None of them change the 
 | Deferred | Why it is safe for now | What makes it urgent |
 |----------|------------------------|----------------------|
 | **Rate limiting on sign-in codes** | **Landed** for challenges (§8). Per-IP limits at the HTTP layer remain deferred | Public discovery still makes per-IP useful. **CAPTCHA is not an option for this audience** |
-| **Request body size limit** on `/api` | **Landed** — 1 MiB in `server/readBody.ts` | — |
+| **Request body size limit** on `/api` | **Landed** — 1 MiB in `src/node-kit/readBody.ts` | — |
 | **`Cache-Control: no-store` on `/api` responses** | **Landed** on the session HTTP pipeline | — |
 | **Status channel** (busy vs dead-end vs failure) | Already a known gap in [`PREPAREDNESS.md`](PREPAREDNESS.md) | After §10, transport failure is the only silent case left — but it is still silent, and sign-in is when people notice |
 | **Password reset** | **Superseded** — there is no password | — |

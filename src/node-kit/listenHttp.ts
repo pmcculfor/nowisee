@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { parseListen, type ListenAddress } from "../src/apps/appEnv.ts";
+import { parseListen, type ListenAddress } from "./appEnv.ts";
 
 export type HttpHandler = (req: IncomingMessage, res: ServerResponse) => void | Promise<void>;
 

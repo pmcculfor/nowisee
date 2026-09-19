@@ -1,6 +1,6 @@
 import { parseListen, requiredEnv } from "./appEnv.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { WireExtras } from "./rpc.ts";
+import type { AppModule, AppServerContext, RefreshExtras, WireExtras } from "../core/types.ts";
 import {
   createIdentityClient,
   createLockboxClient,
@@ -12,9 +12,8 @@ import {
   type WireAppBody,
   type WireCtx,
 } from "./wireCtx.ts";
-import { listenHttp, type ListeningServer } from "../../server/listenHttp.ts";
-import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "../../server/readBody.ts";
-import type { AppModule, AppServerContext, RefreshExtras } from "../core/types.ts";
+import { listenHttp, type ListeningServer } from "./listenHttp.ts";
+import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "./readBody.ts";
 
 export type ServeAppOptions = {
   readonly listen: { host: string; port: number } | "ephemeral";

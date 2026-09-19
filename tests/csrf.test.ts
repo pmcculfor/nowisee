@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SESSION_COOKIE_NAME } from "../server/cookie.ts";
-import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
+import { SESSION_COOKIE_NAME } from "../src/host/cookie.ts";
+import { createNowiseeHost, type NowiseeHost } from "../src/host/host.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
 import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 
 const ORIGIN = "http://localhost:5173";

@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
-import type { LockboxKeyring } from "../server/lockbox/crypto.ts";
-import { handleOAuthHttp } from "../server/oauth/http.ts";
-import { mapOAuthSecrets } from "../server/oauth/secrets.ts";
+import type { NowiseeHost } from "../src/host/host.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
+import type { LockboxKeyring } from "../src/host/lockbox/crypto.ts";
+import { handleOAuthHttp } from "../src/host/oauth/http.ts";
+import { mapOAuthSecrets } from "../src/host/oauth/secrets.ts";
 import type { AppModule, AppServerContext, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
 import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";

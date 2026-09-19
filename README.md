@@ -19,7 +19,7 @@ The public origin is **https://nowisee.app**. Staging on the same droplet is **h
 
 The running host grants Gmail lockbox and OAuth from `app_catalog`, so that path **does** need `NOWISEE_LOCKBOX_KEY`, `NOWISEE_LOCKBOX_KEY_ID`, `NOWISEE_ORIGIN`, `NOWISEE_HOST_SIGNING_KEY`, `NOWISEE_CAPABILITY_LISTEN`, and `NOWISEE_OAUTH_GMAIL_CLIENT_ID` / `_CLIENT_SECRET` on the **host**. Sign-in codes need `NOWISEE_MAIL_FROM`, `NOWISEE_RESEND_API_KEY`, and `NOWISEE_OTP_PEPPER`.
 
-**Production env:** Node does not read `.env` files. Put host secrets in `/etc/nowisee/nowisee.env` (mode `640`, `root:nowisee-host`) from [`.env.production.example`](.env.production.example). App env files: [`deploy/app.env.example`](deploy/app.env.example). Staging uses `/etc/nowisee/nowisee-dev.env` and [`deploy/nowisee-dev.target`](deploy/nowisee-dev.target). The host unit loads `EnvironmentFile=` — do not paste keys into the unit. OAuth redirect: `{NOWISEE_ORIGIN}/oauth/callback`. If a reverse proxy terminates TLS, leave `NOWISEE_TLS_*` unset. Production listens on `PORT=3000`; staging on `3001`.
+**Production env:** Node does not read `.env` files. Put host secrets in `/etc/nowisee/host/nowisee.env` (mode `640`, `root:nowisee-host`) from [`.env.production.example`](.env.production.example). App env files: [`deploy/app.env.example`](deploy/app.env.example). Staging uses `/etc/nowisee-dev/host/nowisee.env` and [`deploy/nowisee-dev.target`](deploy/nowisee-dev.target). The host unit loads `EnvironmentFile=` — do not paste keys into the unit. OAuth redirect: `{NOWISEE_ORIGIN}/oauth/callback`. If a reverse proxy terminates TLS, leave `NOWISEE_TLS_*` unset. Production listens on `PORT=3000`; staging on `3001`.
 
 On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an input node, type in the field (Enter inserts a newline); **Done** commits and **Cancel** abandons. Tab and Escape are unbound.
 
@@ -27,11 +27,12 @@ On a text node, Up/Down move prev/next, Right enters, and Left goes back. On an 
 
 ```text
 src/core/       client shell (navigator, display, keyboard, …)
-src/app-kit/    optional helpers apps import
+src/app-kit/    optional graph helpers apps import
+src/node-kit/   shared Node: sqlite, serveApp, signed ctx
+src/host/       HTTP broker, CSRF, identity, lockbox, OAuth, app_catalog
 src/apps/       Home, Recents, Tutorial, Bible, Notes, Lists, Weather, Gmail, Account (`main.ts` per app)
 src/shell/      browser bootstrap — remote stubs only
 ios/            Swift client (Navigator + URLSession; build on a Mac; see ios/README.md)
-server/         HTTP broker, CSRF, identity, lockbox, OAuth, app_catalog
 tests/          Vitest, node environment; `fixtures/navigator/` is shared with `swift test`
 ```
 

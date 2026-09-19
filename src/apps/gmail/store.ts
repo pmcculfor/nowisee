@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite, type Db } from "../../../server/sqlite.ts";
+import { openSqlite, type Db } from "../../node-kit/sqlite.ts";
 import type { ComposeDraft, GmailStore, InboxMessage, SendResult } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");

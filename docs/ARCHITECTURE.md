@@ -14,7 +14,7 @@ This file covers contracts, packaging, and the stack. Product locks are in [`SPE
 | App host | TypeScript on Node, small `/api` router (no Express) | Same language and `RefreshResult` types as the apps |
 | Where apps run | Own Node process per app; host POSTs signed ctx to the catalog locator | Isolation; first-party and third-party share one HTTP contract |
 | Client apps | Generic `createRemoteApp` stub, minted by app id | Not a phone book of first-party apps |
-| Database | SQLite via `node:sqlite` (`server/sqlite.ts`) | Host identity in `data/nowisee.db`; each app opens `data/apps/*.db`. `:memory:` in tests |
+| Database | SQLite via `node:sqlite` (`src/node-kit/sqlite.ts`) | Host identity in `/var/lib/nowisee/host/nowisee.db`; each app opens `/var/lib/nowisee/<id>/<id>.db`. `:memory:` in tests |
 | URL style | Pathnames behind `AppLocation` | Hash routes were an MVP; a locale segment or sub-path mount still touches Router only |
 | Copy | `clipboardText` on the result; Navigator writes | Apps must not think they own the clipboard |
 | Identity | Host-layer service + Account app | See [`IDENTITY.md`](IDENTITY.md) |
@@ -23,21 +23,18 @@ This file covers contracts, packaging, and the stack. Product locks are in [`SPE
 
 ```text
 src/core/         shell (navigator, display, …)
-src/app-kit/      optional helpers apps import
-src/apps/         AppModules (graphs, stores, `main.ts` process entry)
-src/apps/serve.ts   shared `/open` `/refresh` `/health` HTTP for every app
-src/apps/remote.ts  client RPC stub
-src/shell/        lazy generic stub by app id, mounts display, wires keyboard
+src/app-kit/      optional graph helpers apps import
+src/node-kit/     shared Node: sqlite, listenHttp, serveApp, signed ctx, cap client
+src/host/         HTTP broker, identity, lockbox, OAuth, app_catalog (`index.ts` entry)
+src/apps/<id>/    one AppModule (graph, store, `main.ts`); never imports host or peers
+src/shell/        bootstrap, client RPC stub
 ios/              Swift iPhone client (same open/refresh HTTP; not a WebView)
                   Package.swift runs Foundation Navigator fixtures (`swift test`)
-server/           HTTP broker, host identity SQLite, identity service, app_catalog
-server/sqlite.ts  shared openSqlite helper (apps import this; not ctx.db)
-server/index.ts   production host entry (SPA + /api; does not start apps)
 ```
 
 ### Running it
 
-`npm run build && npm start` has `server/index.ts` serve `dist/` and `/api` together. Vite `base` is `/`. Vite is the bundler and the test runner's config host; there is no Vite dev server.
+`npm run build && npm start` has `src/host/index.ts` serve `dist/` and `/api` together. Vite `base` is `/`. Vite is the bundler and the test runner's config host; there is no Vite dev server.
 
 **Nowisee runs only on a server.** There is no local-machine mode and no default that lets the host boot without configuration: `npm start` reads every value from the environment and throws on a missing one. Work against staging (https://dev.nowisee.app), not a laptop. Tests are the local feedback loop and need no environment at all.
 
@@ -131,8 +128,10 @@ This is a discipline, not a sandbox.
 | Path | Contents |
 |------|----------|
 | `src/core/` | Types, router, navigator, stack, navigation-map store, NodeCache, display, keyboard, registry, platform capabilities |
-| `src/app-kit/` | Optional helpers (edge builders, list edges, input edges, signed-out, split text) |
-| `src/apps/` | First-party `AppModule`s. Graph/docs next to each app |
+| `src/app-kit/` | Optional graph helpers (edge builders, list edges, input edges, signed-out, split text) |
+| `src/node-kit/` | Shared Node: `openSqlite`, listen/body, signed ctx, cap client, `serveApp` |
+| `src/host/` | Broker: CSRF, catalog, identity, lockbox, OAuth, capability port |
+| `src/apps/` | First-party `AppModule`s. Graph/docs next to each app. Import core, app-kit, node-kit only |
 | `src/shell/` | Bootstrap: config, lazy generic RPC stub, mount display, wire keyboard |
 
 **Smell test:** if a third-party app can work with only `open`/`refresh`, a helper belongs in app-kit or the app — not in core. If every session would break unless Navigator runs it, it belongs in core.

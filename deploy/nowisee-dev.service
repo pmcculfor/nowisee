@@ -5,11 +5,11 @@ PartOf=nowisee-dev.target
 
 [Service]
 Type=simple
-User=nowisee-host
-Group=nowisee
+User=nowisee-dev-host
+Group=nowisee-dev
 WorkingDirectory=/var/www/nowisee-dev
-EnvironmentFile=/etc/nowisee/nowisee-dev.env
-ExecStart=/usr/bin/node --experimental-strip-types server/index.ts
+EnvironmentFile=/etc/nowisee-dev/host/nowisee.env
+ExecStart=/usr/bin/node --experimental-strip-types src/host/index.ts
 Restart=on-failure
 RestartSec=5
 

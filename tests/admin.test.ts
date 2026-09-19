@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { clientIpFromRequest } from "../server/clientIp.ts";
-import { SESSION_COOKIE_NAME } from "../server/cookie.ts";
-import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
-import { parseAdminEmails } from "../server/admin/emails.ts";
-import { handleAdminHttp } from "../server/admin/http.ts";
-import { hourBucket } from "../server/usage.ts";
+import { clientIpFromRequest } from "../src/host/clientIp.ts";
+import { SESSION_COOKIE_NAME } from "../src/host/cookie.ts";
+import { createNowiseeHost, type NowiseeHost } from "../src/host/host.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
+import { parseAdminEmails } from "../src/host/admin/emails.ts";
+import { handleAdminHttp } from "../src/host/admin/http.ts";
+import { hourBucket } from "../src/host/usage.ts";
 import { capturingMailer, signInForTest, type CapturingMailer } from "./helpers/signIn.ts";
 import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
 

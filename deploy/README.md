@@ -1,13 +1,15 @@
 # Production host (DigitalOcean)
 
-The droplet `nowisee-prod-00` runs a **host** plus **one process per app**. Caddy terminates TLS and proxies only the host public port. systemd runs Node; secrets live under `/etc/nowisee/`, not in git.
+The droplet `nowisee-prod-00` runs a **host** plus **one process per app**. Caddy terminates TLS and proxies only the host public port. systemd runs Node; secrets live under `/etc/nowisee/` (prod) and `/etc/nowisee-dev/` (staging), not in git. SQLite lives under `/var/lib/nowisee/` and `/var/lib/nowisee-dev/` — one `700` directory per process.
 
 | Origin | Checkout | Target | Host env | Host port | Cap port |
 |--------|----------|--------|----------|-----------|----------|
-| https://nowisee.app | `/var/www/nowisee` | [`nowisee.target`](nowisee.target) | `/etc/nowisee/nowisee.env` from [`.env.production.example`](../.env.production.example) | `127.0.0.1:3000` | `127.0.0.1:3020` |
-| https://dev.nowisee.app | `/var/www/nowisee-dev` | [`nowisee-dev.target`](nowisee-dev.target) | `/etc/nowisee/nowisee-dev.env` from [`.env.staging.example`](../.env.staging.example) | `127.0.0.1:3001` | `127.0.0.1:3021` |
+| https://nowisee.app | `/var/www/nowisee` | [`nowisee.target`](nowisee.target) | `/etc/nowisee/host/nowisee.env` from [`.env.production.example`](../.env.production.example) | `127.0.0.1:3000` | `127.0.0.1:3020` |
+| https://dev.nowisee.app | `/var/www/nowisee-dev` | [`nowisee-dev.target`](nowisee-dev.target) | `/etc/nowisee-dev/host/nowisee.env` from [`.env.staging.example`](../.env.staging.example) | `127.0.0.1:3001` | `127.0.0.1:3021` |
 
-Users: `nowisee-host` runs the broker; `nowisee-notes`, `nowisee-gmail`, … run apps (`User=nowisee-%i` in [`nowisee-app@.service`](nowisee-app@.service)). A shared `nowisee` group can read the git tree. App SQLite files are `data/apps/*.db` under that process’s working directory — `600` the app user. Host `data/nowisee.db` is `600` `nowisee-host`. Do not share `data/`, `NOWISEE_DB`, `NOWISEE_LOCKBOX_KEY`, `NOWISEE_HOST_SIGNING_KEY`, or `NOWISEE_OTP_PEPPER` across prod and staging. App env files (`/etc/nowisee/apps/<id>.env`, template [`app.env.example`](app.env.example)) get the **public** signing key and capability URL, never the lockbox or OTP secrets.
+Prod users: `nowisee-host`, `nowisee-notes`, … (`User=nowisee-%i`). Group `nowisee` reads the prod git tree. Staging users: `nowisee-dev-host`, `nowisee-dev-notes`, … Group `nowisee-dev` reads the staging tree. A staging UID cannot open a prod `700` data dir.
+
+Do not share `/var/lib/nowisee/`, `NOWISEE_DB`, `NOWISEE_LOCKBOX_KEY`, `NOWISEE_HOST_SIGNING_KEY`, or `NOWISEE_OTP_PEPPER` across prod and staging. App env files (template [`app.env.example`](app.env.example)) get the **public** signing key and capability URL, never lockbox, OTP, or OAuth client secrets.
 
 App listen ports (loopback, not in Caddy): prod `3110`–`3118`, staging `3210`–`3218` (Home, Recents, Tutorial, Bible, Notes, Lists, Weather, Gmail, Account). Staging `app_catalog.locator` rows must match those ports — after first migrate, `UPDATE app_catalog SET locator = 'http://127.0.0.1:' \|\| (3210 + sort_order)`.
 
@@ -24,7 +26,7 @@ sudo systemctl restart nowisee.target
 
 Restart `nowisee.target` for a repo-wide pull (especially wire/signing/capability APIs). Restart a single `nowisee-app@notes` only for a Notes-only change on an unchanged contract.
 
-Leave `data/` alone. Do not run `npm audit fix` on the droplet; fix advisories in git and pull.
+Leave `/var/lib/nowisee/` alone. Do not run `npm audit fix` on the droplet; fix advisories in git and pull.
 
 `npm ci` / `npm run build` need Vite. Do not export `NODE_ENV=production` in that shell — the unit sets it for the running process only. A staging build on this droplet can spike CPU; prefer a quiet moment.
 
@@ -42,11 +44,11 @@ You want `active` and `200`.
 Staging tracks whatever branch you check out in `/var/www/nowisee-dev`. Schema changes there migrate **staging** files only.
 
 ```bash
-sudo -u nowisee-host -H bash -lc 'cd /var/www/nowisee-dev && git fetch && git checkout <branch> && git pull && npm ci && npm run build'
+sudo -u nowisee-dev-host -H bash -lc 'cd /var/www/nowisee-dev && git fetch && git checkout <branch> && git pull && npm ci && npm run build'
 sudo systemctl restart nowisee-dev.target
 ```
 
-Leave `/var/www/nowisee-dev/data/` alone. Confirm:
+Leave `/var/lib/nowisee-dev/` alone. Confirm:
 
 ```bash
 systemctl status nowisee-dev.target --no-pager
@@ -55,13 +57,13 @@ curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/
 
 ## Env or unit changes
 
-Node does not read `.env` files. Edit `/etc/nowisee/nowisee.env` or `/etc/nowisee/nowisee-dev.env` (mode `640`, `root:nowisee`). Quote values with spaces:
+Node does not read `.env` files. Edit `/etc/nowisee/host/nowisee.env` or `/etc/nowisee-dev/host/nowisee.env` (mode `640`, `root:nowisee-host` / `root:nowisee-dev-host`). Quote values with spaces:
 
 ```bash
 NOWISEE_MAIL_FROM="Now I See <login@nowisee.app>"
 ```
 
-Do not `source` those files — unquoted `<…>` is shell redirection. Then restart `nowisee.target` or `nowisee-dev.target`. App-only env: `/etc/nowisee/apps/<id>.env` (mode `640`, `root:nowisee-<id>`).
+Do not `source` those files — unquoted `<…>` is shell redirection. Then restart `nowisee.target` or `nowisee-dev.target`. App env: `/etc/nowisee/<id>/<id>.env` (mode `640`, `root:nowisee-<id>`).
 
 If a unit file changed in git:
 
@@ -81,7 +83,7 @@ Copy each unit from **that** instance’s tree so a half-deployed branch cannot 
 
 ## First install
 
-Node 22, git, Caddy, ports 22/80/443 only (not 3000, 3001, capability, or app loopback). Domain A/AAAA `@` → droplet. Shared group plus one user per process:
+Node 22, git, Caddy, ports 22/80/443 only (not 3000, 3001, capability, or app loopback). Domain A/AAAA `@` → droplet.
 
 ```bash
 sudo addgroup --system nowisee
@@ -94,25 +96,33 @@ sudo chown nowisee-host:nowisee /var/www/nowisee
 sudo -u nowisee-host -H git clone https://github.com/pmcculfor/nowisee.git /var/www/nowisee
 sudo chmod -R g+rX /var/www/nowisee
 sudo -u nowisee-host -H bash -lc 'cd /var/www/nowisee && npm ci && npm run build'
-sudo mkdir -p /var/www/nowisee/data/apps
-sudo chown nowisee-host:nowisee /var/www/nowisee/data
-sudo chmod 750 /var/www/nowisee/data
-sudo chmod 1770 /var/www/nowisee/data/apps
-```
 
-```bash
-sudo mkdir -p /etc/nowisee/apps
-sudo cp /var/www/nowisee/.env.production.example /etc/nowisee/nowisee.env
-sudo chown root:nowisee /etc/nowisee /etc/nowisee/nowisee.env
-sudo chmod 750 /etc/nowisee
-sudo chmod 640 /etc/nowisee/nowisee.env
-# fill host secrets, including NOWISEE_HOST_SIGNING_KEY and NOWISEE_CAPABILITY_LISTEN
+sudo mkdir -p /var/lib/nowisee/host
+sudo chown nowisee-host:nowisee-host /var/lib/nowisee/host
+sudo chmod 700 /var/lib/nowisee/host
 for id in home recents tutorial bible notes lists weather gmail account; do
-  sudo cp /var/www/nowisee/deploy/app.env.example "/etc/nowisee/apps/${id}.env"
-  sudo chown "root:nowisee-${id}" "/etc/nowisee/apps/${id}.env"
-  sudo chmod 640 "/etc/nowisee/apps/${id}.env"
+  sudo mkdir -p "/var/lib/nowisee/${id}"
+  sudo chown "nowisee-${id}:nowisee-${id}" "/var/lib/nowisee/${id}"
+  sudo chmod 700 "/var/lib/nowisee/${id}"
 done
-# fill each app env: NOWISEE_LISTEN (3110–3118), NOWISEE_APP_DB, public signing key, capability URL
+
+sudo mkdir -p /etc/nowisee/host
+sudo cp /var/www/nowisee/.env.production.example /etc/nowisee/host/nowisee.env
+sudo chown root:nowisee-host /etc/nowisee/host /etc/nowisee/host/nowisee.env
+sudo chmod 750 /etc/nowisee/host
+sudo chmod 640 /etc/nowisee/host/nowisee.env
+# fill host secrets, including NOWISEE_HOST_SIGNING_KEY and NOWISEE_CAPABILITY_LISTEN
+i=0
+for id in home recents tutorial bible notes lists weather gmail account; do
+  port=$((3110 + i))
+  sudo mkdir -p "/etc/nowisee/${id}"
+  sudo cp /var/www/nowisee/deploy/app.env.example "/etc/nowisee/${id}/${id}.env"
+  sudo chown "root:nowisee-${id}" "/etc/nowisee/${id}" "/etc/nowisee/${id}/${id}.env"
+  sudo chmod 750 "/etc/nowisee/${id}"
+  sudo chmod 640 "/etc/nowisee/${id}/${id}.env"
+  # set NOWISEE_LISTEN=127.0.0.1:${port}, NOWISEE_APP_DB=/var/lib/nowisee/${id}/${id}.db, public key, cap URL
+  i=$((i + 1))
+done
 sudo cp /var/www/nowisee/deploy/nowisee.service /etc/systemd/system/nowisee.service
 sudo cp /var/www/nowisee/deploy/nowisee-app@.service /etc/systemd/system/nowisee-app@.service
 sudo cp /var/www/nowisee/deploy/nowisee.target /etc/systemd/system/nowisee.target
@@ -138,52 +148,65 @@ dev.nowisee.app {
 sudo systemctl reload caddy
 ```
 
-OAuth redirect is `{NOWISEE_ORIGIN}/oauth/callback`. Leave `NOWISEE_TLS_*` unset; Caddy owns HTTPS. Back up each tree’s `data/` (identity, app SQLite) separately from the git tree. Staging `data/` is disposable; production `data/` is not.
+OAuth redirect is `{NOWISEE_ORIGIN}/oauth/callback`. Leave `NOWISEE_TLS_*` unset; Caddy owns HTTPS. Back up `/var/lib/nowisee/` (identity, app SQLite) separately from the git tree. Staging `/var/lib/nowisee-dev/` is disposable; production `/var/lib/nowisee/` is not.
 
 ## Staging instance
 
-Same droplet, second origin. Do not copy production env or `data/`.
+Same droplet, second origin. Do not copy production env or `/var/lib/nowisee/`.
 
 DNS: A (and AAAA if the apex has IPv6) with host **`dev`**, not `dev.nowisee.app`, same IP as `@`. Wait until it resolves before reloading Caddy.
 
 ```bash
+sudo addgroup --system nowisee-dev
+sudo adduser --system --ingroup nowisee-dev --home /var/www/nowisee-dev nowisee-dev-host
+for id in home recents tutorial bible notes lists weather gmail account; do
+  sudo adduser --system --ingroup nowisee-dev --no-create-home "nowisee-dev-$id"
+done
 sudo mkdir -p /var/www/nowisee-dev
-sudo chown nowisee-host:nowisee /var/www/nowisee-dev
-sudo -u nowisee-host -H git clone https://github.com/pmcculfor/nowisee.git /var/www/nowisee-dev
+sudo chown nowisee-dev-host:nowisee-dev /var/www/nowisee-dev
+sudo -u nowisee-dev-host -H git clone https://github.com/pmcculfor/nowisee.git /var/www/nowisee-dev
 sudo chmod -R g+rX /var/www/nowisee-dev
-sudo -u nowisee-host -H bash -lc 'cd /var/www/nowisee-dev && git checkout <branch> && npm ci && npm run build'
-sudo mkdir -p /var/www/nowisee-dev/data/apps
-sudo chown nowisee-host:nowisee /var/www/nowisee-dev/data
-sudo chmod 750 /var/www/nowisee-dev/data
-sudo chmod 1770 /var/www/nowisee-dev/data/apps
+sudo -u nowisee-dev-host -H bash -lc 'cd /var/www/nowisee-dev && git checkout <branch> && npm ci && npm run build'
+
+sudo mkdir -p /var/lib/nowisee-dev/host
+sudo chown nowisee-dev-host:nowisee-dev-host /var/lib/nowisee-dev/host
+sudo chmod 700 /var/lib/nowisee-dev/host
+for id in home recents tutorial bible notes lists weather gmail account; do
+  sudo mkdir -p "/var/lib/nowisee-dev/${id}"
+  sudo chown "nowisee-dev-${id}:nowisee-dev-${id}" "/var/lib/nowisee-dev/${id}"
+  sudo chmod 700 "/var/lib/nowisee-dev/${id}"
+done
 ```
 
-First boot seeds `data/apps/bible.db` from the committed corpus. That is CPU- and disk-heavy; do it when prod can take a spike.
+First boot seeds `/var/lib/nowisee-dev/bible/bible.db` from the committed corpus. That is CPU- and disk-heavy; do it when prod can take a spike.
 
 ```bash
-sudo mkdir -p /etc/nowisee/apps-dev
-sudo cp /var/www/nowisee-dev/.env.staging.example /etc/nowisee/nowisee-dev.env
-sudo chown root:nowisee /etc/nowisee/nowisee-dev.env
-sudo chmod 640 /etc/nowisee/nowisee-dev.env
+sudo mkdir -p /etc/nowisee-dev/host
+sudo cp /var/www/nowisee-dev/.env.staging.example /etc/nowisee-dev/host/nowisee.env
+sudo chown root:nowisee-dev-host /etc/nowisee-dev/host /etc/nowisee-dev/host/nowisee.env
+sudo chmod 750 /etc/nowisee-dev/host
+sudo chmod 640 /etc/nowisee-dev/host/nowisee.env
 # fill secrets: new lockbox, signing, and OTP keys; PORT=3001; cap 3021; NOWISEE_ORIGIN=https://dev.nowisee.app
+i=0
 for id in home recents tutorial bible notes lists weather gmail account; do
-  sudo cp /var/www/nowisee-dev/deploy/app.env.example "/etc/nowisee/apps-dev/${id}.env"
-  sudo chown "root:nowisee-${id}" "/etc/nowisee/apps-dev/${id}.env"
-  sudo chmod 640 "/etc/nowisee/apps-dev/${id}.env"
+  port=$((3210 + i))
+  sudo mkdir -p "/etc/nowisee-dev/${id}"
+  sudo cp /var/www/nowisee-dev/deploy/app.env.example "/etc/nowisee-dev/${id}/${id}.env"
+  sudo chown "root:nowisee-dev-${id}" "/etc/nowisee-dev/${id}" "/etc/nowisee-dev/${id}/${id}.env"
+  sudo chmod 750 "/etc/nowisee-dev/${id}"
+  sudo chmod 640 "/etc/nowisee-dev/${id}/${id}.env"
+  # listen 127.0.0.1:${port}; NOWISEE_APP_DB=/var/lib/nowisee-dev/${id}/${id}.db; cap URL :3021
+  i=$((i + 1))
 done
-# listen ports 3210–3218; NOWISEE_APP_DB under /var/www/nowisee-dev/data/apps
 sudo cp /var/www/nowisee-dev/deploy/nowisee-dev.service /etc/systemd/system/nowisee-dev.service
 sudo cp /var/www/nowisee-dev/deploy/nowisee-dev-app@.service /etc/systemd/system/nowisee-dev-app@.service
 sudo cp /var/www/nowisee-dev/deploy/nowisee-dev.target /etc/systemd/system/nowisee-dev.target
 sudo systemctl daemon-reload
-sudo systemctl enable --now nowisee-dev.target
-```
-
-Seed locators are production `3110`–`3118`. After the staging host first-migrates, point rows at `3210`–`3218`:
-
-```bash
-sudo -u nowisee-host sqlite3 /var/www/nowisee-dev/data/nowisee.db \
+sudo systemctl disable nowisee-dev
+sudo systemctl start nowisee-dev.service
+sudo -u nowisee-dev-host sqlite3 /var/lib/nowisee-dev/host/nowisee.db \
   "UPDATE app_catalog SET locator = 'http://127.0.0.1:' || (3210 + sort_order);"
+sudo systemctl enable --now nowisee-dev.target
 ```
 
 Add the `dev.nowisee.app` site to the Caddyfile (do not change the prod block) and `sudo systemctl reload caddy`.

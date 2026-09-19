@@ -18,22 +18,22 @@ This layer does not include the client warm cache (tab-lifetime) or anything in 
 
 ## Who opens which file
 
-The host opens **only** the host database ([`server/db/`](../server/db/)) — identity, lockbox, OAuth state, login events, admin usage, and `app_catalog`. It does not import or start apps.
+The host opens **only** the host database ([`src/host/db/`](../src/host/db/)) — identity, lockbox, OAuth state, login events, admin usage, and `app_catalog`. It does not import or start apps.
 
-Each app opens **its** file. [`server/sqlite.ts`](../server/sqlite.ts) is a library (`openSqlite`) that turns on WAL, foreign keys, a busy timeout, and numbered migrations for *that* path. Third-party apps do not have to use it.
+Each app opens **its** file. [`src/node-kit/sqlite.ts`](../src/node-kit/sqlite.ts) is a library (`openSqlite`) that turns on WAL, foreign keys, a busy timeout, and numbered migrations for *that* path. Third-party apps do not have to use it.
 
 | Database | Default path | Migrations / detail |
 |----------|----------------|---------------------|
-| Host (identity, lockbox, OAuth state, login events, usage, app catalog) | `data/nowisee.db` | [`001_host.sql`](../server/db/migrations/001_host.sql), [`002_usage.sql`](../server/db/migrations/002_usage.sql), [`003_app_catalog.sql`](../server/db/migrations/003_app_catalog.sql) |
-| Home | `data/apps/home.db` | [`src/apps/home/db/migrations/`](../src/apps/home/db/migrations/). Per-user home list. Graph: [`src/apps/home/README.md`](../src/apps/home/README.md) |
-| Account | `data/apps/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
-| Bible | `data/apps/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
-| Notes | `data/apps/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/). Graph: [`src/apps/notes/README.md`](../src/apps/notes/README.md) |
-| Lists | `data/apps/lists.db` | [`src/apps/lists/db/migrations/`](../src/apps/lists/db/migrations/). Graph: [`src/apps/lists/README.md`](../src/apps/lists/README.md) |
-| Weather | `data/apps/weather.db` | [`src/apps/weather/db/migrations/`](../src/apps/weather/db/migrations/). Per-user ZIP only; forecasts are live. Graph: [`src/apps/weather/README.md`](../src/apps/weather/README.md) |
-| Gmail | `data/apps/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/). Tokens via `ctx.oauth` only. Graph: [`src/apps/gmail/README.md`](../src/apps/gmail/README.md) |
+| Host (identity, lockbox, OAuth state, login events, usage, app catalog) | `/var/lib/nowisee/host/nowisee.db` (`NOWISEE_DB`) | [`001_host.sql`](../src/host/db/migrations/001_host.sql), [`002_usage.sql`](../src/host/db/migrations/002_usage.sql), [`003_app_catalog.sql`](../src/host/db/migrations/003_app_catalog.sql) |
+| Home | `/var/lib/nowisee/home/home.db` | [`src/apps/home/db/migrations/`](../src/apps/home/db/migrations/). Per-user home list. Graph: [`src/apps/home/README.md`](../src/apps/home/README.md) |
+| Account | `/var/lib/nowisee/account/account.db` | [`src/apps/account/db/migrations/`](../src/apps/account/db/migrations/). Graph: [`src/apps/account/README.md`](../src/apps/account/README.md) |
+| Bible | `/var/lib/nowisee/bible/bible.db` | [`src/apps/bible/db/migrations/`](../src/apps/bible/db/migrations/). Corpus and graph: [`src/apps/bible/README.md`](../src/apps/bible/README.md); files: [`src/apps/bible/data/SOURCES.md`](../src/apps/bible/data/SOURCES.md). The host does not import corpus files or pass a seed. |
+| Notes | `/var/lib/nowisee/notes/notes.db` | [`src/apps/notes/db/migrations/`](../src/apps/notes/db/migrations/). Graph: [`src/apps/notes/README.md`](../src/apps/notes/README.md) |
+| Lists | `/var/lib/nowisee/lists/lists.db` | [`src/apps/lists/db/migrations/`](../src/apps/lists/db/migrations/). Graph: [`src/apps/lists/README.md`](../src/apps/lists/README.md) |
+| Weather | `/var/lib/nowisee/weather/weather.db` | [`src/apps/weather/db/migrations/`](../src/apps/weather/db/migrations/). Per-user ZIP only; forecasts are live. Graph: [`src/apps/weather/README.md`](../src/apps/weather/README.md) |
+| Gmail | `/var/lib/nowisee/gmail/gmail.db` | [`src/apps/gmail/db/migrations/`](../src/apps/gmail/db/migrations/). Tokens via `ctx.oauth` only. Graph: [`src/apps/gmail/README.md`](../src/apps/gmail/README.md) |
 
-Tests pass `:memory:` for each app file that the test needs. Host tests use [`startTestFleet`](../tests/helpers/fleet.ts), which starts app listeners on ephemeral ports and writes locators into `app_catalog`. `createNowiseeHost` defaults to `ephemeral: true` (test lockbox keyring and OTP pepper). Production (`server/index.ts`) passes `ephemeral: false` and does not start apps. The host never injects a database into an app; each app process reads `NOWISEE_APP_DB`.
+Tests pass `:memory:` for each app file that the test needs. Host tests use [`startTestFleet`](../tests/helpers/fleet.ts), which starts app listeners on ephemeral ports and writes locators into `app_catalog`. `createNowiseeHost` defaults to `ephemeral: true` (test lockbox keyring and OTP pepper). Production (`src/host/index.ts`) passes `ephemeral: false` and does not start apps. The host never injects a database into an app; each app process reads `NOWISEE_APP_DB`.
 
 `ctx` carries `userId`, `sessionId`, `accountAppId`, and granted capabilities (`identity`, `lockbox`, `oauth`, `directory`). It never carries a database.
 
@@ -58,7 +58,7 @@ Bytes do not travel through `open` / `refresh` (JSON, 1 MiB cap). When attach ex
 ## Transfer
 
 1. An app talks to its own store.
-2. A host engine swap is [`server/db/index.ts`](../server/db/index.ts) for the host file (identity, lockbox, OAuth state, login events, usage).
+2. A host engine swap is [`src/host/db/index.ts`](../src/host/db/index.ts) for the host file (identity, lockbox, OAuth state, login events, usage).
 3. Account export and deletion are still deferred ([`IDENTITY.md`](IDENTITY.md) §13).
 4. There is no app-to-app `SELECT`.
 

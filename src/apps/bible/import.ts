@@ -32,7 +32,7 @@ import type {
   BibleSeedVerse,
   BibleSeedXrefPhrase,
 } from "./types.ts";
-import type { Db } from "../../../server/sqlite.ts";
+import type { Db } from "../../node-kit/sqlite.ts";
 
 const DEFAULT_RAW_DIR = join(dirname(fileURLToPath(import.meta.url)), "data", "raw");
 

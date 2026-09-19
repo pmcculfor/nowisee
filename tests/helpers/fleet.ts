@@ -1,11 +1,11 @@
-import { setLocator, upsertApp } from "../../server/catalog.ts";
+import { setLocator, upsertApp } from "../../src/host/catalog.ts";
 import {
   createNowiseeHost,
   hostRpc,
   type AppHostOptions,
   type NowiseeHost,
-} from "../../server/host.ts";
-import type { OAuthProviderConfig } from "../../server/oauth/providers.ts";
+} from "../../src/host/host.ts";
+import type { OAuthProviderConfig } from "../../src/host/oauth/providers.ts";
 import { startAccountApp } from "../../src/apps/account/index.ts";
 import { startBibleApp } from "../../src/apps/bible/index.ts";
 import { startGmailApp } from "../../src/apps/gmail/index.ts";
@@ -13,10 +13,10 @@ import { startHomeApp } from "../../src/apps/home/index.ts";
 import { startListsApp } from "../../src/apps/lists/index.ts";
 import { startNotesApp } from "../../src/apps/notes/index.ts";
 import { createRecentsApp } from "../../src/apps/recents/index.ts";
-import { serveApp, type ServingApp } from "../../src/apps/serve.ts";
+import { serveApp, type ServingApp } from "../../src/node-kit/serve.ts";
 import { createTutorialApp } from "../../src/apps/tutorial/index.ts";
 import { startWeatherApp } from "../../src/apps/weather/index.ts";
-import type { AppRpc } from "../../src/apps/rpc.ts";
+import type { AppRpc } from "../../src/shell/rpc.ts";
 import type { AppModule } from "../../src/core/types.ts";
 
 export const FIRST_PARTY_APP_IDS = [

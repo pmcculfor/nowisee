@@ -1,5 +1,5 @@
-import { createRemoteApp } from "../apps/remote.ts";
-import { createFetchRpc, type AppRpc } from "../apps/rpc.ts";
+import { createRemoteApp } from "./remote.ts";
+import { createFetchRpc, type AppRpc } from "./rpc.ts";
 import { Display } from "../core/display.ts";
 import { defaultKeyBindings, Keyboard } from "../core/keyboard.ts";
 import { NavPads } from "../core/navPads.ts";

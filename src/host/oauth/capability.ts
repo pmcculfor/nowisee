@@ -1,4 +1,4 @@
-import type { OAuthCapability } from "../../src/core/types.ts";
+import type { OAuthCapability } from "../../core/types.ts";
 import type { OAuthBroker } from "./broker.ts";
 
 export function bindOAuth(

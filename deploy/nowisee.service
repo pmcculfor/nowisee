@@ -8,8 +8,8 @@ Type=simple
 User=nowisee-host
 Group=nowisee
 WorkingDirectory=/var/www/nowisee
-EnvironmentFile=/etc/nowisee/nowisee.env
-ExecStart=/usr/bin/node --experimental-strip-types server/index.ts
+EnvironmentFile=/etc/nowisee/host/nowisee.env
+ExecStart=/usr/bin/node --experimental-strip-types src/host/index.ts
 Restart=on-failure
 RestartSec=5
 

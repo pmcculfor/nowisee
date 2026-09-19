@@ -1,7 +1,7 @@
-import { SESSION_COOKIE_NAME } from "../../server/cookie.ts";
-import type { NowiseeHost } from "../../server/host.ts";
-import { extractSignInCodeFromEmailText } from "../../server/identity/code.ts";
-import type { Mailer, MailMessage } from "../../server/mail/types.ts";
+import { SESSION_COOKIE_NAME } from "../../src/host/cookie.ts";
+import type { NowiseeHost } from "../../src/host/host.ts";
+import { extractSignInCodeFromEmailText } from "../../src/host/identity/code.ts";
+import type { Mailer, MailMessage } from "../../src/host/mail/types.ts";
 
 export const TEST_OTP_PEPPER = new Uint8Array(32).fill(3);
 

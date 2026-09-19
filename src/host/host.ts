@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { request as httpRequest } from "node:http";
-import type { AppRpc, WireExtras } from "../src/apps/rpc.ts";
+import type { AppRpc, RefreshExtras, RefreshResult, WireExtras } from "../core/types.ts";
 import {
   descriptorsToWire,
   generateHostSigningKeyPair,
@@ -9,7 +9,7 @@ import {
   WIRE_API_VERSION,
   WIRE_CTX_TTL_MS,
   type UnsignedWireCtx,
-} from "../src/apps/wireCtx.ts";
+} from "../node-kit/wireCtx.ts";
 import { getApp, listDirectory } from "./catalog.ts";
 import type { CapabilityTicket } from "./capabilities/http.ts";
 import { startCapabilityServer } from "./capabilities/http.ts";
@@ -18,7 +18,7 @@ import { openDatabase } from "./db/index.ts";
 import { AppNotFoundError } from "./errors.ts";
 import type { CookieSlot } from "./identity/context.ts";
 import { createIdentityService, type IdentityService } from "./identity/service.ts";
-import { parseListenAddress } from "./listenHttp.ts";
+import { parseListenAddress } from "../node-kit/listenHttp.ts";
 import { lockboxKeyringFromEnv, type LockboxKeyring } from "./lockbox/crypto.ts";
 import {
   createSilentMailer,
@@ -30,7 +30,6 @@ import { createLockboxService, type LockboxService } from "./lockbox/service.ts"
 import { createOAuthBroker, type OAuthBroker } from "./oauth/broker.ts";
 import { envOAuthSecrets, type OAuthSecrets } from "./oauth/secrets.ts";
 import { recordUsage, usageKind } from "./usage.ts";
-import type { RefreshExtras, RefreshResult } from "../src/core/types.ts";
 
 /** Fixed pepper for ephemeral (test) hosts, which never send real mail. */
 const EPHEMERAL_OTP_PEPPER = new Uint8Array(32).fill(1);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { openDatabase } from "../server/db/index.ts";
-import { handleSessionHttp } from "../server/http.ts";
+import { openDatabase } from "../src/host/db/index.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
 import type { AppModule, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, signInForTest } from "./helpers/signIn.ts";
 import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";

@@ -38,7 +38,7 @@ import { handleSessionHttp, isAppApiUrl } from "./http.ts";
 import { handleOAuthHttp, isOAuthUrl } from "./oauth/http.ts";
 import { handleAdminHttp, isAdminUrl } from "./admin/http.ts";
 import { adminEmailsFromEnv } from "./admin/emails.ts";
-import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "./readBody.ts";
+import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "../node-kit/readBody.ts";
 import { appleAppSiteAssociation, appleTeamId, pageFile, siteTarget } from "./site.ts";
 
 const DIST = resolve(process.cwd(), "dist");

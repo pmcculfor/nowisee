@@ -6,11 +6,11 @@ import type { IdentityService } from "../identity/service.ts";
 import { bindLockbox } from "../lockbox/capability.ts";
 import { LockboxError } from "../lockbox/errors.ts";
 import type { LockboxService } from "../lockbox/service.ts";
-import { listenHttp, type ListeningServer } from "../listenHttp.ts";
+import { listenHttp, type ListeningServer } from "../../node-kit/listenHttp.ts";
 import { bindOAuth } from "../oauth/capability.ts";
 import { OAuthError } from "../oauth/errors.ts";
 import type { OAuthBroker } from "../oauth/broker.ts";
-import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "../readBody.ts";
+import { BodyTooLargeError, MalformedJsonError, readJsonBody } from "../../node-kit/readBody.ts";
 
 export type CapabilityTicket = {
   readonly appId: string;

@@ -1,4 +1,4 @@
-import type { LockboxCapability } from "../../src/core/types.ts";
+import type { LockboxCapability } from "../../core/types.ts";
 import { LockboxError } from "./errors.ts";
 import type { LockboxService } from "./service.ts";
 

@@ -1,6 +1,6 @@
 # Account (`id: "account"`)
 
-Account is an ordinary `AppModule`. Credentials and sessions are **not** here — they live in `server/identity/`. This app receives `ctx.identity` only because the host grants that capability to this app id. Flow email is stored against `sessionId` in `account_flow`, never in a node id, label, or URL.
+Account is an ordinary `AppModule`. Credentials and sessions are **not** here — they live in `src/host/identity/`. This app receives `ctx.identity` only because the host grants that capability to this app id. Flow email is stored against `sessionId` in `account_flow`, never in a node id, label, or URL.
 
 Code: [`index.ts`](index.ts), [`view.ts`](view.ts), [`store.ts`](store.ts). Identity contract: [`docs/IDENTITY.md`](../../../docs/IDENTITY.md). Tests: [`tests/account.test.ts`](../../../tests/account.test.ts).
 

@@ -1,4 +1,4 @@
-import type { OAuthConnectionStatus } from "../../src/core/types.ts";
+import type { OAuthConnectionStatus } from "../../core/types.ts";
 import type { Db } from "../db/index.ts";
 import type { LockboxKeyring } from "../lockbox/crypto.ts";
 import { assertSlot, LockboxError } from "../lockbox/errors.ts";

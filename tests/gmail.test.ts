@@ -15,7 +15,7 @@ import {
   type GmailClient,
   type InboxMessage,
 } from "../src/apps/gmail/types.ts";
-import { OAuthError } from "../server/oauth/errors.ts";
+import { OAuthError } from "../src/host/oauth/errors.ts";
 import type { AppServerContext, OAuthCapability, OAuthConnectionStatus } from "../src/core/types.ts";
 import { refreshApp } from "./helpers/refreshCall.ts";
 

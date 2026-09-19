@@ -22,19 +22,11 @@
   },
   "include": ["src"],
   "exclude": [
-    "src/apps/serve.ts",
-    "src/apps/wireCtx.ts",
-    "src/apps/capClient.ts",
-    "src/apps/appEnv.ts",
+    "src/host",
+    "src/node-kit",
     "src/apps/**/main.ts",
     "src/apps/**/store.ts",
     "src/apps/bible/import.ts",
-    "src/apps/account/store.ts",
-    "src/apps/home/store.ts",
-    "src/apps/notes/store.ts",
-    "src/apps/lists/store.ts",
-    "src/apps/gmail/store.ts",
-    "src/apps/gmail/oauth.ts",
     "src/apps/gmail/gmailClient.ts",
     "src/apps/gmail/mime.ts",
     "src/apps/gmail/index.ts",
@@ -43,8 +35,6 @@
     "src/apps/account/index.ts",
     "src/apps/home/index.ts",
     "src/apps/weather/index.ts",
-    "src/apps/bible/index.ts",
-    "src/apps/weather/store.ts",
-    "src/apps/weather/nwsClient.ts"
+    "src/apps/bible/index.ts"
   ]
 }

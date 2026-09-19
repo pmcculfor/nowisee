@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { getApp, listDirectory } from "../server/catalog.ts";
-import { createNowiseeHost, type NowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
+import { getApp, listDirectory } from "../src/host/catalog.ts";
+import { createNowiseeHost, type NowiseeHost } from "../src/host/host.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
 import { getCanonBook } from "../src/apps/bible/catalog.ts";
 import { optionId } from "../src/apps/bible/ids.ts";
 import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";

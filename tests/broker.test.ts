@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { getApp, setEnabled, setGrant, setLocator, upsertApp } from "../server/catalog.ts";
-import { createNowiseeHost } from "../server/host.ts";
-import { handleSessionHttp } from "../server/http.ts";
-import { generateHostSigningKeyPair } from "../src/apps/wireCtx.ts";
+import { getApp, setEnabled, setGrant, setLocator, upsertApp } from "../src/host/catalog.ts";
+import { createNowiseeHost } from "../src/host/host.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
+import { generateHostSigningKeyPair } from "../src/node-kit/wireCtx.ts";
 import type { AppModule, RefreshResult } from "../src/core/types.ts";
 import { capturingMailer, signInForTest } from "./helpers/signIn.ts";
 import { startTestFleet, type TestFleet } from "./helpers/fleet.ts";
@@ -146,7 +146,7 @@ describe("sandboxed broker", () => {
   it("wrong signing public key is treated as not responding", async () => {
     const host = await createNowiseeHost({ configuredOrigin: ORIGIN });
     const other = generateHostSigningKeyPair();
-    const serving = await (await import("../src/apps/serve.ts")).serveApp(probe("probe"), {
+    const serving = await (await import("../src/node-kit/serve.ts")).serveApp(probe("probe"), {
       listen: "ephemeral",
       hostSigningPub: other.publicKey,
       capabilityUrl: host.capabilityOrigin,
@@ -172,7 +172,7 @@ describe("sandboxed broker", () => {
   });
 
   it("host source does not import app graphs or store openers", () => {
-    const host = readFileSync(new URL("../server/host.ts", import.meta.url), "utf8");
+    const host = readFileSync(new URL("../src/host/host.ts", import.meta.url), "utf8");
     expect(host).not.toMatch(/src\/apps\/\w+\/(main|store|index)/);
     expect(host).not.toContain("firstPartyApps");
   });

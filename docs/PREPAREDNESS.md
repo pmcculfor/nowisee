@@ -28,7 +28,7 @@ Production is a Node host that serves the site and `/api` together (`npm start`)
 |--------|----------------|----------------------|
 | More first-party apps | A folder, `main.ts`, an `app_catalog` row (`home_role` as needed), and a systemd instance. Home lists `ctx.directory` using `homeRole` plus its store. | No product names in core. The host does not open that app’s database or import its graph. |
 | Larger corpora | They stay on the server; the app seeds its own file. The client bundle stays a shell. | No corpus in `src/core/` or in the browser graph. |
-| Hosted identity at volume | The identity service could swap SQLite for another engine behind `server/db`. | Apps still see `ctx.userId`, never `ctx.db`. |
+| Hosted identity at volume | The identity service could swap SQLite for another engine behind `src/host/db`. | Apps still see `ctx.userId`, never `ctx.db`. |
 | Native client (iPhone) | Swift Navigator + URLSession RPC + native text/input. Same `open` / `refresh` JSON. Cookie jar plus `Origin` header. OAuth uses `ASWebAuthenticationSession`. | Do not port apps to Swift. Do not teach apps about swipes. Do not build a second login path. |
 | Live updates | Implement reserved `platform.requestRefresh()` as a read-only refresh of the current tip. The label updates in place; there is no teleport. | Apps must not `setInterval` or touch the DOM to fake push. |
 | Third-party apps | Same HTTP `open` / `refresh` as first-party. Catalog locator (loopback this slice). Then validate at Navigator `apply()`, cap warm/map size, and remote locators. | Do not hand apps the DOM, the registry, or live objects. Do not grow core branches per outsider feature. |

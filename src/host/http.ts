@@ -1,4 +1,4 @@
-import type { WireExtras } from "../src/apps/rpc.ts";
+import type { WireExtras } from "../core/types.ts";
 import { readSessionToken, serializeSessionCookie } from "./cookie.ts";
 import { checkCsrf, expectedOriginFromRequest } from "./csrf.ts";
 import { AppNotFoundError } from "./errors.ts";

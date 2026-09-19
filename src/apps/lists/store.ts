@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite, type Db } from "../../../server/sqlite.ts";
+import { openSqlite, type Db } from "../../node-kit/sqlite.ts";
 import type { FirstActiveItem, ListItemRecord, ListRecord, ListsStore } from "./types.ts";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "db", "migrations");

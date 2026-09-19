@@ -1,11 +1,11 @@
 /**
  * Host identity database. Apps do not use this file — they open their own
- * SQLite via `openSqlite` in server/sqlite.ts.
+ * SQLite via `openSqlite` in src/node-kit/sqlite.ts.
  */
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openSqlite, type Db, type RunResult, type SqlValue } from "../sqlite.ts";
+import { openSqlite, type Db, type RunResult, type SqlValue } from "../../node-kit/sqlite.ts";
 
 export type { Db, RunResult, SqlValue };
 

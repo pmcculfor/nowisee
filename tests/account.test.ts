@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { handleSessionHttp } from "../server/http.ts";
+import { handleSessionHttp } from "../src/host/http.ts";
 import { NODE } from "../src/apps/account/ids.ts";
 import { TUTORIAL_APP_LABEL } from "../src/apps/tutorial/ids.ts";
 import type { AppModule, RefreshResult } from "../src/core/types.ts";
