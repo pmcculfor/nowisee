@@ -1,15 +1,35 @@
 # Production host (DigitalOcean)
 
-The droplet `nowisee-prod-00` runs a **host** plus **one process per app**. Caddy terminates TLS and proxies only the host public port. systemd runs Node; secrets live under `/etc/nowisee/` (prod) and `/etc/nowisee-dev/` (staging), not in git. SQLite lives under `/var/lib/nowisee/` and `/var/lib/nowisee-dev/` — one `700` directory per process.
+The droplet `nowisee-prod-00` runs a **host** plus **one process per app**. Caddy terminates TLS and proxies only the host public port. systemd runs Node.
 
 | Origin | Checkout | Target | Host env | Host port | Cap port |
 |--------|----------|--------|----------|-----------|----------|
 | https://nowisee.app | `/var/www/nowisee` | [`nowisee.target`](nowisee.target) | `/etc/nowisee/host/nowisee.env` from [`.env.production.example`](../.env.production.example) | `127.0.0.1:3000` | `127.0.0.1:3020` |
 | https://dev.nowisee.app | `/var/www/nowisee-dev` | [`nowisee-dev.target`](nowisee-dev.target) | `/etc/nowisee-dev/host/nowisee.env` from [`.env.staging.example`](../.env.staging.example) | `127.0.0.1:3001` | `127.0.0.1:3021` |
 
-Prod users: `nowisee-host`, `nowisee-notes`, … (`User=nowisee-%i`). Group `nowisee` reads the prod git tree. Staging users: `nowisee-dev-host`, `nowisee-dev-notes`, … Group `nowisee-dev` reads the staging tree. A staging UID cannot open a prod `700` data dir.
+## Layout
 
-Do not share `/var/lib/nowisee/`, `NOWISEE_DB`, `NOWISEE_LOCKBOX_KEY`, `NOWISEE_HOST_SIGNING_KEY`, or `NOWISEE_OTP_PEPPER` across prod and staging. App env files (template [`app.env.example`](app.env.example)) get the **public** signing key and capability URL, never lockbox, OTP, or OAuth client secrets.
+Three trees, one owner per process. Staging is the same shape with `nowisee-dev` users and the `-dev` prefixes.
+
+```text
+/var/www/nowisee/                    git checkout (group nowisee, readable)
+  src/host/index.ts                  host process  (User=nowisee-host)
+  src/node-kit/                      sqlite, listen, serveApp, signed ctx (host + every app)
+  src/apps/notes/main.ts             Notes process (User=nowisee-notes)
+  src/app-kit/  src/core/  src/shell/
+
+/etc/nowisee/host/nowisee.env        600 root:root            lockbox, OTP, signing private, Gmail client secret
+/etc/nowisee/notes/notes.env         600 root:root            listen, NOWISEE_APP_DB, public key, cap URL
+
+/var/lib/nowisee/host/nowisee.db     700 nowisee-host:nowisee
+/var/lib/nowisee/notes/notes.db      700 nowisee-notes:nowisee
+```
+
+`ExecStart` is `src/host/index.ts` for the broker and `src/apps/%i/main.ts` for each app ([`nowisee.service`](nowisee.service), [`nowisee-app@.service`](nowisee-app@.service)). Apps never receive lockbox, OTP, or OAuth client secrets. Gmail’s client id/secret stay in the **host** env.
+
+`adduser --ingroup nowisee` puts every prod process in group `nowisee` (there is no `nowisee-notes` group). Data dirs are `700`, so only the owning UID can open them. systemd reads `EnvironmentFile` as root, so env files are `600 root:root`.
+
+Do not share `/var/lib/nowisee/`, `NOWISEE_DB`, `NOWISEE_LOCKBOX_KEY`, `NOWISEE_HOST_SIGNING_KEY`, or `NOWISEE_OTP_PEPPER` across prod and staging.
 
 App listen ports (loopback, not in Caddy): prod `3110`–`3118`, staging `3210`–`3218` (Home, Recents, Tutorial, Bible, Notes, Lists, Weather, Gmail, Account). Staging `app_catalog.locator` rows must match those ports — after first migrate, `UPDATE app_catalog SET locator = 'http://127.0.0.1:' \|\| (3210 + sort_order)`.
 
@@ -57,13 +77,13 @@ curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/
 
 ## Env or unit changes
 
-Node does not read `.env` files. Edit `/etc/nowisee/host/nowisee.env` or `/etc/nowisee-dev/host/nowisee.env` (mode `640`, `root:nowisee-host` / `root:nowisee-dev-host`). Quote values with spaces:
+Node does not read `.env` files. Edit `/etc/nowisee/host/nowisee.env` or `/etc/nowisee-dev/host/nowisee.env` (mode `600`, `root:root`). Quote values with spaces:
 
 ```bash
 NOWISEE_MAIL_FROM="Now I See <login@nowisee.app>"
 ```
 
-Do not `source` those files — unquoted `<…>` is shell redirection. Then restart `nowisee.target` or `nowisee-dev.target`. App env: `/etc/nowisee/<id>/<id>.env` (mode `640`, `root:nowisee-<id>`).
+Do not `source` those files — unquoted `<…>` is shell redirection. Then restart `nowisee.target` or `nowisee-dev.target`. App env: `/etc/nowisee/<id>/<id>.env` (mode `600`, `root:root`).
 
 If a unit file changed in git:
 
@@ -85,6 +105,8 @@ Copy each unit from **that** instance’s tree so a half-deployed branch cannot 
 
 Node 22, git, Caddy, ports 22/80/443 only (not 3000, 3001, capability, or app loopback). Domain A/AAAA `@` → droplet.
 
+Users, checkout, data dirs:
+
 ```bash
 sudo addgroup --system nowisee
 sudo adduser --system --ingroup nowisee --home /var/www/nowisee nowisee-host
@@ -98,29 +120,41 @@ sudo chmod -R g+rX /var/www/nowisee
 sudo -u nowisee-host -H bash -lc 'cd /var/www/nowisee && npm ci && npm run build'
 
 sudo mkdir -p /var/lib/nowisee/host
-sudo chown nowisee-host:nowisee-host /var/lib/nowisee/host
+sudo chown nowisee-host:nowisee /var/lib/nowisee/host
 sudo chmod 700 /var/lib/nowisee/host
 for id in home recents tutorial bible notes lists weather gmail account; do
   sudo mkdir -p "/var/lib/nowisee/${id}"
-  sudo chown "nowisee-${id}:nowisee-${id}" "/var/lib/nowisee/${id}"
+  sudo chown "nowisee-${id}:nowisee" "/var/lib/nowisee/${id}"
   sudo chmod 700 "/var/lib/nowisee/${id}"
 done
+```
 
+Copy the host env, then **stop and fill it** before the next block. systemd will not start without every required value.
+
+```bash
 sudo mkdir -p /etc/nowisee/host
 sudo cp /var/www/nowisee/.env.production.example /etc/nowisee/host/nowisee.env
-sudo chown root:nowisee-host /etc/nowisee/host /etc/nowisee/host/nowisee.env
-sudo chmod 750 /etc/nowisee/host
-sudo chmod 640 /etc/nowisee/host/nowisee.env
-# fill host secrets, including NOWISEE_HOST_SIGNING_KEY and NOWISEE_CAPABILITY_LISTEN
+sudo chmod 600 /etc/nowisee/host/nowisee.env
+```
+
+Edit `/etc/nowisee/host/nowisee.env`: lockbox, OTP, mail, Gmail client id/secret, `NOWISEE_HOST_SIGNING_KEY`, `NOWISEE_CAPABILITY_LISTEN`. The generate command in [`.env.production.example`](../.env.production.example) prints a private key (into this file) and a matching public key (into `PUB` below).
+
+App env files, units, start:
+
+```bash
+PUB='<host public key>'
 i=0
 for id in home recents tutorial bible notes lists weather gmail account; do
   port=$((3110 + i))
   sudo mkdir -p "/etc/nowisee/${id}"
-  sudo cp /var/www/nowisee/deploy/app.env.example "/etc/nowisee/${id}/${id}.env"
-  sudo chown "root:nowisee-${id}" "/etc/nowisee/${id}" "/etc/nowisee/${id}/${id}.env"
-  sudo chmod 750 "/etc/nowisee/${id}"
-  sudo chmod 640 "/etc/nowisee/${id}/${id}.env"
-  # set NOWISEE_LISTEN=127.0.0.1:${port}, NOWISEE_APP_DB=/var/lib/nowisee/${id}/${id}.db, public key, cap URL
+  sudo tee "/etc/nowisee/${id}/${id}.env" >/dev/null <<EOF
+NOWISEE_LISTEN=127.0.0.1:${port}
+NOWISEE_APP_DB=/var/lib/nowisee/${id}/${id}.db
+NOWISEE_HOST_CAPABILITY_URL=http://127.0.0.1:3020
+NOWISEE_HOST_SIGNING_PUB=${PUB}
+NOWISEE_ROOT_APP_ID=home
+EOF
+  sudo chmod 600 "/etc/nowisee/${id}/${id}.env"
   i=$((i + 1))
 done
 sudo cp /var/www/nowisee/deploy/nowisee.service /etc/systemd/system/nowisee.service
@@ -156,6 +190,8 @@ Same droplet, second origin. Do not copy production env or `/var/lib/nowisee/`.
 
 DNS: A (and AAAA if the apex has IPv6) with host **`dev`**, not `dev.nowisee.app`, same IP as `@`. Wait until it resolves before reloading Caddy.
 
+Users, checkout, data dirs. `--ingroup nowisee-dev` means the group is `nowisee-dev`, not `nowisee-dev-host`.
+
 ```bash
 sudo addgroup --system nowisee-dev
 sudo adduser --system --ingroup nowisee-dev --home /var/www/nowisee-dev nowisee-dev-host
@@ -169,33 +205,41 @@ sudo chmod -R g+rX /var/www/nowisee-dev
 sudo -u nowisee-dev-host -H bash -lc 'cd /var/www/nowisee-dev && git checkout <branch> && npm ci && npm run build'
 
 sudo mkdir -p /var/lib/nowisee-dev/host
-sudo chown nowisee-dev-host:nowisee-dev-host /var/lib/nowisee-dev/host
+sudo chown nowisee-dev-host:nowisee-dev /var/lib/nowisee-dev/host
 sudo chmod 700 /var/lib/nowisee-dev/host
 for id in home recents tutorial bible notes lists weather gmail account; do
   sudo mkdir -p "/var/lib/nowisee-dev/${id}"
-  sudo chown "nowisee-dev-${id}:nowisee-dev-${id}" "/var/lib/nowisee-dev/${id}"
+  sudo chown "nowisee-dev-${id}:nowisee-dev" "/var/lib/nowisee-dev/${id}"
   sudo chmod 700 "/var/lib/nowisee-dev/${id}"
 done
 ```
 
-First boot seeds `/var/lib/nowisee-dev/bible/bible.db` from the committed corpus. That is CPU- and disk-heavy; do it when prod can take a spike.
+Copy the host env, then **stop and fill it**. New lockbox, signing, and OTP keys — not copies from production. `PORT=3001`, cap `3021`, `NOWISEE_ORIGIN=https://dev.nowisee.app`.
 
 ```bash
 sudo mkdir -p /etc/nowisee-dev/host
 sudo cp /var/www/nowisee-dev/.env.staging.example /etc/nowisee-dev/host/nowisee.env
-sudo chown root:nowisee-dev-host /etc/nowisee-dev/host /etc/nowisee-dev/host/nowisee.env
-sudo chmod 750 /etc/nowisee-dev/host
-sudo chmod 640 /etc/nowisee-dev/host/nowisee.env
-# fill secrets: new lockbox, signing, and OTP keys; PORT=3001; cap 3021; NOWISEE_ORIGIN=https://dev.nowisee.app
+sudo chmod 600 /etc/nowisee-dev/host/nowisee.env
+```
+
+Keep the matching public key for `PUB` in the next block. First boot after start seeds `/var/lib/nowisee-dev/bible/bible.db` from the committed corpus (CPU- and disk-heavy; do it when prod can take a spike).
+
+App env files, units, start:
+
+```bash
+PUB='<staging host public key>'
 i=0
 for id in home recents tutorial bible notes lists weather gmail account; do
   port=$((3210 + i))
   sudo mkdir -p "/etc/nowisee-dev/${id}"
-  sudo cp /var/www/nowisee-dev/deploy/app.env.example "/etc/nowisee-dev/${id}/${id}.env"
-  sudo chown "root:nowisee-dev-${id}" "/etc/nowisee-dev/${id}" "/etc/nowisee-dev/${id}/${id}.env"
-  sudo chmod 750 "/etc/nowisee-dev/${id}"
-  sudo chmod 640 "/etc/nowisee-dev/${id}/${id}.env"
-  # listen 127.0.0.1:${port}; NOWISEE_APP_DB=/var/lib/nowisee-dev/${id}/${id}.db; cap URL :3021
+  sudo tee "/etc/nowisee-dev/${id}/${id}.env" >/dev/null <<EOF
+NOWISEE_LISTEN=127.0.0.1:${port}
+NOWISEE_APP_DB=/var/lib/nowisee-dev/${id}/${id}.db
+NOWISEE_HOST_CAPABILITY_URL=http://127.0.0.1:3021
+NOWISEE_HOST_SIGNING_PUB=${PUB}
+NOWISEE_ROOT_APP_ID=home
+EOF
+  sudo chmod 600 "/etc/nowisee-dev/${id}/${id}.env"
   i=$((i + 1))
 done
 sudo cp /var/www/nowisee-dev/deploy/nowisee-dev.service /etc/systemd/system/nowisee-dev.service
@@ -204,8 +248,19 @@ sudo cp /var/www/nowisee-dev/deploy/nowisee-dev.target /etc/systemd/system/nowis
 sudo systemctl daemon-reload
 sudo systemctl disable nowisee-dev
 sudo systemctl start nowisee-dev.service
-sudo -u nowisee-dev-host sqlite3 /var/lib/nowisee-dev/host/nowisee.db \
-  "UPDATE app_catalog SET locator = 'http://127.0.0.1:' || (3210 + sort_order);"
+until sudo -u nowisee-dev-host node --input-type=module -e '
+import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync("/var/lib/nowisee-dev/host/nowisee.db");
+if (db.prepare("SELECT COUNT(*) AS n FROM app_catalog").get().n < 1) process.exit(1);
+' 2>/dev/null; do sleep 0.2; done
+sudo -u nowisee-dev-host node --input-type=module -e '
+import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync("/var/lib/nowisee-dev/host/nowisee.db");
+db.exec("UPDATE app_catalog SET locator = '\''http://127.0.0.1:'\'' || (3210 + sort_order)");
+for (const row of db.prepare("SELECT app_id, locator FROM app_catalog ORDER BY sort_order").all()) {
+  console.log(row.app_id, row.locator);
+}
+'
 sudo systemctl enable --now nowisee-dev.target
 ```
 

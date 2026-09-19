@@ -285,15 +285,17 @@ async function postApp(
   try {
     const res = await postJson(url, body);
     if (!res.ok) {
+      console.error(`app ${appId} ${kind} ${url.href} HTTP ${res.status}`);
       return notResponding(appId, label, rootAppId);
     }
     return res.json as RefreshResult;
-  } catch {
+  } catch (err) {
+    console.error(`app ${appId} ${kind} ${url.href} failed`, err);
     return notResponding(appId, label, rootAppId);
   }
 }
 
-function postJson(url: URL, body: unknown): Promise<{ ok: boolean; json: unknown }> {
+function postJson(url: URL, body: unknown): Promise<{ ok: boolean; status: number; json: unknown }> {
   const payload = Buffer.from(JSON.stringify(body));
   return new Promise((resolve, reject) => {
     const req = httpRequest(
@@ -322,7 +324,7 @@ function postJson(url: URL, body: unknown): Promise<{ ok: boolean; json: unknown
             }
           }
           const status = res.statusCode ?? 0;
-          resolve({ ok: status >= 200 && status < 300, json });
+          resolve({ ok: status >= 200 && status < 300, status, json });
         });
       },
     );
